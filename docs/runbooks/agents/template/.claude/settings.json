@@ -1,0 +1,11 @@
+{
+  "model": "sonnet",
+  "permissions": {
+    "allow": [
+      "Write", "Edit",
+      "Bash(cargo build:*)", "Bash(cargo run:*)", "Bash(go run:*)", "Bash(go mod init:*)",
+      "Bash(python3:*)", "Bash(chmod:*)", "Bash(ls:*)",
+      "mcp__den__runbook_guide", "mcp__den__validate_runbook", "mcp__den__list_runbooks", "mcp__den__run_runbook"
+    ]
+  }
+}

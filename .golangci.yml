@@ -1,0 +1,45 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard # errcheck, govet, ineffassign, staticcheck, unused
+  # noctx is left out on purpose: most of den's exec.Command calls are
+  # fire-and-forget helpers (open a browser, run $EDITOR via tea.ExecProcess)
+  # with no request context to pass. HTTP calls build their requests with a
+  # context explicitly.
+  enable:
+    - bodyclose
+    - gosec
+    - misspell
+  settings:
+    gosec:
+      excludes:
+        # Unhandled errors are errcheck's job; gosec's copy of the rule ignores
+        # the std-error-handling exclusions below and would double-report.
+        - G104
+        # den's job is running external tools (aws, ssh, psql, sops, ...) with
+        # arguments built from den.yaml, which the user owns. Every call already
+        # passes an argv, never a shell string built from untrusted input.
+        - G204
+        # Reading files the user named in den.yaml (configs, CA bundles, key
+        # files) is the point, not an inclusion vulnerability.
+        - G304
+        # The taint-analysis versions of G204 and G304. What they trace back to
+        # is the user's own environment ($EDITOR, SOPS_AGE_SSH_PRIVATE_KEY_FILE,
+        # VAULT_CONFIG_PATH), for the same reasons as above.
+        - G702
+        - G703
+  exclusions:
+    presets:
+      - std-error-handling
+    rules:
+      # Tests write fixtures and fake binaries with whatever permissions they need.
+      - path: _test\.go
+        linters:
+          - gosec
+
+formatters:
+  enable:
+    - gofmt

@@ -1,0 +1,26 @@
+# den.yaml of agent-cli.tape: only what this demo shows. Placeholder environments,
+# no services, no updates. Run from the repository root:
+#
+#   den -c docs/runbooks/agents/cli/den.yaml
+version: "1"
+
+aws:
+  config_path: /dev/null
+  credentials_path: /dev/null
+
+menu_order: [runbooks, help]
+
+environments:
+  demo-e2e:
+    region: eu
+    environment: e2e
+    aws_profile: orders-e2e
+    aws_region_code: eu-central-1
+    ec2_instance_id: i-0123456789abcdef0
+
+runbooks:
+  dirs: [runbooks]                  # new runbooks are written here (git-ignored)
+  template: ../template             # a new folder starts as a copy of this one
+  agent: claude                     # claude, codex or auto
+  defaults:
+    history: 5

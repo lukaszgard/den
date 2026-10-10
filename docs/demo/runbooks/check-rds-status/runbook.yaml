@@ -1,0 +1,4 @@
+name: check-rds-status
+description: List the RDS instances of the environment, with their status
+env: eu-dev
+command: ./run.sh

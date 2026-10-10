@@ -1,0 +1,97 @@
+name: Docs site
+
+# Builds the documentation site (site/: Hugo + Hextra) from README.md, docs/ and
+# CHANGELOG.md. A pull request only builds it, which fails when a
+# docs/*/README.md is missing from site/data/sections.yaml or a page does not
+# render. main also publishes it to GitHub Pages once Pages is turned on
+# (Settings → Pages → Source: GitHub Actions) and the repository variable
+# DOCS_SITE_PAGES is "true".
+
+on:
+  pull_request:
+    paths:
+      - "site/**"
+      - "docs/**"
+      - README.md
+      - CHANGELOG.md
+      - Makefile
+      - scripts/site-lastmod.sh
+      - .github/workflows/pages.yaml
+  push:
+    branches:
+      - main
+    paths:
+      - "site/**"
+      - "docs/**"
+      - README.md
+      - CHANGELOG.md
+      - Makefile
+      - scripts/site-lastmod.sh
+      - .github/workflows/pages.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A deployment cut off halfway leaves Pages between two versions.
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  HUGO_VERSION: 0.167.0
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # configure-pages reads the Pages site for its address; job permissions replace
+    # the workflow's, so contents is listed again.
+    permissions:
+      contents: read
+      pages: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The pages' "Last updated" dates come from git history.
+          fetch-depth: 0
+      # Hugo fetches the Hextra theme as a Go module.
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: site/go.mod
+          cache-dependency-path: site/go.sum
+      - name: install Hugo
+        # The extended build, checked against the release's checksums file.
+        run: |
+          base=https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}
+          tarball=hugo_extended_${HUGO_VERSION}_linux-amd64.tar.gz
+          cd "$RUNNER_TEMP"
+          curl -fsSLO "$base/$tarball"
+          curl -fsSLO "$base/hugo_${HUGO_VERSION}_checksums.txt"
+          sha256sum --check --ignore-missing "hugo_${HUGO_VERSION}_checksums.txt"
+          tar -xzf "$tarball" hugo
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - id: pages
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.DOCS_SITE_PAGES == 'true'
+        uses: actions/configure-pages@v6
+      - name: build
+        env:
+          BASE_URL: ${{ steps.pages.outputs.base_url }}
+        run: make site-build ${BASE_URL:+BASE_URL="$BASE_URL/"}
+      - if: steps.pages.outcome == 'success'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: site/public
+
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.DOCS_SITE_PAGES == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

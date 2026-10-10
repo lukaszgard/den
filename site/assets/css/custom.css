@@ -1,0 +1,33 @@
+/* The outlined hero buttons of the home page (content/_index.md marks them with
+   --den-outline): Hextra's button is white text on a solid colour, so a button
+   with a transparent background needs the page's own text colour in each theme.
+   The theme is Hextra's `dark` class on <html>, not the OS setting, so
+   light-dark() would follow the wrong one once a visitor picks a theme. */
+a[style*="--den-outline"] {
+  color: #111827;
+}
+html.dark a[style*="--den-outline"] {
+  color: #f3f4f6;
+}
+
+/* The status badge of a page (layouts/_partials/custom/page-begin.html). */
+.den-status {
+  display: inline-block;
+  margin-bottom: 0.5rem;
+  padding: 0.1rem 0.6rem;
+  border-radius: 9999px;
+  border: 1px solid;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+.den-status-beta {
+  color: #92400e;
+  background: #fef3c7;
+  border-color: #fcd34d;
+}
+html.dark .den-status-beta {
+  color: #fcd34d;
+  background: rgba(146, 64, 14, 0.3);
+  border-color: rgba(252, 211, 77, 0.4);
+}

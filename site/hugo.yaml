@@ -1,0 +1,118 @@
+# den's documentation site: Hugo with the Hextra theme (a Hugo module, see go.mod).
+#
+# The pages are not copied here. content/_content.gotmpl builds them from the
+# repo's own docs/*/README.md and CHANGELOG.md, mounted below as assets,
+# so docs/ stays the one source and GitHub keeps rendering the same files.
+# Preview with `make site`, build with `make site-build`.
+baseURL: http://localhost:1313/ # the publishing workflow passes --baseURL
+title: den
+locale: en-US
+enableRobotsTXT: true
+disableKinds: [taxonomy, term]
+
+module:
+  hugoVersion:
+    extended: true
+    min: "0.158.0" # hugo.Data in the content adapter, locale above
+  imports:
+    - path: github.com/imfing/hextra
+  mounts:
+    # Declaring a mount for a root drops Hugo's default one for it, so content and
+    # assets are listed again next to the repo files.
+    - source: content
+      target: content
+    - source: assets
+      target: assets
+    - source: ../docs
+      target: assets/den/docs
+    - source: ../CHANGELOG.md
+      target: assets/den/CHANGELOG.md
+
+# Every docs page also comes as Markdown (/docs/rds/index.md, what "Copy page" copies)
+# and /llms.txt lists them for AI readers.
+outputs:
+  home: [html, rss, llms]
+  page: [html, markdown]
+  section: [html, markdown]
+
+markup:
+  highlight:
+    noClasses: false
+  goldmark:
+    renderer:
+      # The docs hold no raw HTML of their own.
+      unsafe: false
+
+menu:
+  main:
+    - name: Documentation
+      pageRef: /docs
+      weight: 1
+    - name: Changelog
+      pageRef: /docs/changelog
+      weight: 2
+    - name: Search
+      weight: 3
+      params:
+        type: search
+    - name: Repository
+      weight: 4
+      url: https://github.com/lukaszgard/den
+      params:
+        icon: github
+
+params:
+  description: >-
+    den reaches private cloud data stores from one terminal UI: it opens the tunnel,
+    mints and refreshes the IAM credential, and wraps the daily chores around them.
+
+  # Where links to repo files that are not pages (den.yaml, scripts, the Help
+  # topics) and the "Edit this page" links point.
+  repoURL: https://github.com/lukaszgard/den
+  repoBranch: main
+
+  externalLinkDecoration: true
+
+  navbar:
+    displayTitle: true
+    displayLogo: false
+    width: wide
+
+  theme:
+    default: system
+    displayToggle: true
+
+  footer:
+    enable: true
+    displayCopyright: false
+    displayPoweredBy: true
+    width: normal
+
+  # The pages come from a content adapter, which has no git history of its own:
+  # scripts/site-lastmod.sh writes it to data/lastmod.json first. Without that
+  # file (a bare `hugo`) a page simply shows no date.
+  displayUpdatedDate: true
+
+  search:
+    enable: true
+    type: flexsearch
+    flexsearch:
+      index: content
+      tokenize: forward
+
+  # Each page sets its own editURL to its source file in the repo.
+  editURL:
+    enable: true
+
+  highlight:
+    copy:
+      enable: true
+      display: hover
+
+  page:
+    width: normal
+    contextMenu:
+      enable: true
+
+  imageZoom:
+    enable: true

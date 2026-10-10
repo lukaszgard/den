@@ -1,0 +1,55 @@
+{{- /*
+Hextra's image hook, with destinations resolved by den/resolve.html.
+
+A GIF that has an MP4 of the same name next to it (VHS renders both from a tape) plays
+as a muted, looping video, with the GIF as the fallback inside it: the video keeps the
+terminal's full colour at about half the bytes. The READMEs keep linking the GIF, which
+is all GitHub can show.
+*/ -}}
+{{- $dest := partial "den/resolve.html" (dict "page" .PageInner "dest" .Destination "image" true) -}}
+{{- $video := "" -}}
+{{- $url := urls.Parse .Destination -}}
+{{- with .PageInner.Params.denSource -}}
+  {{- if and (not $url.Scheme) (not (hasPrefix $url.Path "/")) (strings.HasSuffix $url.Path ".gif") -}}
+    {{- $mp4 := path.Join (path.Dir .) (replaceRE `\.gif$` ".mp4" $url.Path) -}}
+    {{- with resources.Get (printf "den/%s" $mp4) -}}
+      {{- $video = .RelPermalink -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- $alt := .PlainText | safeHTML -}}
+{{- $lazyLoading := site.Params.enableImageLazyLoading | default true -}}
+{{- $enableImageZoom := site.Params.imageZoom.enable | default false -}}
+{{- if not (eq .Page.Params.imageZoom nil) -}}
+  {{- $enableImageZoom = .Page.Params.imageZoom -}}
+{{- end -}}
+{{- if $enableImageZoom -}}
+  {{- .Page.Store.Set "hasImageZoom" true -}}
+{{- end -}}
+
+{{- $attributes := "" -}}
+{{- range $key, $value := .Attributes -}}
+  {{- if $value -}}
+    {{- $attributes = printf "%s %s=%q" $attributes $key ($value | transform.HTMLEscape) -}}
+  {{- end -}}
+{{- end -}}
+
+{{- define "den/image" -}}
+  {{- if .video -}}
+    <video autoplay loop muted playsinline preload="metadata" aria-label="{{ .alt }}"{{ with .title }} title="{{ . }}"{{ end }} style="width: 100%; height: auto">
+      <source src="{{ .video | safeURL }}" type="video/mp4">
+      <img src="{{ .dest | safeURL }}" alt="{{ .alt }}" style="width: 100%; height: auto">
+    </video>
+  {{- else -}}
+    <img src="{{ .dest | safeURL }}"{{ with .title }} title="{{ . }}"{{ end }} alt="{{ .alt }}" {{ .attributes | safeHTMLAttr }}{{ if .zoom }} data-zoomable{{ end }}{{ if .lazy }} loading="lazy"{{ end }} />
+  {{- end -}}
+{{- end -}}
+{{- $media := dict "video" $video "dest" $dest "alt" $alt "title" .Title "attributes" $attributes "zoom" $enableImageZoom "lazy" $lazyLoading -}}
+{{- with .Title -}}
+  <figure>
+    {{ template "den/image" $media }}
+    <figcaption>{{ . }}</figcaption>
+  </figure>
+{{- else -}}
+  {{ template "den/image" $media }}
+{{- end -}}

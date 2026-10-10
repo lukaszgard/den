@@ -1,0 +1,39 @@
+# Build artifacts — anchored to the repo root on purpose: an unanchored "den"
+# also matches the cmd/den/ directory and silently ignores the sources in it.
+/main
+/den
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# GoReleaser output
+dist/
+
+# Documentation site: Hugo's output and caches
+/site/public/
+/site/resources/
+/site/.hugo_build.lock
+# made by scripts/site-lastmod.sh from git history
+/site/data/lastmod.json
+
+# Test artifacts
+*.test
+*.out
+
+# IDE
+.idea/
+
+# OS
+.DS_Store
+
+# Env / secrets
+.env
+*.local
+*.local.yaml
+# Personal VPN settings can hold a password: they belong in ~/.config/den/vpn/
+docs/vpn/*.conf
+
+# Claude Code: personal settings stay local; .claude/settings.json is shared
+.claude/settings.local.json

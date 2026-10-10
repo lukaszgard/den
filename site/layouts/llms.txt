@@ -1,0 +1,30 @@
+{{- /*
+den's llms.txt: the docs pages in reading order, in the groups of
+data/sections.yaml, each linking to its Markdown twin, and the changelog last as
+the optional part. Hextra's own walks the content tree, which would list the
+groups' hidden heading pages too.
+*/ -}}
+{{- define "llms-entry" -}}
+{{- $e := cond (reflect.IsMap .) . (dict "src" .) -}}
+{{- with site.GetPage (partial "den/site-path.html" $e.src) -}}
+{{- $url := .Permalink -}}
+{{- with .OutputFormats.Get "markdown" }}{{ $url = .Permalink }}{{ end -}}
+- [{{ .Title }}]({{ $url }}): {{ partial "den/summary.html" . | htmlUnescape }}
+{{ end -}}
+{{- end -}}
+# {{ site.Title }}
+
+> {{ site.Params.description | default "" | replaceRE `\s+` " " }}
+
+Every page of the documentation is also served as Markdown (the links below).
+{{ range hugo.Data.sections }}
+{{- $group := .group }}
+## {{ $group }}
+
+{{ range .pages -}}
+{{- $e := cond (reflect.IsMap .) . (dict "src" .) }}{{ if ne $e.src "CHANGELOG.md" }}{{ template "llms-entry" $e }}{{ end }}
+{{- end }}
+{{ end -}}
+## Optional
+
+{{ template "llms-entry" "CHANGELOG.md" -}}

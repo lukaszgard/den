@@ -1,0 +1,312 @@
+# yaml-language-server: $schema=../../schema/den.schema.json
+#
+# The config every recording that needs AWS runs on (tapes: `./den --config
+# docs/demo/den.yaml`). It describes the demo AWS environment: the same fictional
+# Acme as the repository den.yaml, with every service type switched on, an
+# ssh-transport environment for transports.tape and a runbook folder of its own.
+# Point the profiles, instance IDs and hosts at the demo environment once it
+# exists, and the tapes need no other change. Run from the repository root.
+version: "1"                        # config format version
+title: "Acme — developer connectivity"  # the dashboard's header line
+
+aws:                                # where den reads your AWS CLI setup from
+  config_path: "~/.aws/config"
+  credentials_path: "~/.aws/credentials"
+  # SSO sessions are DISCOVERED from the AWS config above — one login entry per
+  # [sso-session ...] section — so they show up whether or not they are named
+  # here. This block does not enable them; it only filters, renames and reorders
+  # what was discovered, and cannot define a session den would otherwise miss
+  # (`aws sso login --sso-session` resolves the name from the AWS config, and den
+  # never writes that file).
+  #
+  #   key absent   → every discovered session, in discovery order  (the default)
+  #   sessions: [] → no sessions at all
+  #   entries      → only those, in this order
+  #
+  sessions:
+    - session: acme-sso             # must exist in the AWS config above
+      name: "Acme SSO"              # display name only
+      description: "Main corporate SSO"
+
+logs:                                # optional file-based logging
+  level: debug                       # trace, debug, info, warn, error (default: info)
+  file_location: /tmp/den.log
+
+menu_order:                         # optional, customize left-menu order
+ - connect
+ - runbooks
+ - tunnel
+ - secrets
+ - aws
+ - vpn
+ - config
+ - help
+ - updates
+ - logs
+
+tunnels:
+  - name: "Office Tunnel"
+    description: "Office network — SOCKS + port forwards"
+    command: "ssh -N -T -D 5555 bastion.example.com"
+    reconnect: true
+    # Optional. Internal host:port den dials THROUGH the -D SOCKS proxy before
+    # showing the tunnel as connected, proving traffic reaches the far side — not
+    # just that ssh is listening locally. Requires a -D port in the command.
+    health_check: "intranet.example.com:443"
+    # Optional. Re-run the checks every 15 s while connected; two misses in a row
+    # count as a drop, so reconnect: true brings the tunnel back up.
+    monitor: true
+    auto_connect:
+      vpn: "Office VPN"  # must match a name in the vpn: section
+      enabled: true      # optional, default true
+
+vpn:
+  - name: "Office VPN"
+    description: "Corporate VPN (openfortivpn + SAML)"
+    gateway: vpn.example.com        # a gateway is enough: den adds port 443 and --saml-login
+    # Optional. A file of openfortivpn settings den has no key for (set-dns,
+    # trusted-cert, persistent, …), in openfortivpn's `key = value` format.
+    # Keep it in your config directory, never in a repository: it can hold a
+    # password, so chmod 600 it. `den paths` shows where that is.
+    # config_file: ~/.config/den/vpn/office.conf
+    # Optional. Internal host:port reachable ONLY through the VPN. den TCP-probes
+    # it to confirm the data path is actually alive (split-tunnel VPNs leave ppp0
+    # up even when the tunnel is dead). Pick something always-on and internal —
+    # not a public host. Leave unset to fall back to interface-only detection.
+    health_check: "intranet.example.com:443"
+    # Optional. Re-establish a tunnel that dropped after being fully connected:
+    # three attempts (30 s, 60 s, 120 s), then den gives up until you press c.
+    # Needs the passwordless helper (`den vpn install-helper`), because every
+    # attempt re-runs the SAML login. A login that times out is never retried.
+    reconnect: true
+
+environments:                       # named bastion targets; services reference
+                                    # one with `env:` instead of repeating these.
+                                    # aws_profile opens the SSM tunnel,
+                                    # credential_profile mints the credential
+                                    # (aws_profile when it is not set: one role
+                                    # for both needs only aws_profile).
+  eu-dev:
+    region: eu                      # region and environment are labels you choose;
+    environment: dev                # only prod and production mean something to den
+    ec2_instance_id: "i-0123456789abcdef0"
+    aws_profile: "acme-dev"
+    credential_profile: "acme-data-dev"
+    aws_region_code: "eu-central-1"
+
+  eu-staging:
+    region: eu
+    environment: staging
+    ec2_instance_id: "i-0123456789abcdef1"
+    aws_profile: "acme-dev"
+    credential_profile: "acme-data-dev"
+    aws_region_code: "eu-central-1"
+
+  eu-prod:
+    region: eu
+    environment: prod               # prod (or production: true) makes an AI agent ask first
+    ec2_instance_id: "i-0123456789abcdef2"
+    aws_profile: "acme-prod"
+    credential_profile: "acme-data-prod"
+    aws_region_code: "eu-central-1"
+
+  us-prod:
+    region: us
+    environment: prod
+    ec2_instance_id: "i-0123456789abcdef3"
+    aws_profile: "acme-prod"
+    credential_profile: "acme-data-prod"
+    aws_region_code: "us-east-1"
+
+  eu-lab:                           # reached with ssh -L instead of SSM (docs/transports)
+    region: eu
+    environment: lab
+    aws_profile: "acme-dev"
+    credential_profile: "acme-data-dev"
+    aws_region_code: "eu-central-1"
+    transport:
+      type: ssh
+      host: ops@bastion.example.com
+      args: [-i, ~/.ssh/acme_lab_ed25519]
+
+runbooks:                           # user-defined scripts, run with den's context
+  dirs:                             # every folder in them with a runbook.yaml is one runbook
+    - runbooks                      # docs/demo/runbooks; relative paths: to this file
+  # rescan: true                    # pick up folders added/changed/removed while den runs
+  # template: ~/.config/den/runbook-template   # folder copied for a new runbook
+  # agent: auto                     # writes a runbook from a description: auto, claude, codex or a name below
+  agents:                         # command lines that write one; n offers them when there are two or more
+    - name: Claude Opus
+      command: claude --model opus
+    - name: Ollama qwen3
+      command: ollama launch codex --model qwen3-coder:30b
+      # kind: claude              # claude or codex; only for a wrapper den cannot read it from
+  defaults:                         # every runbook inherits these; a runbook.yaml overrides them
+    history: 20                     # finished runs kept, in the runbook's logs/ (0: only the last, in memory)
+    # about: true                   # the About tab of a runbook's view
+    # shell: bash                   # what t opens in the runbook's folder (default $SHELL)
+    # editor: code --wait           # what e and o open the script and run logs with (default $VISUAL, $EDITOR, vi)
+    # agent: claude --model opus    # what E changes a runbook with: a command line or a name above (default agent)
+
+# Local ports below follow one scheme: 501xx RDS, 502xx Redis, 504xx DocumentDB,
+# 505xx Redshift, 506xx OpenSearch, 507xx Neptune; the next two digits count up.
+services:
+  - name: "EU DEV Orders DB"
+    type: rds
+    env: eu-dev
+    rds:
+      local_port: 50110
+      update_pgpass: true
+      rds_host: "db1.abcdefghijkl.eu-central-1.rds.amazonaws.com"
+      db_user: "app"                # the database user granted rds_iam
+      db_name: "orders"             # optional; psql's default is the user name
+
+  - name: "EU STAGING Orders DB"
+    type: rds
+    env: eu-staging
+    rds:
+      local_port: 50111
+      update_pgpass: true
+      rds_host: "db1.mnopqrstuvwx.eu-central-1.rds.amazonaws.com"
+      db_user: "app"
+      db_name: "orders"
+
+  - name: "EU PROD Orders DB"
+    type: rds
+    env: eu-prod
+    rds:
+      local_port: 50112
+      update_pgpass: true
+      rds_host: "db1.yzabcdefghij.eu-central-1.rds.amazonaws.com"
+      db_user: "app"
+      db_name: "orders"
+
+  - name: "EU DEV Cache"
+    type: redis                     # ElastiCache; docs/elasticache
+    env: eu-dev
+    redis:
+      local_port: 50210
+      redis_host: master.orders-dev.abcdef.euc1.cache.amazonaws.com
+      cache_name: orders-dev
+      user_id: orders-dev
+
+  - name: "EU DEV Documents"
+    type: documentdb
+    env: eu-dev
+    documentdb:
+      local_port: 50410
+      reconnect: true
+      documentdb_host: "docs-dev.cluster-abcdefghijkl.eu-central-1.docdb.amazonaws.com"
+
+  - name: "EU DEV Analytics"
+    type: redshift                  # docs/redshift
+    env: eu-dev
+    redshift:
+      local_port: 50510
+      update_pgpass: true
+      redshift_host: analytics.abcdefghijkl.eu-central-1.redshift.amazonaws.com
+      cluster_identifier: analytics # or workgroup_name: for Serverless
+      db_name: dev
+
+  - name: "EU DEV Logs"
+    type: opensearch                # docs/opensearch — signing proxy on local_port
+    env: eu-dev
+    opensearch:
+      local_port: 50610
+      opensearch_host: vpc-logs-dev-abcdefghijkl.eu-central-1.es.amazonaws.com
+
+  - name: "EU DEV Graph"
+    type: neptune                   # docs/neptune — signing proxy on local_port
+    env: eu-dev
+    neptune:
+      local_port: 50710
+      neptune_host: graph-dev.cluster-abcdefghijkl.eu-central-1.neptune.amazonaws.com
+
+  - name: "EU DEV MySQL"            # RDS MySQL / MariaDB / Aurora MySQL — docs/rds
+    type: rds
+    env: eu-dev
+    rds:
+      engine: mysql
+      local_port: 50131
+      rds_host: "orders.cluster-abcdefghijkl.eu-central-1.rds.amazonaws.com"
+      db_user: app_iam
+
+  - name: "EU DEV MemoryDB"         # docs/memorydb
+    type: redis
+    env: eu-dev
+    redis:
+      memorydb: true
+      local_port: 50281
+      redis_host: orders-dev-0001-001.orders-dev.abcdef.memorydb.eu-central-1.amazonaws.com
+      cache_name: orders-dev        # MemoryDB cluster name
+      user_id: iam-user-01
+
+  - name: "LAB Orders DB"           # through the ssh transport of eu-lab
+    type: rds
+    env: eu-lab
+    rds:
+      local_port: 50191
+      rds_host: "db1.abcdefghijkl.eu-central-1.rds.amazonaws.com"
+      db_user: "app"
+      db_name: "orders"
+
+  # - name: "EU STAGING Kafka"        # plain SSM tunnel, no credential to mint
+  #   type: kafka
+  #   env: eu-staging
+  #   kafka:
+  #     local_port: 19092
+  #     kafka_host: b-1.orders-staging.abcdef.c2.kafka.eu-central-1.amazonaws.com
+  #
+  # - name: "Local Stack"             # docker compose, runs locally — no bastion
+  #   type: docker
+  #   docker:
+  #     compose_file: ./docker-compose.yml
+  #     services: [postgres, redis, kafka]
+  #     env_file: ./.env.local
+
+secrets:
+  # view: tree                      # nested values: tree (default, as in the file)
+  #                                 # or flat (db.password); a secret's own view:
+  #                                 # wins, and t toggles the open one
+  sops:                             # SOPS files made with KMS in the demo environment
+    - name: "orders - EU DEV"
+      description: "Orders app secrets for EU DEV"
+      file: docs/demo/secrets/eu-dev.yaml
+      aws_profile: "acme-dev"
+      aws_region: "eu-central-1"
+      auto_reveal: true
+    - name: "orders - EU STAGING"
+      description: "Orders app secrets for EU STAGING"
+      file: docs/demo/secrets/eu-staging.yaml
+      aws_profile: "acme-dev"
+      aws_region: "eu-central-1"
+    - name: "orders - EU PROD"
+      description: "Orders app secrets for EU PROD"
+      file: docs/demo/secrets/eu-prod.yaml
+      aws_profile: "acme-prod"
+      aws_region: "eu-central-1"
+
+  aws_secretsmanager:
+    - name: "Orders API key - EU DEV"
+      description: "API client key for EU DEV"
+      secret_id: "/acme/orders/dev/api-key"
+      aws_profile: "acme-dev"
+      aws_region: "eu-central-1"
+      version_stage: "AWSCURRENT"
+      auto_reveal: true
+    - name: "Orders API key - EU STAGING"
+      description: "API client key for EU STAGING"
+      secret_id: "/acme/orders/staging/api-key"
+      aws_profile: "acme-dev"
+      aws_region: "eu-central-1"
+      version_stage: "AWSCURRENT"
+
+  # vault:                          # HashiCorp Vault KV v1/v2, read with the vault
+  #                                 # CLI and the token `vault login` left
+  #   - name: "payments db"
+  #     address: "https://vault.example.com"  # VAULT_ADDR; default: your env's
+  #     mount: secret               # KV mount (default secret)
+  #     path: payments/db           # a path ending in / lists a folder
+  #     login: "vault login -method=oidc"     # what L runs for a new token
+  #     # namespace: team-a         # Vault Enterprise / HCP
+  #     # field: password           # one key only

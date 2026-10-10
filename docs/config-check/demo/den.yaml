@@ -1,0 +1,34 @@
+# The den.yaml config-check.tape checks and then opens: no AWS, nothing that
+# connects by itself, and a few mistakes of the kinds the check finds.
+version: "1"
+aws:
+  config_path: /tmp/den-check-demo/aws
+  credentials_path: /tmp/den-check-demo/aws
+menu_order: [connect, tunnel, config, logs, help]
+environments:
+  dev:
+    region: eu
+    environment: dev
+    ec2_instance_id: i-0123456789abcdef0
+    aws_profile: devops
+    credential_profile: devops-data
+    aws_region_code: eu-central-1
+services:
+  - name: orders cache
+    type: redis
+    env: dev
+    redis:
+      redis_host: orders.cache.example.com
+  - name: billing cache
+    type: redis
+    env: dev
+    redis:
+      redis_host: billing.cache.example.com
+tunnels:
+  - name: bastion
+    command: ssh -N -D 5555 bastion.example.com
+    reconect: true
+secrets:
+  sops:
+    - name: db
+      file: /tmp/den-check-demo/secrets/db.yaml

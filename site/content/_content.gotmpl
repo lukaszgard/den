@@ -1,0 +1,112 @@
+{{- /*
+Builds /docs from the repo's own markdown, which hugo.yaml mounts under
+assets/den/, in the order and groups of data/sections.yaml.
+
+A page keeps its source path in params.denSource: the link and image hooks
+resolve its relative links (../rds/README.md, vpn.gif) against it, the way GHE
+does, so the files read the same in both places.
+*/ -}}
+
+{{- /* Reading order first: the sidebar needs a weight per page (from 1: Hugo sorts
+weight 0 last) and the pager each page's neighbours. */ -}}
+{{- $entries := slice -}}
+{{- $pages := slice -}}
+{{- $listed := dict -}}
+{{- range $group := hugo.Data.sections -}}
+  {{- $entries = $entries | append (dict "group" $group.group) -}}
+  {{- range $group.pages -}}
+    {{- $e := cond (reflect.IsMap .) . (dict "src" .) -}}
+    {{- $path := partial "den/site-path.html" $e.src -}}
+    {{- if not $path -}}
+      {{- errorf "data/sections.yaml: %s cannot be a page (see den/site-path.html)" $e.src -}}
+    {{- end -}}
+    {{- $e = merge $e (dict "path" $path) -}}
+    {{- $entries = $entries | append $e -}}
+    {{- $pages = $pages | append $e -}}
+    {{- $listed = merge $listed (dict $e.src true) -}}
+  {{- end -}}
+{{- end -}}
+
+{{- /* The Help topics (docs/help/) are den's in-app manual, not pages here; every
+other feature reference must be listed. */ -}}
+{{- range resources.Match "den/docs/*/README.md" -}}
+  {{- $src := .Name | strings.TrimPrefix "/" | strings.TrimPrefix "den/" -}}
+  {{- if and (ne $src "docs/help/README.md") (not (index $listed $src)) -}}
+    {{- errorf "%s is not in site/data/sections.yaml: add it to a group to put it on the site" $src -}}
+  {{- end -}}
+{{- end -}}
+
+{{- range $i, $e := $entries -}}
+  {{- with $e.group -}}
+    {{- /* A group is a sidebar heading: listed so the sidebar shows it, never
+    rendered, and left out of search because it has no content. */ -}}
+    {{- $.AddPage (dict
+      "kind" "page"
+      "path" (printf "docs/group-%s" (urlize .))
+      "title" .
+      "weight" (add $i 1)
+      "params" (dict "sidebar" (dict "separator" true))
+      "build" (dict "render" "never" "list" "always")
+    ) -}}
+    {{- continue -}}
+  {{- end -}}
+
+  {{- $res := resources.Get (printf "den/%s" $e.src) -}}
+  {{- if not $res -}}
+    {{- errorf "data/sections.yaml: %s does not exist" $e.src -}}
+  {{- end -}}
+  {{- $md := $res.Content -}}
+
+  {{- /* The theme prints the title as the page's heading, so the file's own goes. */ -}}
+  {{- $title := $e.title -}}
+  {{- if not $title -}}
+    {{- $h1 := `^(?:<!--[^\n]*-->\s*)?# ([^\n]+)\n` -}}
+    {{- with findRESubmatch $h1 $md 1 -}}
+      {{- $title = index (index . 0) 1 | replaceRE "`" "" -}}
+      {{- $md = replaceRE $h1 "" $md 1 -}}
+    {{- else -}}
+      {{- errorf "%s has no leading # heading: give it a title in data/sections.yaml" $e.src -}}
+    {{- end -}}
+  {{- end -}}
+
+  {{- /* A page with pages under it is a section, or they would not nest under it
+  in the sidebar. */ -}}
+  {{- $kind := "page" -}}
+  {{- range $pages -}}
+    {{- if hasPrefix .path (printf "%s/" $e.path) -}}{{- $kind = "section" -}}{{- end -}}
+  {{- end -}}
+
+  {{- /* Explicit neighbours: Hugo's own would include the group headings, which
+  have no page to go to. */ -}}
+  {{- $prev := false -}}
+  {{- $next := false -}}
+  {{- range $j, $p := $pages -}}
+    {{- if eq $p.src $e.src -}}
+      {{- if gt $j 0 -}}{{- $prev = (index $pages (sub $j 1)).path -}}{{- end -}}
+      {{- if lt $j (sub (len $pages) 1) -}}{{- $next = (index $pages (add $j 1)).path -}}{{- end -}}
+    {{- end -}}
+  {{- end -}}
+
+  {{- /* The date of the file's last commit (data/lastmod.json, made by
+  scripts/site-lastmod.sh); a file with none shows no date. */ -}}
+  {{- $dates := dict -}}
+  {{- with hugo.Data.lastmod -}}
+    {{- with index . $e.src -}}{{- $dates = dict "lastmod" (time.AsTime .) -}}{{- end -}}
+  {{- end -}}
+
+  {{- $.AddPage (dict
+    "kind" $kind
+    "path" (strings.TrimPrefix "/" $e.path)
+    "title" $title
+    "weight" (add $i 1)
+    "dates" $dates
+    "content" (dict "mediaType" "text/markdown" "value" $md)
+    "params" (dict
+      "denSource" $e.src
+      "denStatus" ($e.status | default "")
+      "editURL" (printf "%s/edit/%s/%s" site.Params.repoURL site.Params.repoBranch $e.src)
+      "prev" $prev
+      "next" $next
+    )
+  ) -}}
+{{- end -}}

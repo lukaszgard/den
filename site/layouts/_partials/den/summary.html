@@ -1,0 +1,24 @@
+{{- /*
+One plain-text line about a docs page for llms.txt: the first paragraph of its
+Markdown that is prose (not a heading, table, list, code or image), with the
+Markdown marks taken out. Hugo's .Summary is HTML, with entities, and starts
+with the "What it is" heading.
+
+@param {page} . The page.
+*/ -}}
+{{- $out := "" -}}
+{{- $notProse := printf `^(#|\||%s|<|-|\*\s|\d+\.|!|>|\{)` "```" -}}
+{{- if eq .Params.denSource "CHANGELOG.md" -}}
+  {{- $out = "What changed in each den release, newest first." -}}
+{{- else -}}
+  {{- range split (replaceRE `<!--[\s\S]*?-->` "" .RawContent) "\n\n" -}}
+    {{- $p := strings.TrimSpace . -}}
+    {{- if and (not $out) $p (not (findRE $notProse $p)) -}}
+      {{- $out = $p -}}
+    {{- end -}}
+  {{- end -}}
+  {{- $out = $out | replaceRE `!?\[([^\]]*)\]\([^)]*\)` "$1" | replaceRE "[`*]" "" | replaceRE `\s+` " " -}}
+  {{- with findRESubmatch `^(.{30,}?\.)(?:\s|$)` $out -}}{{- $out = index (index . 0) 1 -}}{{- end -}}
+  {{- $out = $out | truncate 160 -}}
+{{- end -}}
+{{- return $out -}}

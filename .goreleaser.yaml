@@ -1,0 +1,65 @@
+version: 2
+
+project_name: den
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: den
+    main: ./cmd/den
+    binary: den
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - id: den
+    ids:
+      - den
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README.md
+      - den.yaml
+      - skills/den/SKILL.md
+      - skills/den/runbooks.md
+
+checksum:
+  name_template: "checksums.txt"
+
+release:
+  github:
+    owner: "lukaszgard"
+    name: den
+  draft: false
+  prerelease: auto
+  name_template: "v{{.Version}}"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+      - Merge pull request
+      - Merge branch
+
+source:
+  enabled: false

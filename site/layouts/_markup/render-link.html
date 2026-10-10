@@ -1,0 +1,10 @@
+{{- /* Hextra's link hook, with destinations resolved by den/resolve.html. */ -}}
+{{- $dest := partial "den/resolve.html" (dict "page" .PageInner "dest" .Destination "image" false) -}}
+{{- $isExternal := hasPrefix $dest "http" -}}
+<a href="{{ $dest | safeURL }}"{{ with .Title }} title="{{ . }}"{{ end }}{{ if $isExternal }} target="_blank" rel="noopener"{{ end }}>
+  {{- .Text | safeHTML -}}
+  {{- if and site.Params.externalLinkDecoration $isExternal -}}
+    {{- partial "utils/icon.html" (dict "name" "arrow-up-right" "attributes" `class="hx:inline hx:rtl:rotate-270 hx:align-baseline" height="1em" aria-hidden="true"`) -}}
+  {{- end -}}
+</a>
+{{- /* Drop trailing newlines */ -}}

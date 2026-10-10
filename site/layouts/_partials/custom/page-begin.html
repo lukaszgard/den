@@ -1,0 +1,9 @@
+{{- /*
+A badge on a page whose feature is not settled yet: data/sections.yaml gives
+the entry a status (beta), and it links to the feature status page.
+*/ -}}
+{{- with .Params.denStatus -}}
+  {{- with site.GetPage "/docs/status" -}}
+    <a href="{{ .RelPermalink }}" class="den-status den-status-{{ $.Params.denStatus }}" title="See feature status">{{ $.Params.denStatus | title }}</a>
+  {{- end -}}
+{{- end -}}

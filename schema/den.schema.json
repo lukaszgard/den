@@ -1,0 +1,1244 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://den.dev/schema/den.schema.json",
+  "$defs": {
+    "AIConfig": {
+      "properties": {
+        "model": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "AWSSecretsManagerSecretSpec": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "secret_id": {
+          "type": "string"
+        },
+        "aws_profile": {
+          "type": "string"
+        },
+        "aws_region": {
+          "type": "string"
+        },
+        "version_stage": {
+          "type": "string"
+        },
+        "auto_reveal": {
+          "type": "boolean"
+        },
+        "view": {
+          "type": "string",
+          "enum": [
+            "tree",
+            "flat"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "name",
+        "secret_id"
+      ]
+    },
+    "AWSSessionSpec": {
+      "properties": {
+        "session": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "session"
+      ]
+    },
+    "AWSSpec": {
+      "properties": {
+        "config_path": {
+          "type": "string"
+        },
+        "credentials_path": {
+          "type": "string"
+        },
+        "sessions": {
+          "items": {
+            "$ref": "#/$defs/AWSSessionSpec"
+          },
+          "type": "array"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "AgentSpec": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "command": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "claude",
+            "codex"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "name",
+        "command"
+      ]
+    },
+    "DockerSpec": {
+      "properties": {
+        "compose_file": {
+          "type": "string"
+        },
+        "services": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "env_file": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "compose_file"
+      ]
+    },
+    "DocumentDBSpec": {
+      "properties": {
+        "region": {
+          "type": "string"
+        },
+        "environment": {
+          "type": "string"
+        },
+        "production": {
+          "type": "boolean"
+        },
+        "local_port": {
+          "type": "integer"
+        },
+        "reconnect": {
+          "type": "boolean"
+        },
+        "ec2_instance_id": {
+          "type": "string"
+        },
+        "aws_profile": {
+          "type": "string"
+        },
+        "credential_profile": {
+          "type": "string"
+        },
+        "aws_region_code": {
+          "type": "string"
+        },
+        "transport": {
+          "$ref": "#/$defs/TransportSpec"
+        },
+        "documentdb_host": {
+          "type": "string"
+        },
+        "db_name": {
+          "type": "string"
+        },
+        "ca_file": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "EnvSpec": {
+      "properties": {
+        "region": {
+          "type": "string"
+        },
+        "environment": {
+          "type": "string"
+        },
+        "production": {
+          "type": "boolean"
+        },
+        "ec2_instance_id": {
+          "type": "string"
+        },
+        "aws_profile": {
+          "type": "string"
+        },
+        "credential_profile": {
+          "type": "string"
+        },
+        "aws_region_code": {
+          "type": "string"
+        },
+        "transport": {
+          "$ref": "#/$defs/TransportSpec"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "KafkaSpec": {
+      "properties": {
+        "region": {
+          "type": "string"
+        },
+        "environment": {
+          "type": "string"
+        },
+        "production": {
+          "type": "boolean"
+        },
+        "local_port": {
+          "type": "integer"
+        },
+        "reconnect": {
+          "type": "boolean"
+        },
+        "ec2_instance_id": {
+          "type": "string"
+        },
+        "aws_profile": {
+          "type": "string"
+        },
+        "credential_profile": {
+          "type": "string"
+        },
+        "aws_region_code": {
+          "type": "string"
+        },
+        "transport": {
+          "$ref": "#/$defs/TransportSpec"
+        },
+        "kafka_host": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "KeePassXCSecretSpec": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "database": {
+          "type": "string"
+        },
+        "entry": {
+          "type": "string"
+        },
+        "group": {
+          "type": "string"
+        },
+        "key_file": {
+          "type": "string"
+        },
+        "no_password": {
+          "type": "boolean"
+        },
+        "attributes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "totp": {
+          "type": "boolean"
+        },
+        "remember_password": {
+          "type": "string"
+        },
+        "cli_path": {
+          "type": "string"
+        },
+        "auto_reveal": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "name",
+        "database"
+      ]
+    },
+    "LogsConfig": {
+      "properties": {
+        "level": {
+          "type": "string",
+          "enum": [
+            "trace",
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ]
+        },
+        "file_location": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "MCPConfig": {
+      "properties": {
+        "allow": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "allow_production": {
+          "type": "boolean"
+        },
+        "allow_runbooks": {
+          "type": "boolean"
+        },
+        "allow_source_runbooks": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "NeptuneSpec": {
+      "properties": {
+        "region": {
+          "type": "string"
+        },
+        "environment": {
+          "type": "string"
+        },
+        "production": {
+          "type": "boolean"
+        },
+        "local_port": {
+          "type": "integer"
+        },
+        "reconnect": {
+          "type": "boolean"
+        },
+        "ec2_instance_id": {
+          "type": "string"
+        },
+        "aws_profile": {
+          "type": "string"
+        },
+        "credential_profile": {
+          "type": "string"
+        },
+        "aws_region_code": {
+          "type": "string"
+        },
+        "transport": {
+          "$ref": "#/$defs/TransportSpec"
+        },
+        "neptune_host": {
+          "type": "string"
+        },
+        "port": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "OpenSearchSpec": {
+      "properties": {
+        "region": {
+          "type": "string"
+        },
+        "environment": {
+          "type": "string"
+        },
+        "production": {
+          "type": "boolean"
+        },
+        "local_port": {
+          "type": "integer"
+        },
+        "reconnect": {
+          "type": "boolean"
+        },
+        "ec2_instance_id": {
+          "type": "string"
+        },
+        "aws_profile": {
+          "type": "string"
+        },
+        "credential_profile": {
+          "type": "string"
+        },
+        "aws_region_code": {
+          "type": "string"
+        },
+        "transport": {
+          "$ref": "#/$defs/TransportSpec"
+        },
+        "opensearch_host": {
+          "type": "string"
+        },
+        "serverless": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "ParamSpec": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "default": {
+          "type": "string"
+        },
+        "options": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "secret": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "RDSSpec": {
+      "properties": {
+        "region": {
+          "type": "string"
+        },
+        "environment": {
+          "type": "string"
+        },
+        "production": {
+          "type": "boolean"
+        },
+        "local_port": {
+          "type": "integer"
+        },
+        "reconnect": {
+          "type": "boolean"
+        },
+        "ec2_instance_id": {
+          "type": "string"
+        },
+        "aws_profile": {
+          "type": "string"
+        },
+        "credential_profile": {
+          "type": "string"
+        },
+        "aws_region_code": {
+          "type": "string"
+        },
+        "transport": {
+          "$ref": "#/$defs/TransportSpec"
+        },
+        "engine": {
+          "type": "string",
+          "enum": [
+            "postgres",
+            "mysql"
+          ]
+        },
+        "update_pgpass": {
+          "type": "boolean"
+        },
+        "rds_host": {
+          "type": "string"
+        },
+        "db_name": {
+          "type": "string"
+        },
+        "db_user": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "RedisSpec": {
+      "properties": {
+        "region": {
+          "type": "string"
+        },
+        "environment": {
+          "type": "string"
+        },
+        "production": {
+          "type": "boolean"
+        },
+        "local_port": {
+          "type": "integer"
+        },
+        "reconnect": {
+          "type": "boolean"
+        },
+        "ec2_instance_id": {
+          "type": "string"
+        },
+        "aws_profile": {
+          "type": "string"
+        },
+        "credential_profile": {
+          "type": "string"
+        },
+        "aws_region_code": {
+          "type": "string"
+        },
+        "transport": {
+          "$ref": "#/$defs/TransportSpec"
+        },
+        "cache_name": {
+          "type": "string"
+        },
+        "user_id": {
+          "type": "string"
+        },
+        "serverless": {
+          "type": "boolean"
+        },
+        "memorydb": {
+          "type": "boolean"
+        },
+        "redis_host": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "RedshiftSpec": {
+      "properties": {
+        "region": {
+          "type": "string"
+        },
+        "environment": {
+          "type": "string"
+        },
+        "production": {
+          "type": "boolean"
+        },
+        "local_port": {
+          "type": "integer"
+        },
+        "reconnect": {
+          "type": "boolean"
+        },
+        "ec2_instance_id": {
+          "type": "string"
+        },
+        "aws_profile": {
+          "type": "string"
+        },
+        "credential_profile": {
+          "type": "string"
+        },
+        "aws_region_code": {
+          "type": "string"
+        },
+        "transport": {
+          "$ref": "#/$defs/TransportSpec"
+        },
+        "update_pgpass": {
+          "type": "boolean"
+        },
+        "redshift_host": {
+          "type": "string"
+        },
+        "cluster_identifier": {
+          "type": "string"
+        },
+        "workgroup_name": {
+          "type": "string"
+        },
+        "db_name": {
+          "type": "string"
+        },
+        "db_user": {
+          "type": "string"
+        },
+        "credential_ttl": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "RetrySpec": {
+      "properties": {
+        "until_success": {
+          "type": "boolean"
+        },
+        "interval": {
+          "type": "string"
+        },
+        "max_attempts": {
+          "type": "integer"
+        },
+        "timeout": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "interval"
+      ]
+    },
+    "RunbookSettings": {
+      "properties": {
+        "history": {
+          "type": "integer"
+        },
+        "about": {
+          "type": "boolean"
+        },
+        "shell": {
+          "type": "string"
+        },
+        "editor": {
+          "type": "string"
+        },
+        "agent": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "RunbookSource": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "ref": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "include": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "exclude": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "env_map": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "name",
+        "url"
+      ]
+    },
+    "RunbookSpec": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "command": {
+          "type": "string"
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "env": {
+          "type": "string"
+        },
+        "env_vars": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "params": {
+          "items": {
+            "$ref": "#/$defs/ParamSpec"
+          },
+          "type": "array"
+        },
+        "confirm": {
+          "type": "boolean"
+        },
+        "timeout": {
+          "type": "string"
+        },
+        "retry": {
+          "$ref": "#/$defs/RetrySpec"
+        },
+        "history": {
+          "type": "integer"
+        },
+        "about": {
+          "type": "boolean"
+        },
+        "shell": {
+          "type": "string"
+        },
+        "editor": {
+          "type": "string"
+        },
+        "agent": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "name",
+        "command"
+      ]
+    },
+    "RunbooksConfig": {
+      "properties": {
+        "dirs": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "rescan": {
+          "type": "boolean"
+        },
+        "template": {
+          "type": "string"
+        },
+        "agent": {
+          "type": "string"
+        },
+        "agents": {
+          "items": {
+            "$ref": "#/$defs/AgentSpec"
+          },
+          "type": "array"
+        },
+        "defaults": {
+          "$ref": "#/$defs/RunbookSettings"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/RunbookSpec"
+          },
+          "type": "array"
+        },
+        "sequences": {
+          "items": {
+            "$ref": "#/$defs/SequenceSpec"
+          },
+          "type": "array"
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/RunbookSource"
+          },
+          "type": "array"
+        },
+        "allow_sources": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "SOPSSecretSpec": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "aws_profile": {
+          "type": "string"
+        },
+        "aws_region": {
+          "type": "string"
+        },
+        "auto_reveal": {
+          "type": "boolean"
+        },
+        "view": {
+          "type": "string",
+          "enum": [
+            "tree",
+            "flat"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "name",
+        "file"
+      ]
+    },
+    "SecretsConfig": {
+      "properties": {
+        "sops": {
+          "items": {
+            "$ref": "#/$defs/SOPSSecretSpec"
+          },
+          "type": "array"
+        },
+        "aws_secretsmanager": {
+          "items": {
+            "$ref": "#/$defs/AWSSecretsManagerSecretSpec"
+          },
+          "type": "array"
+        },
+        "keepassxc": {
+          "items": {
+            "$ref": "#/$defs/KeePassXCSecretSpec"
+          },
+          "type": "array"
+        },
+        "vault": {
+          "items": {
+            "$ref": "#/$defs/VaultSecretSpec"
+          },
+          "type": "array"
+        },
+        "view": {
+          "type": "string",
+          "enum": [
+            "tree",
+            "flat"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "SequenceSpec": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "steps": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "confirm": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "name",
+        "steps"
+      ]
+    },
+    "ServiceSpec": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "rds",
+            "redis",
+            "documentdb",
+            "redshift",
+            "opensearch",
+            "neptune",
+            "kafka",
+            "docker"
+          ]
+        },
+        "env": {
+          "type": "string"
+        },
+        "rds": {
+          "$ref": "#/$defs/RDSSpec"
+        },
+        "kafka": {
+          "$ref": "#/$defs/KafkaSpec"
+        },
+        "redis": {
+          "$ref": "#/$defs/RedisSpec"
+        },
+        "documentdb": {
+          "$ref": "#/$defs/DocumentDBSpec"
+        },
+        "redshift": {
+          "$ref": "#/$defs/RedshiftSpec"
+        },
+        "opensearch": {
+          "$ref": "#/$defs/OpenSearchSpec"
+        },
+        "neptune": {
+          "$ref": "#/$defs/NeptuneSpec"
+        },
+        "docker": {
+          "$ref": "#/$defs/DockerSpec"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "name",
+        "type"
+      ]
+    },
+    "TransportSpec": {
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "ssm",
+            "ssh",
+            "eice",
+            "kubectl"
+          ]
+        },
+        "host": {
+          "type": "string"
+        },
+        "args": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "endpoint_id": {
+          "type": "string"
+        },
+        "resource": {
+          "type": "string"
+        },
+        "context": {
+          "type": "string"
+        },
+        "namespace": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "type"
+      ]
+    },
+    "TunnelAutoConnect": {
+      "properties": {
+        "vpn": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "vpn"
+      ]
+    },
+    "TunnelSpec": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "command": {
+          "type": "string"
+        },
+        "reconnect": {
+          "type": "boolean"
+        },
+        "health_check": {
+          "type": "string"
+        },
+        "monitor": {
+          "type": "boolean"
+        },
+        "auto_connect": {
+          "$ref": "#/$defs/TunnelAutoConnect"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "name",
+        "command"
+      ]
+    },
+    "UpdatesConfig": {
+      "properties": {
+        "github_api": {
+          "type": "string"
+        },
+        "s3_bucket": {
+          "type": "string"
+        },
+        "s3_prefix": {
+          "type": "string"
+        },
+        "aws_profile": {
+          "type": "string"
+        },
+        "aws_region": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "VPNSpec": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "gateway": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "config_file": {
+          "type": "string"
+        },
+        "extra_args": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "health_check": {
+          "type": "string"
+        },
+        "reconnect": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "name"
+      ]
+    },
+    "VaultSecretSpec": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "address": {
+          "type": "string"
+        },
+        "namespace": {
+          "type": "string"
+        },
+        "ca_cert": {
+          "type": "string"
+        },
+        "mount": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "field": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        },
+        "login": {
+          "type": "string"
+        },
+        "cli_path": {
+          "type": "string"
+        },
+        "auto_reveal": {
+          "type": "boolean"
+        },
+        "view": {
+          "type": "string",
+          "enum": [
+            "tree",
+            "flat"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "name",
+        "path"
+      ]
+    }
+  },
+  "properties": {
+    "version": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "aws": {
+      "$ref": "#/$defs/AWSSpec"
+    },
+    "menu_order": {
+      "items": {
+        "type": "string",
+        "enum": [
+          "connect",
+          "tunnel",
+          "runbooks",
+          "vpn",
+          "aws",
+          "secrets",
+          "create-env",
+          "config",
+          "logs",
+          "help",
+          "updates"
+        ]
+      },
+      "type": "array"
+    },
+    "disabled_panes": {
+      "items": {
+        "type": "string",
+        "enum": [
+          "connect",
+          "tunnel",
+          "runbooks",
+          "vpn",
+          "aws",
+          "secrets",
+          "create-env",
+          "config",
+          "logs",
+          "help",
+          "updates"
+        ]
+      },
+      "type": "array"
+    },
+    "environments": {
+      "additionalProperties": {
+        "$ref": "#/$defs/EnvSpec"
+      },
+      "type": "object"
+    },
+    "services": {
+      "items": {
+        "$ref": "#/$defs/ServiceSpec"
+      },
+      "type": "array"
+    },
+    "tunnels": {
+      "items": {
+        "$ref": "#/$defs/TunnelSpec"
+      },
+      "type": "array"
+    },
+    "vpn": {
+      "items": {
+        "$ref": "#/$defs/VPNSpec"
+      },
+      "type": "array"
+    },
+    "runbooks": {
+      "$ref": "#/$defs/RunbooksConfig"
+    },
+    "secrets": {
+      "$ref": "#/$defs/SecretsConfig"
+    },
+    "logs": {
+      "$ref": "#/$defs/LogsConfig"
+    },
+    "updates": {
+      "$ref": "#/$defs/UpdatesConfig"
+    },
+    "mcp": {
+      "$ref": "#/$defs/MCPConfig"
+    },
+    "ai": {
+      "$ref": "#/$defs/AIConfig"
+    }
+  },
+  "additionalProperties": false,
+  "type": "object",
+  "title": "den.yaml",
+  "description": "Configuration for den, the developer environment navigator."
+}

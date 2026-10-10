@@ -1,0 +1,10 @@
+name: Env report
+description: What den hands a runbook - profile, region, bastion
+command: ./run.sh
+env: demo-e2e
+timeout: 30s
+params:
+  - name: format
+    description: How to print it
+    options: [table, plain]
+    default: table

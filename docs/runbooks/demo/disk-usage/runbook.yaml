@@ -1,0 +1,4 @@
+name: Disk usage
+description: Free and used space of the root disk, in Python
+command: python3 main.py
+timeout: 30s

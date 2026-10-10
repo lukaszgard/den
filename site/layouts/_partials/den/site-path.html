@@ -1,0 +1,23 @@
+{{- /*
+Returns the site path of a repo markdown file (docs/vpn/README.md, CHANGELOG.md),
+or "" for a file that cannot be a page. The repo's README.md is the GitHub page and
+is not one; docs/intro/README.md is /docs/, the landing page; the three pages of
+docs/runbooks/agents/ sit beside the others (/docs/agent-cli/), because an address under
+/docs/runbooks/ would nest them under Runbooks in the sidebar instead of their group.
+The content adapter places pages with it and the link hook finds them with it, so the
+two cannot disagree.
+*/ -}}
+{{- $src := . -}}
+{{- $path := "" -}}
+{{- if eq $src "docs/intro/README.md" -}}
+  {{- $path = "/docs" -}}
+{{- else if and (hasPrefix $src "docs/runbooks/agents/") (strings.HasSuffix $src "/README.md") (ne $src "docs/runbooks/agents/template/README.md") -}}
+  {{- $path = printf "/docs/agent-%s" (strings.TrimSuffix "/README.md" (strings.TrimPrefix "docs/runbooks/agents/" $src)) -}}
+{{- else if eq $src "CHANGELOG.md" -}}
+  {{- $path = "/docs/changelog" -}}
+{{- else if and (hasPrefix $src "docs/") (strings.HasSuffix $src "/README.md") -}}
+  {{- $path = printf "/docs/%s" (strings.TrimSuffix "/README.md" (strings.TrimPrefix "docs/" $src)) -}}
+{{- else if and (hasPrefix $src "docs/") (strings.HasSuffix $src ".md") -}}
+  {{- $path = printf "/docs/%s" (strings.TrimSuffix ".md" (strings.TrimPrefix "docs/" $src)) -}}
+{{- end -}}
+{{- return $path -}}

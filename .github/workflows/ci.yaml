@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.14.0
+      # The schema and the config reference come from the config structs, the
+      # command reference from the command tree and the install reference
+      # from the prereq catalog; a change to any must ship with the regenerated
+      # file.
+      - name: generated files are up to date
+        run: make generate && git diff --exit-code schema/ docs/config/ docs/cli/ docs/doctor/install.md
+      - run: make script-test
+
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: make build vet
+      # Race detector plus the per-package coverage floors.
+      - run: make cover
+
+  vuln:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: make vuln
+
+  # Warns, never fails: the CHANGELOG.md version should match what the commit
+  # types call for (feat = minor, fix = patch). See scripts/release.sh.
+  release-version:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - run: ./scripts/release.sh check origin/${{ github.base_ref }}

@@ -1,0 +1,4 @@
+description: Cluster status and engine version
+command: ./run.sh
+env: prod
+timeout: 1m

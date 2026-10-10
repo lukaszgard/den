@@ -1,0 +1,49 @@
+{{- /*
+Resolves a link or image destination to the URL it has on the site.
+
+In a page built from a repo file (params.denSource), a relative destination is
+read against that file, as GitHub reads it:
+  - another file that is a page here (../rds/README.md#x) → that page
+  - an image (vpn.gif)                                    → its published copy
+  - any other repo file (den.yaml, a Help topic)          → the file on the repo host
+A site-absolute one (/docs/vpn) goes through the base URL, which may have a path.
+Anything else (https:, mailto:, #fragment) comes back as written.
+
+@param {page}   page  The page being rendered.
+@param {string} dest  The destination as written.
+@param {bool}   image True for an image.
+*/ -}}
+{{- $dest := .dest -}}
+{{- $url := urls.Parse $dest -}}
+{{- $fragment := cond (ne $url.Fragment "") (printf "#%s" $url.Fragment) "" -}}
+{{- $src := .page.Params.denSource -}}
+
+{{- if or $url.Scheme (not $url.Path) -}}
+  {{- /* as written */ -}}
+{{- else if hasPrefix $url.Path "/" -}}
+  {{- with or (and (not .image) (site.GetPage $url.Path)) (resources.Get (strings.TrimPrefix "/" $url.Path)) -}}
+    {{- $dest = printf "%s%s" .RelPermalink $fragment -}}
+  {{- else -}}
+    {{- $dest = printf "%s%s" (relURL (strings.TrimPrefix "/" $url.Path)) $fragment -}}
+  {{- end -}}
+{{- else if $src -}}
+  {{- $target := path.Join (path.Dir $src) $url.Path -}}
+  {{- if hasPrefix $target "../" -}}
+    {{- warnf "%s: %s points outside the repository" $src .dest -}}
+  {{- else if .image -}}
+    {{- with resources.Get (printf "den/%s" $target) -}}
+      {{- $dest = .RelPermalink -}}
+    {{- else -}}
+      {{- warnf "%s: image %s does not exist" $src $url.Path -}}
+    {{- end -}}
+  {{- else -}}
+    {{- /* Not "with partial": Hugo reads that as a partial decorator. */ -}}
+    {{- $sitePath := partial "den/site-path.html" $target -}}
+    {{- with and $sitePath (site.GetPage $sitePath) -}}
+      {{- $dest = printf "%s%s" .RelPermalink $fragment -}}
+    {{- else -}}
+      {{- $dest = printf "%s/blob/%s/%s%s" site.Params.repoURL site.Params.repoBranch $target $fragment -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- return $dest -}}

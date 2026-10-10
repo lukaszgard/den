@@ -1,0 +1,84 @@
+# The pages of /docs, in reading order. The groups say what kind of page you will find,
+# not which feature it covers: the first answers what den is, why and how to start, the
+# last is for looking things up. They are not the groups of the in-app Help
+# (docs/help/README.md), which stay as they are.
+# Each page is a markdown file of the repo, and its address follows its path
+# (layouts/_partials/den/site-path.html):
+#   docs/intro/README.md      → /docs/
+#   docs/vpn/README.md        → /docs/vpn/
+#   docs/doctor/install.md    → /docs/doctor/install/
+#   CHANGELOG.md              → /docs/changelog/
+# The repo's README.md is the GitHub page and is not on the site.
+# The title is the file's first "# " heading; a file without one names it here.
+# `status: beta` puts a Beta badge on the page, linking to docs/status/ (keep the two in step).
+# A docs/*/README.md missing from this list fails the build, so a new feature's
+# reference cannot quietly stay off the site.
+- group: Start here
+  pages:
+    - docs/intro/README.md
+    - docs/why-den/README.md
+    - docs/quickstart/README.md
+    - docs/install/README.md
+    - docs/concepts/README.md
+
+- group: Set up
+  pages:
+    - docs/doctor/README.md
+    - docs/doctor/install.md
+    - docs/init/README.md
+    - docs/files/README.md
+    - docs/config-reload/README.md
+    - docs/config-check/README.md
+    - docs/schema/README.md
+
+- group: Connect
+  pages:
+    - docs/environments/README.md
+    - docs/transports/README.md
+    - docs/aws/README.md
+    - docs/vpn/README.md
+    - docs/tunnel/README.md
+    - src: docs/terminal/README.md
+      status: beta
+
+- group: Data stores
+  pages:
+    - docs/rds/README.md
+    - docs/elasticache/README.md
+    - docs/memorydb/README.md
+    - docs/documentdb/README.md
+    - docs/redshift/README.md
+    - docs/opensearch/README.md
+    - docs/neptune/README.md
+    - docs/docker/README.md
+
+- group: Secrets & runbooks
+  pages:
+    - docs/secrets/README.md
+    - docs/runbooks/README.md
+    - src: docs/runbook-sources/README.md
+      status: beta
+
+- group: AI agents
+  pages:
+    - docs/mcp/README.md
+    - src: docs/runbooks/agents/cli/README.md
+      status: beta
+    - src: docs/runbooks/agents/panel/README.md
+      status: beta
+    - src: docs/runbooks/agents/mcp/README.md
+      status: beta
+
+- group: Reference
+  pages:
+    - docs/config/README.md
+    - docs/cli/README.md
+    - docs/shortcuts/README.md
+    - docs/help-panel/README.md
+    - docs/updates/README.md
+    - docs/security/README.md
+    - docs/troubleshooting/README.md
+    - docs/glossary/README.md
+    - docs/status/README.md
+    - src: CHANGELOG.md
+      title: Changelog

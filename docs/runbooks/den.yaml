@@ -1,0 +1,40 @@
+# The den.yaml of runbooks.tape: just enough to show runbooks. Placeholder
+# environments, no services and no updates block, so a recording connects
+# nothing and checks for no update. Run it from the repository root:
+#
+#   den -c docs/runbooks/den.yaml
+version: "1"
+
+aws:                                # no real profiles in a recording
+  config_path: /dev/null
+  credentials_path: /dev/null
+
+menu_order: [runbooks, help]        # only what the demo shows
+
+environments:                       # placeholder names: no account is ever called
+  demo-e2e:
+    region: eu
+    environment: e2e
+    aws_profile: orders-e2e
+    aws_region_code: eu-central-1
+    ec2_instance_id: i-0123456789abcdef0
+  demo-prod:
+    region: eu
+    environment: prod
+    aws_profile: orders-prod
+    aws_region_code: eu-central-1
+    ec2_instance_id: i-0fedcba9876543210
+
+runbooks:
+  dirs: [demo]                      # docs/runbooks/demo: one folder per runbook, and an old-format script
+  defaults:
+    history: 5
+  items:
+    - name: Hello
+      description: A one-line command declared in den.yaml
+      env: demo-e2e
+      command: echo "hello from $DEN_RUNBOOK, as $AWS_PROFILE in $AWS_REGION"
+  sequences:
+    - name: Morning check
+      description: Env report, then disk usage
+      steps: [Env report, Disk usage]

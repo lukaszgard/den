@@ -1,0 +1,27 @@
+{{- /*
+The Markdown twin of a docs page (/docs/rds/index.md): the repo file as written,
+but with relative links read against the file (den/resolve.html, as the HTML links
+are) and made absolute, since a twin is read away from the site: pasted into an AI
+chat, or fetched by an agent.
+
+@param {page} . The page.
+*/ -}}
+{{- $page := . -}}
+{{- $md := .RawContent -}}
+{{- $base := urls.Parse site.Home.Permalink -}}
+{{- $origin := printf "%s://%s" $base.Scheme $base.Host -}}
+{{- if $page.Params.denSource -}}
+  {{- range findRESubmatch `(!?)\[[^\]\n]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)` $md -}}
+    {{- $image := eq (index . 1) "!" -}}
+    {{- $dest := index . 2 -}}
+    {{- $resolved := partial "den/resolve.html" (dict "page" $page "dest" $dest "image" $image) -}}
+    {{- if and (ne $resolved $dest) (hasPrefix $resolved "/") -}}
+      {{- $resolved = printf "%s%s" $origin $resolved -}}
+    {{- end -}}
+    {{- if ne $resolved $dest -}}
+      {{- $link := index . 0 -}}
+      {{- $md = replace $md $link (replace $link (printf "](%s" $dest) (printf "](%s" $resolved)) -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- return $md -}}

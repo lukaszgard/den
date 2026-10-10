@@ -1,0 +1,32 @@
+name: Bug report
+description: Something in den does not work as documented
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what den did instead.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: den version
+      description: The output of `den --version`.
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Environment
+      description: |
+        Your OS, terminal and the output of `den doctor`. Replace account IDs, host names and
+        profile names that you do not want to publish; never paste a token or a password.
+      render: text
+  - type: textarea
+    id: config
+    attributes:
+      label: The part of den.yaml involved
+      description: Only the service, environment or runbook concerned, with names changed if you like.
+      render: yaml

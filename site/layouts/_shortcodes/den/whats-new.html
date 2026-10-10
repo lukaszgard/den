@@ -1,0 +1,34 @@
+{{- /*
+The latest releases as cards, from CHANGELOG.md (mounted as assets/den/CHANGELOG.md):
+the version and date of the top entries, their bold lead line, and the paragraph
+that follows it. Each card links to its entry on the changelog page.
+
+@param {int} count How many releases to show. Default 3.
+
+@example {{< den/whats-new >}}
+*/ -}}
+{{- $count := int (.Get "count" | default 3) -}}
+{{- $changelog := resources.Get "den/CHANGELOG.md" -}}
+{{- if not $changelog -}}
+  {{- errorf "den/whats-new: den/CHANGELOG.md is not mounted (see module.mounts in hugo.yaml)" -}}
+{{- end -}}
+{{- $entries := findRESubmatch `(?m)^## \[([^\]]+)\] - (\d{4}-\d{2}-\d{2})\n\n\*\*([^*]+)\*\*([\s\S]*?)\n\n` $changelog.Content $count -}}
+{{- if not $entries -}}
+  {{- errorf "den/whats-new: CHANGELOG.md has no '## [X.Y.Z] - date' entry opening with a bold line" -}}
+{{- end -}}
+{{- $page := site.GetPage "/docs/changelog" -}}
+<div class="hextra-feature-grid hx:grid hx:sm:max-lg:grid-cols-2 hx:max-sm:grid-cols-1 hx:gap-4 hx:w-full not-prose" style="--hextra-feature-grid-cols: {{ $count }}">
+  {{- range $entries }}
+  {{- $version := index . 1 -}}
+  {{- $date := index . 2 -}}
+  {{- $lead := index . 3 -}}
+  {{- $rest := index . 4 | replaceRE `\s+` " " | strings.TrimSpace -}}
+  <a href="{{ $page.RelPermalink }}#{{ printf "[%s] - %s" $version $date | anchorize }}" class="hextra-feature-card not-prose hx:block hx:relative hx:overflow-hidden hx:rounded-3xl hx:border hx:border-gray-200 hx:hover:border-gray-300 hx:dark:border-neutral-800 hx:dark:hover:border-neutral-700 hx:before:pointer-events-none hx:before:absolute hx:before:inset-0 hx:before:bg-glass-gradient">
+    <div class="hx:relative hx:w-full hx:p-6">
+      <p class="hx:text-gray-500 hx:dark:text-gray-400 hx:text-sm hx:mb-1">{{ $version }} · {{ $date }}</p>
+      <h3 class="hx:text-xl hx:font-medium hx:leading-6 hx:mb-2">{{ $lead | markdownify }}</h3>
+      <p class="hx:text-gray-500 hx:dark:text-gray-400 hx:text-sm hx:leading-6">{{ $rest | markdownify }}</p>
+    </div>
+  </a>
+  {{- end }}
+</div>

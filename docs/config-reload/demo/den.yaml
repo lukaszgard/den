@@ -1,0 +1,10 @@
+# The den.yaml config-reload.tape starts den with: one tunnel, no AWS, nothing
+# that connects by itself. edit.sh is the "editor" that changes it.
+version: "1"
+aws:
+  config_path: /tmp/den-reload-demo/aws
+  credentials_path: /tmp/den-reload-demo/aws
+menu_order: [connect, tunnel, config, logs, help]
+tunnels:
+  - name: bastion
+    command: ssh -N -D 5555 bastion.example.com

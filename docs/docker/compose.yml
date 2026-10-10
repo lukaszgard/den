@@ -1,0 +1,6 @@
+# The stack docker.tape starts: den create-env -f docs/docker/compose.yml
+services:
+  valkey:
+    image: valkey/valkey:8
+    ports:
+      - "16399:6379"
