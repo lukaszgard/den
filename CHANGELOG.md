@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.0.1] - 2026-10-10
+
+**Checking for updates no longer depends on GitHub's API rate limit.** den checks on every
+start, and without a token GitHub's API allows 60 requests an hour per IP, so an office, a VPN
+exit or a CI fleet behind one address got HTTP 403 in the Updates pane.
+
+### 🔄 Updates
+
+- The check reads the release feed on github.com (`latest.json` of the latest release) and the
+  download uses the release's files by their URLs: the route `install.sh` and `install.ps1`
+  already take, with no API call and no rate limit. A public repository needs nothing
+  configured: no token, no `updates:` block. den needs HTTPS access to `github.com` and to
+  `release-assets.githubusercontent.com`; behind a proxy it honours `HTTPS_PROXY`.
+- `GITHUB_TOKEN` still selects the releases API, which a private repository needs. A release
+  without `latest.json` falls back to the API, and a fork whose `github_api` is on
+  `api.github.com` reads the feed of its own repository. GitHub Enterprise and the S3 mirror
+  work as before.
+- A failed check says what to do: that den could not reach github.com (set `HTTPS_PROXY`), that
+  the repository is private (set `GITHUB_TOKEN`), or that GitHub's rate limit was reached.
+- The Updates pane's help (`h`) shows where releases are read from and what you need, and the
+  Updates documentation and Help topic list the same requirements.
+
 ## [1.0.0] - 2026-10-10
 
 **den 1.0: reach the private data stores of your AWS accounts from one terminal.** den opens the
