@@ -592,3 +592,21 @@ func TestRateLimitIsExplained(t *testing.T) {
 		t.Fatalf("err = %v, want the rate limit and GITHUB_TOKEN named", err)
 	}
 }
+
+// A token that GitHub hides the repository from gets a bare 404 back, which
+// looks like a missing release. The error says what the token needs.
+func TestTokenNotFoundExplainsWhatTheTokenNeeds(t *testing.T) {
+	r := &routed{reply: func(*http.Request) (int, string) { return http.StatusNotFound, "" }}
+	_, err := Source{HTTPClient: r.client(), Token: "tok"}.Latest(context.Background(), "linux", "amd64")
+	if err == nil {
+		t.Fatal("a 404 must fail the check")
+	}
+	for _, want := range []string{"HTTP 404", "GITHUB_TOKEN", "Contents: read", "repo scope"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("err = %v, want it to mention %q", err, want)
+		}
+	}
+	if got := r.urls(); len(got) != 1 || got[0] != DefaultGitHubAPI {
+		t.Errorf("asked %v, want only the API: a token must not go to the feed", got)
+	}
+}
