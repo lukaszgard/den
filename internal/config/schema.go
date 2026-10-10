@@ -214,11 +214,13 @@ type VaultSecretSpec struct {
 }
 
 // UpdatesConfig controls where den checks for and downloads new releases.
-// By default that is the project's GitHub Releases, which need no token. Set
-// github_api for a fork or a GitHub Enterprise server, or s3_bucket for a
-// mirror you host: S3 is then used for both version checking and download.
+// By default that is the project's release feed on github.com, which needs no
+// token and no API call. Set github_api for a fork or a GitHub Enterprise server
+// (with GITHUB_TOKEN in the environment when its repository is private), or
+// s3_bucket for a mirror you host: S3 is then used for both version checking and
+// download.
 type UpdatesConfig struct {
-	GitHubAPI  string `yaml:"github_api,omitempty"`  // releases/latest API URL, e.g. https://api.github.com/repos/you/den/releases/latest; GITHUB_TOKEN authenticates it when set
+	GitHubAPI  string `yaml:"github_api,omitempty"`  // releases/latest API URL of a fork or GitHub Enterprise server, e.g. https://api.github.com/repos/you/den/releases/latest; a fork on api.github.com reads its own release feed, and GITHUB_TOKEN, when set, makes den use the API
 	S3Bucket   string `yaml:"s3_bucket,omitempty"`   // an S3 mirror of the releases; wins over github_api
 	S3Prefix   string `yaml:"s3_prefix,omitempty"`   // e.g. "den/releases/" — no leading slash
 	AWSProfile string `yaml:"aws_profile,omitempty"` // uses default AWS profile if omitted

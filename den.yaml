@@ -337,8 +337,11 @@ secrets:
   #     # field: password           # one key only
 
 # updates:                          # where the Updates pane checks for releases.
-#                                   # By default: this project's GitHub Releases.
-#   github_api: "https://api.github.com/repos/you/den/releases/latest"   # a fork
+#                                   # By default: this project's release feed on
+#                                   # github.com (no token). GITHUB_TOKEN switches to
+#                                   # the releases API, which a private repo needs.
+#   github_api: "https://api.github.com/repos/you/den/releases/latest"   # a fork,
+#                                   # or a GitHub Enterprise server
 #                                   # or a mirror you host on S3, read with `aws s3 cp`:
 #   s3_bucket: "acme-releases"
 #   s3_prefix: "den/"

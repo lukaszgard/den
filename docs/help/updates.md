@@ -18,15 +18,17 @@ The Updates panel keeps den current. den checks for a newer release when it star
 
 ## Before you start
 
-- From GitHub: nothing for a public repository. A private fork or a GitHub Enterprise server needs `GITHUB_TOKEN` exported before starting den, with read access to the repository's releases.
-- From an S3 mirror: the AWS CLI v2, and a profile allowed `s3:GetObject` on `latest.json`, the archives and `checksums.txt`.
+- Public repository (the default): nothing to configure. No `updates:` block, no token, no AWS. den needs HTTPS access to `github.com` and to the host it redirects downloads to, `release-assets.githubusercontent.com`; behind a corporate proxy it honours `HTTPS_PROXY` and `NO_PROXY`.
+- Private repository: export `GITHUB_TOKEN` before starting den. The token needs Contents: read, or the `repo` scope.
+- Fork or GitHub Enterprise: set `updates.github_api`, plus `GITHUB_TOKEN` when the repository is private.
+- S3 mirror: set `updates.s3_bucket`, with the AWS CLI v2 and a profile allowed `s3:GetObject` on `latest.json`, the archives and `checksums.txt`. No token and no GitHub access are needed.
 - Write access to the folder den is installed in.
 
 ## Configure
 
 An `updates:` section; leave it out to use this project's GitHub Releases.
 
-- `github_api`: the `releases/latest` API URL of a fork or a GitHub Enterprise server, such as `https://api.github.com/repos/you/den/releases/latest`.
+- `github_api`: the `releases/latest` API URL of a fork or a GitHub Enterprise server, such as `https://api.github.com/repos/you/den/releases/latest`. A fork on github.com reads the release feed of its own repository; `GITHUB_TOKEN` makes den use the API, which a private one needs.
 - `s3_bucket`: a bucket you mirror the releases to; it wins over `github_api`.
 - `s3_prefix`: the key prefix of `latest.json` and the archives, without a leading slash.
 - `aws_profile`: the profile `aws s3 cp` runs as; the default profile without it.
@@ -64,6 +66,9 @@ updates:
 ## When it goes wrong
 
 - The check fails right after start: the S3 profile's SSO login has expired; log in from the AWS SSO panel and check again.
+- "could not reach github.com": den has no HTTPS route to github.com; check the network, and behind a proxy set `HTTPS_PROXY` before starting den.
+- "HTTP 404 … set GITHUB_TOKEN": the repository is private, or the release does not exist; export `GITHUB_TOKEN` with Contents: read in the shell den starts from.
+- "GitHub's rate limit was reached": the check went through the API, which allows 60 requests an hour per IP without a token; set `GITHUB_TOKEN` to raise it, or unset it so den reads the release feed.
 - `GITHUB_TOKEN` errors: the variable is missing in the shell den was started from, or lacks access to the releases.
 - The install fails with a permission error: den cannot write next to its binary; use the manual commands.
 

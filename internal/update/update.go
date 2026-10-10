@@ -2,10 +2,13 @@
 // holds no UI: the Updates pane drives it one step at a time and renders the
 // progress.
 //
-// Releases come from one of two places. With an S3 bucket configured (a mirror
-// you host), the `aws` CLI reads latest.json and the archives the release
-// workflow publishes there. Otherwise the GitHub releases API is used, with
-// GITHUB_TOKEN when it is set: a public repository needs none.
+// Releases come from one of three places. With an S3 bucket configured (a
+// mirror you host), the `aws` CLI reads latest.json and the archives the release
+// workflow publishes there. Otherwise the default reads the release feed on
+// github.com: latest.json and the release's files by their URLs, which no API
+// rate limit covers (the install scripts read the same). The GitHub releases API
+// is used with GITHUB_TOKEN (what a private repository needs), for a GitHub
+// Enterprise server, and when a release has no latest.json.
 package update
 
 import (
@@ -27,8 +30,15 @@ import (
 	"time"
 )
 
-// DefaultGitHubAPI is the releases endpoint used when no S3 bucket is configured.
+// DefaultGitHubAPI is the releases endpoint used when the feed cannot answer
+// (a release without latest.json, a private repository) and with a token.
 const DefaultGitHubAPI = "https://api.github.com/repos/lukaszgard/den/releases/latest"
+
+// DefaultRepo is the owner/repo whose release feed is read by default.
+const DefaultRepo = "lukaszgard/den"
+
+// DefaultGitHubWeb is the site the release feed and the release files live on.
+const DefaultGitHubWeb = "https://github.com"
 
 // ChecksumsFile is the name GoReleaser gives the checksum list of a release.
 const ChecksumsFile = "checksums.txt"
@@ -47,10 +57,15 @@ type Source struct {
 	AWSRegion  string
 
 	// GitHubAPI is the releases/latest URL; DefaultGitHubAPI when empty. A
-	// GitHub Enterprise server has its own.
+	// GitHub Enterprise server has its own. On api.github.com it also names the
+	// repository whose release feed is read (a fork's).
 	GitHubAPI string
-	// Token authenticates GitHub requests (GITHUB_TOKEN); may be empty.
+	// Token authenticates GitHub requests (GITHUB_TOKEN); may be empty. A token
+	// selects the releases API: it has the higher limit and reads private repos.
 	Token string
+	// GitHubWeb is the site of the release feed and of the release files;
+	// DefaultGitHubWeb when empty. Tests point it at a local server.
+	GitHubWeb string
 
 	// HTTPClient is used for GitHub requests; a client with timeouts when nil.
 	HTTPClient *http.Client
@@ -66,8 +81,13 @@ type Release struct {
 	Notes   string // release notes, markdown
 
 	Archive      string // archive file name for this platform
-	ArchiveURL   string // GitHub asset API URL; empty for S3
-	ChecksumsURL string // GitHub asset API URL of checksums.txt; empty when absent or S3
+	ArchiveURL   string // GitHub asset URL (API or release feed); empty for S3
+	ChecksumsURL string // GitHub URL of checksums.txt; empty when absent or S3
+
+	// feed marks a release built from the release feed, whose files are named
+	// by URL without asking GitHub which exist: a 404 on checksums.txt is
+	// ErrNoChecksums there.
+	feed bool
 }
 
 // ArchiveName is the GoReleaser archive name for version on goos/goarch.
@@ -91,7 +111,111 @@ func (s Source) Latest(ctx context.Context, goos, goarch string) (Release, error
 	if s.UsesS3() {
 		return s.latestS3(ctx, goos, goarch)
 	}
+	if repo, ok := s.feedRepo(); ok {
+		rel, err := s.latestFeed(ctx, repo, goos, goarch)
+		if !isNotFound(err) {
+			return rel, err
+		}
+		// No latest.json: a release cut before it was published, a fork's
+		// workflow without that step, a private repository answered anonymously,
+		// or the seconds before the workflow uploads it. The API knows better.
+	}
 	return s.latestGitHub(ctx, goos, goarch)
+}
+
+// Location names where Latest reads: the S3 URL, the release feed or the API.
+func (s Source) Location() string {
+	if s.UsesS3() {
+		return s.s3URL("")
+	}
+	if repo, ok := s.feedRepo(); ok {
+		return s.feedURL(repo)
+	}
+	api := s.GitHubAPI
+	if api == "" {
+		api = DefaultGitHubAPI
+	}
+	if s.Token != "" {
+		api += " (GITHUB_TOKEN)"
+	}
+	return api
+}
+
+// feedRepo returns the owner/repo whose release feed this source reads, or
+// false when it reads the API: a token needs the API (the feed is public, and a
+// private repo is only answerable with one), and any GitHubAPI that is not
+// api.github.com is a server whose URL layout is not ours to guess.
+func (s Source) feedRepo() (string, bool) {
+	if s.Token != "" {
+		return "", false
+	}
+	if s.GitHubAPI == "" || s.GitHubAPI == DefaultGitHubAPI {
+		return DefaultRepo, true
+	}
+	u, err := url.Parse(s.GitHubAPI)
+	if err != nil || u.Scheme != "https" || u.Hostname() != "api.github.com" {
+		return "", false
+	}
+	// /repos/<owner>/<repo>/releases/latest
+	p := strings.Split(strings.Trim(u.Path, "/"), "/")
+	if len(p) != 5 || p[0] != "repos" || p[1] == "" || p[2] == "" || p[3] != "releases" || p[4] != "latest" {
+		return "", false
+	}
+	return p[1] + "/" + p[2], true
+}
+
+func (s Source) web() string {
+	if s.GitHubWeb == "" {
+		return DefaultGitHubWeb
+	}
+	return strings.TrimRight(s.GitHubWeb, "/")
+}
+
+func (s Source) feedURL(repo string) string {
+	return s.web() + "/" + repo + "/releases/latest/download/latest.json"
+}
+
+// latestFeed reads latest.json from the release feed — the file the release
+// workflow publishes and the install scripts read — and names the release's
+// files by URL, so no API call is made. A 404 is returned as a statusError for
+// Latest to fall back on.
+func (s Source) latestFeed(ctx context.Context, repo, goos, goarch string) (Release, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.feedURL(repo), nil)
+	if err != nil {
+		return Release{}, err
+	}
+	resp, err := s.client().Do(req)
+	if err != nil {
+		if ctx.Err() != nil {
+			return Release{}, err
+		}
+		return Release{}, fmt.Errorf("could not reach github.com — den needs HTTPS access to github.com; behind a proxy set HTTPS_PROXY: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+	if err := s.checkStatus(resp); err != nil {
+		return Release{}, err
+	}
+	var meta struct {
+		Version string `json:"version"`
+		Notes   string `json:"notes"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 10<<20)).Decode(&meta); err != nil {
+		return Release{}, fmt.Errorf("parse latest.json: %w", err)
+	}
+	if meta.Version == "" {
+		return Release{}, fmt.Errorf("latest.json has no version")
+	}
+	archive := ArchiveName(meta.Version, goos, goarch)
+	base := s.web() + "/" + repo + "/releases/"
+	return Release{
+		Version:      meta.Version,
+		URL:          base + "tag/" + meta.Version,
+		Notes:        meta.Notes,
+		Archive:      archive,
+		ArchiveURL:   base + "download/" + meta.Version + "/" + archive,
+		ChecksumsURL: base + "download/" + meta.Version + "/" + ChecksumsFile,
+		feed:         true,
+	}, nil
 }
 
 func (s Source) latestS3(ctx context.Context, goos, goarch string) (Release, error) {
@@ -208,6 +332,9 @@ func (s Source) Checksums(ctx context.Context, rel Release) (map[string]string, 
 		}
 		var buf bytes.Buffer
 		if err := s.fetchGitHub(ctx, rel.ChecksumsURL, &buf, nil, nil); err != nil {
+			if rel.feed && isNotFound(err) {
+				return nil, ErrNoChecksums
+			}
 			return nil, fmt.Errorf("download %s: %w", ChecksumsFile, err)
 		}
 		data = buf.Bytes()
@@ -379,18 +506,40 @@ func (s Source) authorize(req *http.Request) {
 	}
 }
 
+// statusError is a non-200 answer. It keeps the code so callers can tell a 404
+// (the file is not there) from a failure.
+type statusError struct {
+	code int
+	msg  string
+}
+
+func (e *statusError) Error() string { return e.msg }
+
+// isNotFound reports whether err is an HTTP 404 answer.
+func isNotFound(err error) bool {
+	var se *statusError
+	return errors.As(err, &se) && se.code == http.StatusNotFound
+}
+
 func (s Source) checkStatus(resp *http.Response) error {
+	code := resp.StatusCode
+	var msg string
 	switch {
-	case resp.StatusCode == http.StatusOK:
+	case code == http.StatusOK:
 		return nil
-	case (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusNotFound) && s.Token == "":
+	case (code == http.StatusUnauthorized || code == http.StatusNotFound) && s.Token == "":
 		// GitHub answers 404 rather than 401 for a private repo without a token.
-		return fmt.Errorf("HTTP %d — no such release; for a private repository set GITHUB_TOKEN to a token that can read it", resp.StatusCode)
-	case resp.StatusCode == http.StatusUnauthorized:
-		return fmt.Errorf("HTTP 401 — GITHUB_TOKEN was rejected")
+		msg = fmt.Sprintf("HTTP %d — no such release; for a private repository set GITHUB_TOKEN to a token that can read it", code)
+	case code == http.StatusUnauthorized:
+		msg = "HTTP 401 — GITHUB_TOKEN was rejected"
+	case (code == http.StatusForbidden || code == http.StatusTooManyRequests) && s.Token == "":
+		msg = fmt.Sprintf("HTTP %d — GitHub's rate limit was reached; GITHUB_TOKEN raises it, or leave it unset and den reads the release feed", code)
+	case code == http.StatusForbidden || code == http.StatusTooManyRequests:
+		msg = fmt.Sprintf("HTTP %d — GitHub's rate limit was reached or GITHUB_TOKEN may not read this repository; unset it and den reads the release feed", code)
 	default:
-		return fmt.Errorf("HTTP %d", resp.StatusCode)
+		msg = fmt.Sprintf("HTTP %d", code)
 	}
+	return &statusError{code: code, msg: msg}
 }
 
 func (s Source) downloadGitHub(ctx context.Context, assetURL, path string, progress, total *atomic.Int64) error {

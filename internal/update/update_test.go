@@ -302,26 +302,293 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
-// With nothing configured the check asks the public GitHub API, and sends no
-// credentials: a public repository needs none.
-func TestDefaultSourceIsPublicGitHub(t *testing.T) {
-	var asked *http.Request
-	client := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-		asked = r
-		body := `{"tag_name":"v1.2.3","html_url":"https://github.com/o/den/releases/tag/v1.2.3","body":"notes","assets":[]}`
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{}}, nil
+// routed answers each request through one function and records the URLs asked,
+// so a test can say which routes a source took.
+type routed struct {
+	asked []*http.Request
+	reply func(*http.Request) (int, string)
+}
+
+func (r *routed) client() *http.Client {
+	return &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		r.asked = append(r.asked, req)
+		code, body := r.reply(req)
+		return &http.Response{StatusCode: code, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{}}, nil
 	})}
-	rel, err := Source{HTTPClient: client}.Latest(context.Background(), "linux", "amd64")
+}
+
+func (r *routed) urls() []string {
+	var out []string
+	for _, req := range r.asked {
+		out = append(out, req.URL.String())
+	}
+	return out
+}
+
+const (
+	feedURL    = "https://github.com/lukaszgard/den/releases/latest/download/latest.json"
+	feedJSON   = `{"version":"v1.2.3","notes":"notes"}`
+	apiRelease = `{"tag_name":"v1.2.3","html_url":"https://github.com/lukaszgard/den/releases/tag/v1.2.3","body":"notes","assets":[]}`
+)
+
+// With nothing configured the check reads the release feed on github.com, not
+// the API (60 requests an hour per IP), and sends no credentials.
+func TestDefaultSourceReadsReleaseFeed(t *testing.T) {
+	r := &routed{reply: func(*http.Request) (int, string) { return http.StatusOK, feedJSON }}
+	rel, err := Source{HTTPClient: r.client()}.Latest(context.Background(), "linux", "amd64")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if asked.URL.String() != DefaultGitHubAPI || !strings.HasPrefix(DefaultGitHubAPI, "https://api.github.com/repos/") {
-		t.Errorf("asked %s, want the default %s on api.github.com", asked.URL, DefaultGitHubAPI)
+	if got := r.urls(); len(got) != 1 || got[0] != feedURL {
+		t.Fatalf("asked %v, want only %s", got, feedURL)
 	}
-	if asked.Header.Get("Authorization") != "" {
+	if r.asked[0].Header.Get("Authorization") != "" {
 		t.Error("no token is set, so no Authorization header may be sent")
 	}
-	if rel.Version != "v1.2.3" {
-		t.Errorf("release = %+v", rel)
+	want := Release{
+		Version:      "v1.2.3",
+		URL:          "https://github.com/lukaszgard/den/releases/tag/v1.2.3",
+		Notes:        "notes",
+		Archive:      "den_1.2.3_linux_amd64.tar.gz",
+		ArchiveURL:   "https://github.com/lukaszgard/den/releases/download/v1.2.3/den_1.2.3_linux_amd64.tar.gz",
+		ChecksumsURL: "https://github.com/lukaszgard/den/releases/download/v1.2.3/checksums.txt",
+		feed:         true,
+	}
+	if rel != want {
+		t.Errorf("release = %+v\nwant      %+v", rel, want)
+	}
+}
+
+// feedServer serves a release feed laid out like github.com: latest.json under
+// releases/latest/download and the files under releases/download/<tag>.
+func feedServer(t *testing.T, repo, tag string, assets map[string][]byte) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "" {
+			t.Errorf("%s: the feed route sends no credentials", r.URL.Path)
+		}
+		prefix := "/" + repo + "/releases/"
+		switch p := r.URL.Path; {
+		case p == prefix+"latest/download/latest.json":
+			_ = json.NewEncoder(w).Encode(map[string]string{"version": tag, "notes": "notes"})
+		case strings.HasPrefix(p, prefix+"download/"+tag+"/"):
+			data, ok := assets[strings.TrimPrefix(p, prefix+"download/"+tag+"/")]
+			if !ok {
+				http.NotFound(w, r)
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(data)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// The feed twin of TestGitHubDownloadVerifiedEndToEnd: check, download, verify
+// and install without any API call.
+func TestFeedDownloadVerifiedEndToEnd(t *testing.T) {
+	archive := ArchiveName("v1.0.0", runtime.GOOS, runtime.GOARCH)
+	data := tarGz(t, map[string]string{"README.md": "readme", "den": "#!/bin/sh\necho new\n"})
+	sums := fmt.Sprintf("%s  %s\n%s  other.tar.gz\n", sha(data), archive, strings.Repeat("0", 64))
+	srv := feedServer(t, DefaultRepo, "v1.0.0", map[string][]byte{archive: data, ChecksumsFile: []byte(sums)})
+	src := Source{GitHubWeb: srv.URL}
+	ctx := context.Background()
+
+	rel, err := src.Latest(ctx, runtime.GOOS, runtime.GOARCH)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rel.Version != "v1.0.0" || rel.Notes != "notes" || rel.URL != srv.URL+"/"+DefaultRepo+"/releases/tag/v1.0.0" {
+		t.Fatalf("release = %+v", rel)
+	}
+
+	dir := t.TempDir()
+	archivePath := filepath.Join(dir, "download")
+	var progress, total atomic.Int64
+	if err := src.Download(ctx, rel, archivePath, &progress, &total); err != nil {
+		t.Fatal(err)
+	}
+	if progress.Load() != int64(len(data)) {
+		t.Errorf("progress = %d, want %d", progress.Load(), len(data))
+	}
+	got, err := src.Checksums(ctx, rel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Verify(archivePath, rel.Archive, got); err != nil {
+		t.Fatalf("Verify: %v", err)
+	}
+
+	target := filepath.Join(dir, "den")
+	writeFile(t, target, []byte("old"))
+	bin, err := ExtractBinary(archivePath, "linux", target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Replace(bin, target); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(target); string(b) != "#!/bin/sh\necho new\n" {
+		t.Fatalf("target = %q", b)
+	}
+}
+
+// A release the feed does not know (no latest.json yet, a private repo) is
+// looked up on the API; any other failure is the answer.
+func TestFeedFallsBackToAPIOnlyOnNotFound(t *testing.T) {
+	r := &routed{reply: func(req *http.Request) (int, string) {
+		if req.URL.Host == "api.github.com" {
+			return http.StatusOK, apiRelease
+		}
+		return http.StatusNotFound, ""
+	}}
+	rel, err := Source{HTTPClient: r.client()}.Latest(context.Background(), "linux", "amd64")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := r.urls(); len(got) != 2 || got[0] != feedURL || got[1] != DefaultGitHubAPI {
+		t.Errorf("asked %v, want the feed, then %s", got, DefaultGitHubAPI)
+	}
+	if rel.Version != "v1.2.3" || rel.feed {
+		t.Errorf("release = %+v, want the API's", rel)
+	}
+
+	r = &routed{reply: func(req *http.Request) (int, string) {
+		if req.URL.Host == "api.github.com" {
+			return http.StatusOK, apiRelease
+		}
+		return http.StatusInternalServerError, ""
+	}}
+	_, err = Source{HTTPClient: r.client()}.Latest(context.Background(), "linux", "amd64")
+	if err == nil || !strings.Contains(err.Error(), "500") {
+		t.Fatalf("err = %v, want the feed's HTTP 500", err)
+	}
+	if got := r.urls(); len(got) != 1 {
+		t.Errorf("asked %v, a failing feed must not be retried on the API", got)
+	}
+}
+
+// Both routes missing the release keeps the hint about GITHUB_TOKEN.
+func TestFeedAndAPINotFoundExplainsWhatToSet(t *testing.T) {
+	r := &routed{reply: func(*http.Request) (int, string) { return http.StatusNotFound, "" }}
+	_, err := Source{HTTPClient: r.client()}.Latest(context.Background(), "linux", "amd64")
+	if err == nil || !strings.Contains(err.Error(), "GITHUB_TOKEN") {
+		t.Fatalf("err = %v, want a hint to set GITHUB_TOKEN", err)
+	}
+}
+
+// A token selects the API (its limit, and what a private repository needs);
+// the feed is never asked.
+func TestTokenGoesStraightToAPI(t *testing.T) {
+	r := &routed{reply: func(*http.Request) (int, string) { return http.StatusOK, apiRelease }}
+	if _, err := (Source{HTTPClient: r.client(), Token: "tok"}).Latest(context.Background(), "linux", "amd64"); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.urls(); len(got) != 1 || got[0] != DefaultGitHubAPI {
+		t.Fatalf("asked %v, want only %s", got, DefaultGitHubAPI)
+	}
+	if got := r.asked[0].Header.Get("Authorization"); got != "Bearer tok" {
+		t.Errorf("Authorization = %q", got)
+	}
+}
+
+func TestForkDerivesFeedFromGitHubAPI(t *testing.T) {
+	cases := []struct {
+		name, api, want string
+	}{
+		{"fork on github.com", "https://api.github.com/repos/you/fork/releases/latest",
+			"https://github.com/you/fork/releases/latest/download/latest.json"},
+		{"Enterprise keeps the API", "https://ghe.example.com/api/v3/repos/you/fork/releases/latest",
+			"https://ghe.example.com/api/v3/repos/you/fork/releases/latest"},
+		{"not a releases/latest URL keeps the API", "https://api.github.com/repos/you/fork/releases",
+			"https://api.github.com/repos/you/fork/releases"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r := &routed{reply: func(req *http.Request) (int, string) {
+				if strings.HasSuffix(req.URL.Path, "latest.json") {
+					return http.StatusOK, feedJSON
+				}
+				return http.StatusOK, apiRelease
+			}}
+			if _, err := (Source{HTTPClient: r.client(), GitHubAPI: c.api}).Latest(context.Background(), "linux", "amd64"); err != nil {
+				t.Fatal(err)
+			}
+			if got := r.urls(); len(got) != 1 || got[0] != c.want {
+				t.Errorf("asked %v, want only %s", got, c.want)
+			}
+		})
+	}
+}
+
+func TestFeedReleaseWithoutChecksums(t *testing.T) {
+	archive := ArchiveName("v1.0.0", runtime.GOOS, runtime.GOARCH)
+	srv := feedServer(t, DefaultRepo, "v1.0.0", map[string][]byte{archive: []byte("x")})
+	src := Source{GitHubWeb: srv.URL}
+	rel, err := src.Latest(context.Background(), runtime.GOOS, runtime.GOARCH)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := src.Checksums(context.Background(), rel); !errors.Is(err, ErrNoChecksums) {
+		t.Fatalf("err = %v, want ErrNoChecksums", err)
+	}
+}
+
+func TestFeedWithoutVersionIsAnError(t *testing.T) {
+	for _, body := range []string{`{"version":"","notes":"x"}`, `{}`, `not json`} {
+		r := &routed{reply: func(*http.Request) (int, string) { return http.StatusOK, body }}
+		_, err := Source{HTTPClient: r.client()}.Latest(context.Background(), "linux", "amd64")
+		if err == nil {
+			t.Errorf("latest.json %q was accepted", body)
+		}
+		if got := r.urls(); len(got) != 1 {
+			t.Errorf("latest.json %q: asked %v, want only the feed", body, got)
+		}
+	}
+}
+
+func TestLocation(t *testing.T) {
+	cases := []struct {
+		name string
+		src  Source
+		want string
+	}{
+		{"default feed", Source{}, feedURL},
+		{"fork feed", Source{GitHubAPI: "https://api.github.com/repos/you/fork/releases/latest"},
+			"https://github.com/you/fork/releases/latest/download/latest.json"},
+		{"token uses the API", Source{Token: "t"}, DefaultGitHubAPI + " (GITHUB_TOKEN)"},
+		{"Enterprise API", Source{GitHubAPI: "https://ghe.example.com/api/v3/repos/o/r/releases/latest"},
+			"https://ghe.example.com/api/v3/repos/o/r/releases/latest"},
+		{"S3", Source{S3Bucket: "bkt", S3Prefix: "den/", Token: "t"}, "s3://bkt/den/"},
+	}
+	for _, c := range cases {
+		if got := c.src.Location(); got != c.want {
+			t.Errorf("%s: Location() = %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
+// A feed that cannot be connected to says what den needs, not a bare dial error.
+func TestUnreachableFeedNamesWhatDenNeeds(t *testing.T) {
+	srv := httptest.NewServer(http.NotFoundHandler())
+	closed := srv.URL
+	srv.Close()
+	_, err := Source{GitHubWeb: closed}.Latest(context.Background(), "linux", "amd64")
+	if err == nil || !strings.Contains(err.Error(), "github.com") || !strings.Contains(err.Error(), "HTTPS_PROXY") {
+		t.Fatalf("err = %v, want it to name github.com and HTTPS_PROXY", err)
+	}
+}
+
+func TestRateLimitIsExplained(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "API rate limit exceeded", http.StatusForbidden)
+	}))
+	t.Cleanup(srv.Close)
+	_, err := Source{GitHubAPI: srv.URL + "/releases/latest"}.Latest(context.Background(), "linux", "amd64")
+	if err == nil || !strings.Contains(err.Error(), "rate limit") || !strings.Contains(err.Error(), "GITHUB_TOKEN") {
+		t.Fatalf("err = %v, want the rate limit and GITHUB_TOKEN named", err)
 	}
 }

@@ -17,15 +17,32 @@ Nothing reconnects by itself, and bringing the VPN back means another SAML
 login. The prompt lists what will close, and "later" is always one key away;
 the new version is installed either way and starts the next time you run den.
 
+## What you need
+
+**Public repository (the default): nothing to configure.**
+
+- No `updates:` block, no token, no AWS.
+- HTTPS access to `github.com` and to `release-assets.githubusercontent.com`, the host GitHub redirects release downloads to. Behind a corporate proxy, den honours `HTTPS_PROXY` and `NO_PROXY`.
+- Write access to the folder den is installed in.
+
+**Private repository:** export `GITHUB_TOKEN` before starting den. The token needs Contents: read, or the `repo` scope.
+
+**Fork or GitHub Enterprise:** set `updates.github_api`, plus `GITHUB_TOKEN` when the repository is private.
+
+**S3 mirror:** set `updates.s3_bucket`, as described under "Where releases come from". No token and no GitHub access are needed.
+
+When a check fails, the pane says which of these applies.
+
 ## Configuration
 
-With no `updates:` block den reads this project's GitHub Releases, which need no token.
-Three keys change where it looks:
+With no `updates:` block den reads this project's release feed on GitHub, which needs no token.
+These keys change where it looks:
 
 ```yaml
 updates:
   github_api: "https://api.github.com/repos/you/den/releases/latest"
-                                   # a fork, or a GitHub Enterprise server
+                                   # a fork on github.com (its own release feed),
+                                   # or a GitHub Enterprise server
                                    # (https://ghe.example.com/api/v3/repos/…)
   s3_bucket: "acme-releases"       # an S3 mirror you host; wins over github_api
   s3_prefix: "den/"                # key prefix of latest.json and the archives
@@ -35,9 +52,11 @@ updates:
 
 ## Prerequisites
 
-- **GitHub (the default):** network access to `api.github.com`. A private fork or a
-  GitHub Enterprise server needs `GITHUB_TOKEN` exported before starting den, with
-  read access to the repository's releases.
+- **GitHub (the default):** HTTPS access to `github.com` and to the host it redirects
+  release downloads to (`release-assets.githubusercontent.com`), not to `api.github.com`.
+  Behind a proxy, set `HTTPS_PROXY`. A private repository or a GitHub Enterprise server
+  needs `GITHUB_TOKEN` exported before starting den, with read access to the
+  repository's releases; that switches the check to the API (`api.github.com`).
 - **S3 mirror:** the AWS CLI v2 and a profile allowed `s3:GetObject` on
   `<prefix>latest.json`, the release archives and `checksums.txt`. An expired
   SSO login shows up as a failed check; log in from the AWS pane and press `c`.
@@ -81,10 +100,21 @@ start den again.
 
 ## Where releases come from
 
-**GitHub Releases (default).** The check reads the repository's `releases/latest` API and
-the download uses the release's assets. A public repository needs no token. Set
-`github_api` to read a fork or a GitHub Enterprise server instead; for a private
-repository export a personal access token before starting den:
+**GitHub Releases (default).** The check reads the release feed,
+`https://github.com/<owner>/<repo>/releases/latest/download/latest.json`, and the download
+uses the release's files by their URLs (`…/releases/download/<tag>/<archive>` and
+`checksums.txt`). That is the route the install scripts take. It makes no API call, so
+GitHub's rate limit of 60 API requests an hour per IP, which a shared office, VPN or CI
+address would soon reach, does not apply. A public repository needs no token.
+
+- A release without `latest.json` (one cut before it was published, a fork's workflow without
+  that step) is looked up on the releases API instead, as is a private repository, which
+  answers the feed with 404.
+- `GITHUB_TOKEN` switches the check to the releases API, with the token's own limit of 5000
+  requests an hour. That is what a private repository needs: export a personal access token
+  before starting den.
+- A fork on github.com (`github_api` on `api.github.com`) reads the feed of its own repository.
+  A GitHub Enterprise server (any other host) always uses its API.
 
 ```bash
 export GITHUB_TOKEN=<your-personal-access-token>
@@ -104,7 +134,8 @@ needed. Copy each release's files there, and a `latest.json` must exist at
 {"version": "1.0.0"}
 ```
 
-The release workflow attaches `latest.json` to every GitHub release for this purpose.
+The release workflow attaches `latest.json` to every GitHub release; that is the file the
+GitHub feed reads, and the one to copy to the bucket.
 
 ## Verification
 
