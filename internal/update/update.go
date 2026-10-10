@@ -521,6 +521,15 @@ func isNotFound(err error) bool {
 	return errors.As(err, &se) && se.code == http.StatusNotFound
 }
 
+// requested names what a response answered for, without a query: a redirect
+// to pre-signed storage carries credentials in it.
+func requested(resp *http.Response) string {
+	if resp.Request == nil || resp.Request.URL == nil {
+		return "GitHub"
+	}
+	return resp.Request.URL.Host + resp.Request.URL.Path
+}
+
 func (s Source) checkStatus(resp *http.Response) error {
 	code := resp.StatusCode
 	var msg string
@@ -531,7 +540,15 @@ func (s Source) checkStatus(resp *http.Response) error {
 		// GitHub answers 404 rather than 401 for a private repo without a token.
 		msg = fmt.Sprintf("HTTP %d — no such release; for a private repository set GITHUB_TOKEN to a token that can read it", code)
 	case code == http.StatusUnauthorized:
-		msg = "HTTP 401 — GITHUB_TOKEN was rejected"
+		msg = "HTTP 401 — GITHUB_TOKEN was rejected: it is invalid, expired or revoked"
+	case code == http.StatusNotFound:
+		// With a token, GitHub answers 404 both for a repository the token cannot
+		// read and for one with no published release: a token that is valid but
+		// not granted this repository looks exactly like a missing one.
+		msg = fmt.Sprintf("HTTP 404 from %s — GITHUB_TOKEN is valid but GitHub shows it no such release. "+
+			"The token must be able to read this repository: a fine-grained token needs this repository "+
+			"selected (under its owner) and Contents: read, a classic token the repo scope, authorized "+
+			"for SSO when the organization enforces it. A published release must exist too", requested(resp))
 	case (code == http.StatusForbidden || code == http.StatusTooManyRequests) && s.Token == "":
 		msg = fmt.Sprintf("HTTP %d — GitHub's rate limit was reached; GITHUB_TOKEN raises it, or leave it unset and den reads the release feed", code)
 	case code == http.StatusForbidden || code == http.StatusTooManyRequests:

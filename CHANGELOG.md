@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.2] - 2026-10-10
+
+### 🔄 Updates
+
+- A failed update check with `GITHUB_TOKEN` set no longer ends in a bare "HTTP 404". GitHub
+  answers 404 for a repository a valid token cannot read, so the message now says so and what
+  the token needs: for a fine-grained token, the repository selected under its owner and
+  Contents: read; for a classic one, the `repo` scope, authorized for SSO when the organization
+  enforces it. A rejected token (HTTP 401) is reported as invalid, expired or revoked.
+
 ## [1.0.1] - 2026-10-10
 
 **Checking for updates no longer depends on GitHub's API rate limit.** den checks on every
