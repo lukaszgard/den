@@ -16,7 +16,7 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.47.1
 	github.com/aws/aws-sdk-go-v2/config v1.33.7
 	github.com/aws/aws-sdk-go-v2/service/elasticache v1.63.1
-	github.com/aws/aws-sdk-go-v2/service/memorydb v1.42.1
+	github.com/aws/aws-sdk-go-v2/service/memorydb v1.42.2
 	github.com/aws/aws-sdk-go-v2/service/opensearch v1.82.0
 	github.com/aws/aws-sdk-go-v2/service/rds v1.130.1
 	github.com/aws/aws-sdk-go-v2/service/redshift v1.71.0
