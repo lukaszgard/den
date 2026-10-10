@@ -42,8 +42,8 @@ github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.19 h1:bAdDl/
 github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.19/go.mod h1:KaUzbLxv4CeSxh6ZCl9B4m7CuFenS8kUEaDs+f/DQr4=
 github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.4 h1:29SvnfGhXjTl8ONxFwbj2rs6lbhiFXD2CgFQmbT/bXY=
 github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.4/go.mod h1:wm04I5DMuNVvZHFe/dHnUxincvNbbK7AiNBbYsQivek=
-github.com/aws/aws-sdk-go-v2/service/memorydb v1.42.1 h1:LCzpCTjsbBAB3rYub+zBz0ya6QmOmwU4scJmFyCv/qo=
-github.com/aws/aws-sdk-go-v2/service/memorydb v1.42.1/go.mod h1:xCZLG9u1YGs1gRK24KaDbTI0JRO95SQPQshc8ETui9A=
+github.com/aws/aws-sdk-go-v2/service/memorydb v1.42.2 h1:9Fy3P6Q9UIPFwSdRXz+qmmbBt54nuPjMpQHLO1eUUlM=
+github.com/aws/aws-sdk-go-v2/service/memorydb v1.42.2/go.mod h1:xCZLG9u1YGs1gRK24KaDbTI0JRO95SQPQshc8ETui9A=
 github.com/aws/aws-sdk-go-v2/service/opensearch v1.82.0 h1:ilufDQuVK5rhpIuh0Yg5412wRI0S3i3TJyqqNkyMHDM=
 github.com/aws/aws-sdk-go-v2/service/opensearch v1.82.0/go.mod h1:CvcpFSN88bS6cblIDsSvlcCa12N8y/6POG0e9+1boJo=
 github.com/aws/aws-sdk-go-v2/service/rds v1.130.1 h1:H17oFwC/icF6BB/UeG1EskOdI/n7ugkVKMs8aAFi4Yo=
