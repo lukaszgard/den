@@ -31,7 +31,7 @@ github.com/lukaszgard/den/internal/tui/screens/detail=85 \
 github.com/lukaszgard/den/internal/tui/screens/help=95 \
 github.com/lukaszgard/den/internal/tui/screens/secrets=79 \
 github.com/lukaszgard/den/internal/tui/screens/updates=54 \
-github.com/lukaszgard/den/internal/update=67"
+github.com/lukaszgard/den/internal/update=74"
 
 awk -v floors="$FLOORS" '
 BEGIN {
