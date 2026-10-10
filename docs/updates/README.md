@@ -123,7 +123,11 @@ den
 
 The token needs read access to the repository's contents (`repo`, or a fine-grained token
 with Contents: read). Without it, a private repository answers 404 and the check fails
-with a hint to set `GITHUB_TOKEN`. Everything else works.
+with a hint to set `GITHUB_TOKEN`. A token that cannot read the repository gets the same
+404 (GitHub does not say a repository exists to a token that cannot see it), and the check
+then says what the token needs: for a fine-grained token, the repository selected under its
+owner and Contents: read; for a classic one, the `repo` scope, authorized for SSO when the
+organization enforces it. Everything else works.
 
 **S3 mirror.** For a team that hosts its own copy of the releases, set `updates.s3_bucket`:
 the check and the download then use `aws s3 cp` with your own AWS profile, and no token is

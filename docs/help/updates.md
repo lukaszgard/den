@@ -68,6 +68,7 @@ updates:
 - The check fails right after start: the S3 profile's SSO login has expired; log in from the AWS SSO panel and check again.
 - "could not reach github.com": den has no HTTPS route to github.com; check the network, and behind a proxy set `HTTPS_PROXY` before starting den.
 - "HTTP 404 … set GITHUB_TOKEN": the repository is private, or the release does not exist; export `GITHUB_TOKEN` with Contents: read in the shell den starts from.
+- "HTTP 404 … GITHUB_TOKEN is valid but GitHub shows it no such release": the token cannot read this repository, which GitHub reports as a missing one; a fine-grained token needs the repository selected under its owner and Contents: read, a classic one the `repo` scope, authorized for SSO when the organization enforces it.
 - "GitHub's rate limit was reached": the check went through the API, which allows 60 requests an hour per IP without a token; set `GITHUB_TOKEN` to raise it, or unset it so den reads the release feed.
 - `GITHUB_TOKEN` errors: the variable is missing in the shell den was started from, or lacks access to the releases.
 - The install fails with a permission error: den cannot write next to its binary; use the manual commands.
