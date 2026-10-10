@@ -29,6 +29,7 @@ Nothing is required: den finds the sessions in your AWS config. The optional `aw
 
 - `config_path` (default `~/.aws/config`): the AWS config file.
 - `credentials_path` (default `~/.aws/credentials`): the credentials file.
+- When either is set, den hands it to the `aws` CLI and the SDK as `AWS_CONFIG_FILE` and `AWS_SHARED_CREDENTIALS_FILE`, so logins and tokens use the same file den reads.
 - `sessions`: the sessions to show, in this order. Left out, den shows every session; `sessions: []` shows none.
 - `sessions[].session` (required): the name of an `[sso-session …]` in the AWS config.
 - `sessions[].name`: the name den shows; the session's own name otherwise.

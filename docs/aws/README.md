@@ -32,6 +32,11 @@ sso_role_name = Developer
 region = eu-central-1
 ```
 
+`aws.config_path` and `aws.credentials_path` are not only read by den: when they are
+set, den passes them to the `aws` CLI and the AWS SDK it runs as `AWS_CONFIG_FILE` and
+`AWS_SHARED_CREDENTIALS_FILE`, so `aws sso login` finds the sessions den listed. Left out,
+a variable you export yourself keeps applying.
+
 Use `aws.sessions` in `den.yaml` only to curate that list:
 
 ```yaml
