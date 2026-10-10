@@ -1,5 +1,6 @@
 // Package updates implements the right-panel "Updates" view.
-// It shows the current version and allows checking for new GitHub releases or an S3 bucket.
+// It shows the current version and allows checking for new releases, read from
+// the GitHub release feed (or its API) or from an S3 bucket.
 package updates
 
 import (
@@ -524,7 +525,7 @@ func (m Model) renderHelp(width, height int) string {
 	var authLines []string
 	if m.updatesCfg != nil && m.updatesCfg.S3Bucket != "" {
 		authLines = []string{
-			head.Render("Authentication"),
+			head.Render("What you need"),
 			"",
 			dim.Render("Configured to download from S3:"),
 			code.Render("  Bucket:  " + m.updatesCfg.S3Bucket),
@@ -535,28 +536,29 @@ func (m Model) renderHelp(width, height int) string {
 		if m.updatesCfg.AWSProfile != "" {
 			authLines = append(authLines, code.Render("  Profile: "+m.updatesCfg.AWSProfile))
 		}
-		authLines = append(authLines, "", dim.Render("No GITHUB_TOKEN required."))
+		authLines = append(authLines, "", dim.Render("No token and no GitHub access needed."))
 	} else {
-		api := update.DefaultGitHubAPI
-		if m.updatesCfg != nil && m.updatesCfg.GitHubAPI != "" {
-			api = m.updatesCfg.GitHubAPI
-		}
+		// The wording is the one of docs/updates and the Help topic.
 		authLines = []string{
-			head.Render("Authentication"),
+			head.Render("What you need"),
 			"",
-			dim.Render("Releases are read from GitHub:"),
-			code.Render("  " + api),
+			dim.Render("Releases are read from:"),
+			code.Render("  " + source(m.updatesCfg).Location()),
 			"",
-			dim.Render("A public repository needs no token. For a private fork, or"),
-			dim.Render("when GitHub's rate limit is reached, set GITHUB_TOKEN before"),
-			dim.Render("starting den:"),
+			dim.Render("Public repository: nothing to configure. den needs HTTPS"),
+			dim.Render("access to github.com; behind a proxy, set HTTPS_PROXY."),
+			"",
+			dim.Render("Private repository: export GITHUB_TOKEN before starting den:"),
 			"",
 			code.Render("  export GITHUB_TOKEN=<your-personal-access-token>"),
 			"",
-			dim.Render("Required scope: repo (or a fine-grained token with Contents: read)."),
+			dim.Render("The token needs Contents: read, or the repo scope."),
+			"",
+			dim.Render("Fork or GitHub Enterprise: set updates.github_api in den.yaml,"),
+			dim.Render("plus GITHUB_TOKEN when the repository is private."),
 			"",
 			dim.Render("To use a mirror you host, configure updates.s3_bucket in den.yaml"),
-			dim.Render("(no token required)."),
+			dim.Render("(no token and no GitHub access needed)."),
 		}
 	}
 
@@ -792,14 +794,12 @@ func formatBytes(n int64) string {
 }
 
 // CheckForUpdates looks up the latest release from S3 when updates.s3_bucket
-// is configured, and from the GitHub releases API otherwise.
+// is configured, and otherwise from the GitHub release feed (the releases API
+// with GITHUB_TOKEN or a GitHub Enterprise server).
 func CheckForUpdates(cfg *config.UpdatesConfig, logger *applog.Logger) tea.Cmd {
 	return func() tea.Msg {
 		src := source(cfg)
-		where := "github"
-		if src.UsesS3() {
-			where = "s3://" + src.S3Bucket + "/" + src.S3Prefix
-		}
+		where := src.Location()
 		logger.Trace("update check [" + where + "]: looking up the latest release")
 		start := time.Now()
 		c, cancel := context.WithTimeout(context.Background(), checkTimeout)

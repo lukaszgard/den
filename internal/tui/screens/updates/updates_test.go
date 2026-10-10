@@ -299,3 +299,39 @@ func TestProgressFollowsTheInstall(t *testing.T) {
 		t.Fatal("the bar should clear when the install ends")
 	}
 }
+
+// The help overlay names the place the next check reads, from the same source
+// the check uses: the release feed by default, the API with a token, the bucket
+// for S3.
+func TestHelpNamesWhereReleasesAreRead(t *testing.T) {
+	cases := []struct {
+		name  string
+		cfg   *config.UpdatesConfig
+		token string
+		want  string
+	}{
+		{"default", nil, "", "https://github.com/lukaszgard/den/releases/latest/download/latest.json"},
+		{"token", nil, "ghp_x", update.DefaultGitHubAPI + " (GITHUB_TOKEN)"},
+		{"fork", &config.UpdatesConfig{GitHubAPI: "https://api.github.com/repos/you/fork/releases/latest"}, "",
+			"https://github.com/you/fork/releases/latest/download/latest.json"},
+		{"enterprise", &config.UpdatesConfig{GitHubAPI: "https://ghe.example.com/api/v3/repos/o/r/releases/latest"}, "",
+			"https://ghe.example.com/api/v3/repos/o/r/releases/latest"},
+		{"s3", &config.UpdatesConfig{S3Bucket: "team-bucket", S3Prefix: "den/"}, "ghp_x", "team-bucket"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("GITHUB_TOKEN", tc.token)
+			m := New("1.0.0", tc.cfg, applog.New(), nil, 200, 60)
+			m, _ = m.Update(testkeys.Press("h"), true)
+			view := ansi.Strip(m.View(200, 60, true))
+			for _, want := range []string{"What you need", tc.want} {
+				if !strings.Contains(view, want) {
+					t.Errorf("help misses %q:\n%s", want, view)
+				}
+			}
+			if tc.cfg != nil && tc.cfg.S3Bucket == "" && strings.Contains(view, "s3://") {
+				t.Errorf("a GitHub source must not show an S3 location:\n%s", view)
+			}
+		})
+	}
+}
