@@ -46,8 +46,8 @@ github.com/aws/aws-sdk-go-v2/service/memorydb v1.42.1 h1:LCzpCTjsbBAB3rYub+zBz0y
 github.com/aws/aws-sdk-go-v2/service/memorydb v1.42.1/go.mod h1:xCZLG9u1YGs1gRK24KaDbTI0JRO95SQPQshc8ETui9A=
 github.com/aws/aws-sdk-go-v2/service/opensearch v1.82.0 h1:ilufDQuVK5rhpIuh0Yg5412wRI0S3i3TJyqqNkyMHDM=
 github.com/aws/aws-sdk-go-v2/service/opensearch v1.82.0/go.mod h1:CvcpFSN88bS6cblIDsSvlcCa12N8y/6POG0e9+1boJo=
-github.com/aws/aws-sdk-go-v2/service/rds v1.129.1 h1:tLLKlVNRH6YIWCIq/9a8b6LMamBsIDCOQ5hdlhYl3qk=
-github.com/aws/aws-sdk-go-v2/service/rds v1.129.1/go.mod h1:ISB8224E71TShRfUITcXvgbjlq0MVx/KWpvF0jbiFmg=
+github.com/aws/aws-sdk-go-v2/service/rds v1.130.1 h1:H17oFwC/icF6BB/UeG1EskOdI/n7ugkVKMs8aAFi4Yo=
+github.com/aws/aws-sdk-go-v2/service/rds v1.130.1/go.mod h1:ISB8224E71TShRfUITcXvgbjlq0MVx/KWpvF0jbiFmg=
 github.com/aws/aws-sdk-go-v2/service/redshift v1.71.0 h1:LLqetEH9SAXVzjTfdwA6Nm2Stl/8vshhB5/qDyIFpqE=
 github.com/aws/aws-sdk-go-v2/service/redshift v1.71.0/go.mod h1:kImgReFKNjl19fPmOZpmzVRJDuOBw/D8yYDYjyQpglk=
 github.com/aws/aws-sdk-go-v2/service/redshiftserverless v1.44.0 h1:Qg77X444qRkk1M9Sw6QPsfc6HHR5TMY6n91sJJZSqcM=
