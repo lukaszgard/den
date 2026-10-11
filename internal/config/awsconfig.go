@@ -198,16 +198,20 @@ func ListSSOTokens(ssoCacheDir string) []SSOToken {
 	return out
 }
 
-// ReadSSOToken scans ssoCacheDir for an active token file matching either
+// ReadSSOToken scans ssoCacheDir for the token file matching either
 // sessionName or startURL (AWS CLI v2 stores startUrl, not sessionName).
+// When several match (the cache keeps the files of a renamed session), the one
+// that runs out last wins, so a stale file never hides a fresh login.
 // Returns token info including the file mod time as IssuedAt, or nil if not found.
 func ReadSSOToken(sessionName, startURL, ssoCacheDir string) *SSOTokenInfo {
+	var best *SSOTokenInfo
 	for _, tok := range ListSSOTokens(ssoCacheDir) {
-		if tok.Matches(sessionName, startURL) {
-			return &tok.SSOTokenInfo
+		if tok.Matches(sessionName, startURL) && (best == nil || tok.ExpiresAt.After(best.ExpiresAt)) {
+			info := tok.SSOTokenInfo
+			best = &info
 		}
 	}
-	return nil
+	return best
 }
 
 // SSOCacheDir returns the SSO token cache directory relative to the AWS

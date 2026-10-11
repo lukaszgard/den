@@ -32,6 +32,8 @@ irm https://github.com/lukaszgard/den/releases/latest/download/install.ps1 | iex
 {{< hextra/hero-button text="Get started" link="docs/quickstart/" style="margin-left: 0.5rem; margin-bottom: 2rem; --den-outline: 1; background: transparent; border: 1px solid currentColor" >}}
 {{< hextra/hero-button text="Install what den needs" link="docs/doctor/install/" style="margin-left: 0.5rem; margin-bottom: 2rem; --den-outline: 1; background: transparent; border: 1px solid currentColor" >}}
 
+{{< den/video src="den/main-hd.mp4" alt="den connecting eight data stores from one list, opening psql on one of them, running a runbook and decrypting a secret" >}}
+
 {{< hextra/hero-subtitle style="margin-top: 2rem; margin-bottom: 1rem" >}}
   What's new
 {{< /hextra/hero-subtitle >}}

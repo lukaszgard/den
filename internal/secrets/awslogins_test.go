@@ -84,6 +84,27 @@ func TestAWSLoginsCheck(t *testing.T) {
 	}
 }
 
+// A cache with an expired token that sorts before the valid one, both for the
+// session's start URL, is a login: the file name order must not decide.
+func TestAWSLoginsStaleTokenBeforeValidOne(t *testing.T) {
+	now := time.Now()
+	awsConfig := awsHome(t)
+	cache := filepath.Join(filepath.Dir(awsConfig), "sso", "cache")
+	write := func(name string, exp time.Time) {
+		t.Helper()
+		tok := fmt.Sprintf(`{"startUrl":%q,"accessToken":"x","expiresAt":%q}`, corpURL, exp.UTC().Format(time.RFC3339))
+		if err := os.WriteFile(filepath.Join(cache, name), []byte(tok), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("0-old.json", now.Add(-time.Hour))
+	write("9-new.json", now.Add(time.Hour))
+
+	if got := NewAWSLogins(awsConfig).Check("sso-prof", now); got != "" {
+		t.Errorf("Check = %q, want a usable login", got)
+	}
+}
+
 func TestAWSLoginsNilChecksNothing(t *testing.T) {
 	var a *AWSLogins
 	if got := a.Check("sso-prof", time.Now()); got != "" {
