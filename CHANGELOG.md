@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.0.4] - 2026-10-11
+
+**An old SSO login left in the cache no longer hides a fresh one.** `~/.aws/sso/cache` keeps a
+file per session name and per start URL, and the files of a renamed session stay behind. den took
+the first match in file name order, so an expired leftover that sorted before today's login made a
+logged-in session show as expired.
+
+### 🔧 Configuration and checks
+
+- A session counts as logged in when any of its cached logins is still valid. Secrets no longer
+  say "SSO login expired — log in from the AWS pane" for a session you have just logged in to,
+  and the AWS pane and `den doctor` read the login that runs out last.
+
 ## [1.0.3] - 2026-10-10
 
 **`aws.config_path` and `aws.credentials_path` now reach the `aws` CLI and the AWS SDK.** den read
