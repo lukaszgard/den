@@ -2,6 +2,10 @@ package aws
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -133,5 +137,39 @@ func TestNameDefaultsToSession(t *testing.T) {
 	svc := New("", "alpha", "", "", "", "", t.TempDir(), "")
 	if got := svc.Info().Name; got != "alpha" {
 		t.Errorf("Info().Name = %q, want %q", got, "alpha")
+	}
+}
+
+// The login must reach the file den.yaml names (the CLI reads it from
+// AWS_CONFIG_FILE) and a failure must show the CLI's own message, not just
+// "exit status 255".
+func TestLoginFailureShowsTheCLIMessage(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake aws is a shell script")
+	}
+	bin := t.TempDir()
+	script := "#!/bin/sh\necho 'starting' >&2\necho \"cannot read $AWS_CONFIG_FILE\" >&2\nexit 255\n"
+	if err := os.WriteFile(filepath.Join(bin, "aws"), []byte(script), 0o755); err != nil { //nolint:gosec
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("AWS_CONFIG_FILE", "/den/config-den")
+
+	svc := New("", "alpha", "", "", "", "", t.TempDir(), "")
+	if _, err := svc.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() { _ = svc.Stop(context.Background()) })
+
+	deadline := time.Now().Add(5 * time.Second)
+	for svc.State().Status != service.StatusError {
+		if time.Now().After(deadline) {
+			t.Fatalf("status = %v, want error", svc.State().Status)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	err := svc.State().Error
+	if err == nil || !strings.Contains(err.Error(), "cannot read /den/config-den") {
+		t.Errorf("error = %v, want the CLI's last line with the config path", err)
 	}
 }

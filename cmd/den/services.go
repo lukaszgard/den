@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 
 	"charm.land/log/v2"
 
@@ -129,6 +130,7 @@ func serviceEntries(cfg *config.Config) (entries []service.Entry, warnings []err
 // applyConfig makes mgr hold exactly the services cfg describes, keeping the
 // running instances of those that did not change.
 func applyConfig(ctx context.Context, mgr *service.Manager, cfg *config.Config) service.ReconcileResult {
+	exportAWSEnv(cfg)
 	entries, warnings := serviceEntries(cfg)
 	res := mgr.Reconcile(ctx, entries)
 	res.Errors = append(warnings, res.Errors...)
@@ -186,5 +188,46 @@ func checkConfig(explicit string) (string, *config.Config, config.Problems, erro
 func logSkipped(res service.ReconcileResult) {
 	for _, err := range res.Errors {
 		log.Warn("skipping", "err", err)
+	}
+}
+
+// envValue is an environment variable as den found it: unset differs from empty.
+type envValue struct {
+	value string
+	set   bool
+}
+
+// awsEnvKeys are the variables Config.AWSEnv may set.
+var awsEnvKeys = []string{"AWS_CONFIG_FILE", "AWS_SHARED_CREDENTIALS_FILE"}
+
+// startupAWSEnv is what the user's shell gave den, so a reload that drops
+// aws.config_path puts that back instead of leaving the old file in place.
+var startupAWSEnv = func() map[string]envValue {
+	env := make(map[string]envValue, len(awsEnvKeys))
+	for _, k := range awsEnvKeys {
+		v, ok := os.LookupEnv(k)
+		env[k] = envValue{v, ok}
+	}
+	return env
+}()
+
+// exportAWSEnv puts aws.config_path and aws.credentials_path into den's own
+// environment. The aws CLI and the AWS SDK know a non-default file only through
+// AWS_CONFIG_FILE and AWS_SHARED_CREDENTIALS_FILE: without this den lists the
+// sessions of the file it parsed, and `aws sso login` then looks for them in
+// ~/.aws/config and fails with "session not found". Every child process
+// inherits the variables.
+func exportAWSEnv(cfg *config.Config) {
+	want := cfg.AWSEnv()
+	for _, k := range awsEnvKeys {
+		if v, ok := want[k]; ok {
+			_ = os.Setenv(k, v)
+			continue
+		}
+		if start := startupAWSEnv[k]; start.set {
+			_ = os.Setenv(k, start.value)
+		} else {
+			_ = os.Unsetenv(k)
+		}
 	}
 }

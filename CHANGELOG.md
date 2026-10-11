@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.0.3] - 2026-10-10
+
+**`aws.config_path` and `aws.credentials_path` now reach the `aws` CLI and the AWS SDK.** den read
+the files named there to find your SSO sessions, but the `aws` commands it runs looked in
+`~/.aws/config`, so an SSO login from a custom config file ended in `exit status 255`.
+
+### 🔧 Configuration and checks
+
+- den exports `AWS_CONFIG_FILE` and `AWS_SHARED_CREDENTIALS_FILE` from `aws.config_path` and
+  `aws.credentials_path` for everything it starts: SSO logins, RDS tokens, SSM tunnels, credential
+  exports and the SDK. A key `den.yaml` leaves out does not override a variable you exported
+  yourself, and a config reload that drops a key puts back the value den started with.
+
+### 🔌 Data stores and tunnels
+
+- A failed SSO login says why. The row shows the last line of the `aws` CLI's output after
+  `exit status N`, instead of the exit status alone.
+
 ## [1.0.2] - 2026-10-10
 
 ### 🔄 Updates

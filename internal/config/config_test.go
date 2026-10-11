@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -1076,5 +1077,32 @@ services:
 		if err == nil || !strings.Contains(err.Error(), "rds.db_user is required") {
 			t.Errorf("%s: err = %v, want db_user required", engine, err)
 		}
+	}
+}
+
+func TestAWSEnv(t *testing.T) {
+	home, _ := os.UserHomeDir()
+	tests := []struct {
+		name string
+		cfg  *Config
+		want map[string]string
+	}{
+		{"nil config", nil, map[string]string{}},
+		{"no aws block", &Config{}, map[string]string{}},
+		{"keys unset", &Config{AWS: &AWSSpec{}}, map[string]string{}},
+		{"config only, ~ expanded", &Config{AWS: &AWSSpec{ConfigPath: "~/.aws/config-den"}},
+			map[string]string{"AWS_CONFIG_FILE": filepath.Join(home, ".aws", "config-den")}},
+		{"both", &Config{AWS: &AWSSpec{ConfigPath: "/etc/aws/config", CredentialsPath: "~/creds"}},
+			map[string]string{
+				"AWS_CONFIG_FILE":             "/etc/aws/config",
+				"AWS_SHARED_CREDENTIALS_FILE": filepath.Join(home, "creds"),
+			}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.cfg.AWSEnv(); !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("AWSEnv = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }

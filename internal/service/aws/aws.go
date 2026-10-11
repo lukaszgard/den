@@ -5,6 +5,7 @@ package aws
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -155,11 +156,16 @@ func (s *Service) run(ctx context.Context) {
 			s.setState(service.RuntimeState{Status: service.StatusIdle})
 			return
 		}
-		errMsg := fmt.Sprintf("SSO login failed: %v: %s", err, strings.TrimSpace(string(out)))
-		s.log(errMsg)
+		s.log(fmt.Sprintf("SSO login failed: %v: %s", err, strings.TrimSpace(string(out))))
+		// The exit status alone ("exit status 255") says nothing; the CLI's
+		// last line does ("The SSO session ... does not exist").
+		msg := fmt.Sprintf("SSO login failed: %v", err)
+		if line := lastLine(string(out)); line != "" {
+			msg += ": " + line
+		}
 		s.setState(service.RuntimeState{
 			Status: service.StatusError,
-			Error:  fmt.Errorf("SSO login failed: %v", err),
+			Error:  errors.New(msg),
 		})
 		return
 	}
@@ -181,6 +187,12 @@ func (s *Service) run(ctx context.Context) {
 
 	// Monitor token expiry in background
 	s.tokenMonitorLoop(ctx)
+}
+
+// lastLine is the last non-empty line of the CLI's output.
+func lastLine(out string) string {
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	return strings.TrimSpace(lines[len(lines)-1])
 }
 
 func (s *Service) tokenMonitorLoop(ctx context.Context) {

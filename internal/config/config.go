@@ -862,6 +862,24 @@ func (c *Config) AWSCredentialsPath() string {
 	return platform.ExpandHome("~/.aws/credentials")
 }
 
+// AWSEnv is the environment the aws CLI and the AWS SDK need to find the files
+// den.yaml names: they know a non-default config or credentials file only
+// through AWS_CONFIG_FILE and AWS_SHARED_CREDENTIALS_FILE. A key den.yaml does
+// not set is left out, so the user's own variable keeps applying. c may be nil.
+func (c *Config) AWSEnv() map[string]string {
+	env := map[string]string{}
+	if c == nil || c.AWS == nil {
+		return env
+	}
+	if c.AWS.ConfigPath != "" {
+		env["AWS_CONFIG_FILE"] = c.AWSConfigPath()
+	}
+	if c.AWS.CredentialsPath != "" {
+		env["AWS_SHARED_CREDENTIALS_FILE"] = c.AWSCredentialsPath()
+	}
+	return env
+}
+
 // AWSSessions is the aws.sessions curation list; nil means show every
 // discovered session. c may be nil.
 func (c *Config) AWSSessions() []AWSSessionSpec {

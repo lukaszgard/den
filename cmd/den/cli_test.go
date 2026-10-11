@@ -867,3 +867,46 @@ func TestVPNStatusWithoutEntriesSaysTheSmallestOne(t *testing.T) {
 		}
 	}
 }
+
+// The aws CLI and the SDK find a non-default file only through the environment:
+// without it `aws sso login --sso-session X` looks in ~/.aws/config, which has
+// no such session, and exits 255.
+func TestApplyConfigExportsTheAWSFiles(t *testing.T) {
+	started := startupAWSEnv
+	startupAWSEnv = map[string]envValue{
+		"AWS_CONFIG_FILE":             {"/users/own/config", true},
+		"AWS_SHARED_CREDENTIALS_FILE": {},
+	}
+	t.Cleanup(func() { startupAWSEnv = started })
+	// Registers the restore of both variables, whatever the test leaves behind.
+	t.Setenv("AWS_CONFIG_FILE", "/users/own/config")
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", "")
+	_ = os.Unsetenv("AWS_SHARED_CREDENTIALS_FILE")
+
+	apply := func(cfg *config.Config) {
+		t.Helper()
+		mgr := service.NewManager()
+		t.Cleanup(mgr.Close)
+		applyConfig(t.Context(), mgr, cfg)
+	}
+	dir := t.TempDir()
+	apply(&config.Config{AWS: &config.AWSSpec{
+		ConfigPath:      filepath.Join(dir, "config-den"),
+		CredentialsPath: filepath.Join(dir, "credentials-den"),
+	}})
+	if got, want := os.Getenv("AWS_CONFIG_FILE"), filepath.Join(dir, "config-den"); got != want {
+		t.Errorf("AWS_CONFIG_FILE = %q, want %q", got, want)
+	}
+	if got, want := os.Getenv("AWS_SHARED_CREDENTIALS_FILE"), filepath.Join(dir, "credentials-den"); got != want {
+		t.Errorf("AWS_SHARED_CREDENTIALS_FILE = %q, want %q", got, want)
+	}
+
+	// A reload that drops the keys puts back what den started with.
+	apply(&config.Config{})
+	if got := os.Getenv("AWS_CONFIG_FILE"); got != "/users/own/config" {
+		t.Errorf("AWS_CONFIG_FILE = %q, want the value den started with", got)
+	}
+	if v, ok := os.LookupEnv("AWS_SHARED_CREDENTIALS_FILE"); ok {
+		t.Errorf("AWS_SHARED_CREDENTIALS_FILE = %q, want it unset again", v)
+	}
+}
