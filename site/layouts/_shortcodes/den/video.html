@@ -4,23 +4,29 @@ A recording that plays like a GIF: autoplay, loop, no controls.
 VHS renders every tape as a GIF and as an MP4. A GIF holds 256 colours, so it dithers
 the terminal's colours and the edges of the text; the video keeps the full colour at
 about half the bytes. The GIF stays inside the video as the fallback for a browser
-without video. iOS only autoplays a video that is both muted and playsinline.
+without video, when there is one. iOS only autoplays a video that is both muted and playsinline.
 
 @param {string} src      The video, under assets/ (mounted in hugo.yaml).
-@param {string} fallback The GIF shown when the browser cannot play the video.
+@param {string} [fallback] The GIF shown when the browser cannot play the video.
 @param {string} alt      What the recording shows, for screen readers.
 
-@example {{< den/video src="den/main.mp4" fallback="den/main.gif" alt="den's dashboard" >}}
+@example {{< den/video src="den/main-hd.mp4" alt="den's dashboard" >}}
+@example {{< den/video src="den/runbooks/runbooks.mp4" fallback="den/runbooks/runbooks.gif" alt="a runbook run" >}}
 */ -}}
 {{- $video := resources.Get (.Get "src") -}}
 {{- if not $video -}}
   {{- errorf "den/video: %q is not in assets (see module.mounts in hugo.yaml)" (.Get "src") -}}
 {{- end -}}
-{{- $fallback := resources.Get (.Get "fallback") -}}
-{{- if not $fallback -}}
-  {{- errorf "den/video: %q is not in assets (see module.mounts in hugo.yaml)" (.Get "fallback") -}}
+{{- $fallback := "" -}}
+{{- with .Get "fallback" -}}
+  {{- $fallback = resources.Get . -}}
+  {{- if not $fallback -}}
+    {{- errorf "den/video: %q is not in assets (see module.mounts in hugo.yaml)" . -}}
+  {{- end -}}
 {{- end -}}
 <video autoplay loop muted playsinline preload="auto" aria-label="{{ .Get "alt" }}" style="width: 100%; height: auto">
   <source src="{{ $video.RelPermalink }}" type="video/mp4">
-  <img src="{{ $fallback.RelPermalink }}" alt="{{ .Get "alt" }}" style="width: 100%; height: auto">
+  {{- with $fallback }}
+  <img src="{{ .RelPermalink }}" alt="{{ $.Get "alt" }}" style="width: 100%; height: auto">
+  {{- end }}
 </video>

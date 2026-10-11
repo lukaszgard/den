@@ -27,6 +27,9 @@ module:
       target: assets/den/docs
     - source: ../CHANGELOG.md
       target: assets/den/CHANGELOG.md
+    # The home page's recording, rendered from main-hd.tape (make tape TAPE=main-hd).
+    - source: ../main-hd.mp4
+      target: assets/den/main-hd.mp4
 
 # Every docs page also comes as Markdown (/docs/rds/index.md, what "Copy page" copies)
 # and /llms.txt lists them for AI readers.
