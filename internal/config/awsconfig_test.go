@@ -50,16 +50,18 @@ func TestListSSOTokensWithoutACache(t *testing.T) {
 	}
 }
 
-// ReadSSOToken is the first matching login of the list, so the AWS pane and
-// the secret statuses cannot disagree about a session.
-func TestReadSSOTokenIsTheFirstMatch(t *testing.T) {
+// ReadSSOToken is the matching login that runs out last, whatever order the
+// files sort in: the cache keeps the files of a renamed session, and a stale
+// one must not hide a fresh login from the AWS pane, den doctor or the secrets.
+func TestReadSSOTokenIsTheLatestMatch(t *testing.T) {
 	dir := t.TempDir()
-	writeCache(t, dir, "a.json", `{"startUrl":"https://corp/start","accessToken":"x","expiresAt":"2030-01-02T03:04:05Z"}`)
+	writeCache(t, dir, "a.json", `{"startUrl":"https://corp/start","accessToken":"x","expiresAt":"2020-01-02T03:04:05Z"}`)
 	writeCache(t, dir, "b.json", `{"startUrl":"https://corp/start","accessToken":"y","expiresAt":"2031-01-02T03:04:05Z"}`)
+	writeCache(t, dir, "c.json", `{"startUrl":"https://corp/start","accessToken":"z","expiresAt":"2030-01-02T03:04:05Z"}`)
 
 	tok := ReadSSOToken("", "https://corp/start", dir)
-	if tok == nil || !tok.ExpiresAt.Equal(time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)) || tok.IssuedAt.IsZero() {
-		t.Fatalf("token = %+v, want a.json's", tok)
+	if tok == nil || !tok.ExpiresAt.Equal(time.Date(2031, 1, 2, 3, 4, 5, 0, time.UTC)) || tok.IssuedAt.IsZero() {
+		t.Fatalf("token = %+v, want b.json's", tok)
 	}
 	if ReadSSOToken("other", "https://other/start", dir) != nil {
 		t.Error("an unknown session has no token")

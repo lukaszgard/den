@@ -60,12 +60,12 @@ func (a *AWSLogins) Check(profile string, now time.Time) string {
 	if login == (ssoLogin{}) {
 		return ""
 	}
+	// The cache keeps one file per session name and one per start URL, and
+	// old ones stay after a rename, so several tokens can match: any one that
+	// is still valid is a login, whatever order the files sort in.
 	for _, tok := range a.tokens {
-		if tok.Matches(login.session, login.startURL) {
-			if tok.ExpiresAt.After(now) {
-				return ""
-			}
-			break
+		if tok.Matches(login.session, login.startURL) && tok.ExpiresAt.After(now) {
+			return ""
 		}
 	}
 	return "SSO login expired — log in from the AWS pane"
