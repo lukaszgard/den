@@ -3,8 +3,9 @@
 # The pages are not copied here. content/_content.gotmpl builds them from the
 # repo's own docs/*/README.md and CHANGELOG.md, mounted below as assets,
 # so docs/ stays the one source and GitHub keeps rendering the same files.
-# Preview with `make site`, build with `make site-build`.
-baseURL: http://localhost:1313/ # the publishing workflow passes --baseURL
+# Preview with `make site` (it serves on localhost:1313 whatever baseURL says),
+# build with `make site-build`.
+baseURL: https://den-tui.com/ # the site's own domain; `make site-build BASE_URL=…` overrides it
 title: den
 locale: en-US
 enableRobotsTXT: true

@@ -73,7 +73,7 @@ site: ## Preview the documentation site (site/, Hugo + Hextra) at http://localho
 	./scripts/site-lastmod.sh
 	cd site && $(HUGO) server
 
-site-build: ## Build the documentation site into site/public [BASE_URL=https://…/]
+site-build: ## Build the documentation site into site/public (https://den-tui.com/) [BASE_URL=https://…/]
 	./scripts/site-lastmod.sh
 	cd site && $(HUGO) --gc --minify $(if $(BASE_URL),--baseURL "$(BASE_URL)")
 
