@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.1.1] - 2026-10-12
+
+**The `den.yaml` schema and the configuration reference describe every key.** Each key is
+documented where den defines it, but the schema generator looked those notes up under the wrong
+package name, found none and reported nothing. The schema shipped without a single key
+description, and every Description cell of the configuration reference was empty.
+
+### 🔧 Configuration and checks
+
+- `den schema` now carries a description for every key, so an editor with the YAML language
+  server shows what a key does when you hover it. If you saved the schema to a file
+  (`den schema > ~/.config/den/den.schema.json`), run that again after updating.
+- The configuration reference on the documentation site fills its Description column from the
+  same text.
+
 ## [1.1.0] - 2026-10-12
 
 **Six more agent CLIs can write and change your runbooks.** `den runbook new --agent`, the
