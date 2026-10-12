@@ -47,7 +47,8 @@ reconnect — never copy that lifecycle.
 6. **Tests** — engine `Forwards`/`ConnectCommand`/credential logic in the package
    (see `internal/service/documentdb/documentdb_test.go`); a `Validate` case in
    `internal/config/config_test.go`.
-7. **Docs** — follow the `feature-docs` skill: `docs/<type>/README.md` + `.tape`, a
+7. **Docs** — follow the `feature-docs` skill: `docs/<type>/README.md` + its three tapes
+   (`<type>-steps.tape`, `<type>.tape`, `<type>-hd.tape`), a
    commented example in `den.yaml`, the README "Supported Services" table and service
    fields table, and a Help topic `docs/help/<type>.md` listed under Data stores in
    `docs/help/README.md` (`helpdoc_test.go` fails until the new type has a snippet;

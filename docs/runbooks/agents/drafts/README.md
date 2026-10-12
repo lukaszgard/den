@@ -1,5 +1,7 @@
 # Drafts and saved requests
 
+![A request kept as a draft, den quit and started again, and the draft picked up where it was left](drafts.gif)
+
 ## What it is
 
 What you type for an agent in the Runbooks panel, the request of `n` (up to 4000

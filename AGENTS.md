@@ -214,21 +214,43 @@ Every new feature or significant update **must** include:
    build fails until it is) and link other docs relatively, as GitHub reads them.
 2. **`docs/help/<feature>.md`** — its in-app Help topic, in the template above, listed in
    `docs/help/README.md`: short, with several configuration examples.
-3. **`docs/<feature>/<feature>.tape`** — a [VHS](https://github.com/charmbracelet/vhs)
-   script for this feature only, starting with the two `Output` lines and the shared
-   settings:
+3. **`docs/<feature>/<feature>.tape` and `<feature>-hd.tape`** — a
+   [VHS](https://github.com/charmbracelet/vhs) recording of this feature only, rendered
+   twice from one script, `<feature>-steps.tape`. The steps hold the scenes, and any `Env`
+   or `Set WaitTimeout` they need; never an `Output`, a `Source` or a `Set` of the look.
+   Every recording has all three files, new or old:
 
 ```
+# <feature>.tape: the README's GIF, 1200x800
 Output docs/<feature>/<feature>.gif
-Output docs/<feature>/<feature>.mp4
 
 Source docs/tape-settings.tape
+Source docs/<feature>/<feature>-steps.tape
 ```
 
-`docs/tape-settings.tape` holds the window, the font and the typing speed, so a size
-change is one edit (`main-hd.tape` alone keeps its own, at twice the font size). Tapes
-run from the repo root, where `Source` and `Output` paths resolve (`vhs secrets.tape` inside
-`docs/secrets` fails to find the settings): `make tape TAPE=secrets` renders one.
+```
+# <feature>-hd.tape: the site's video, 2400x1600
+Output docs/<feature>/<feature>.mp4
+
+Source docs/tape-settings-hd.tape
+Source docs/<feature>/<feature>-steps.tape
+```
+
+The site plays `<feature>.mp4` in place of the GIF next to it, and a 1200 px video looks
+soft on a retina screen, so the video is rendered at twice the size with the font
+doubled. The GIF stays at 1200x800: GitHub shows only the GIF, and one twice the size
+weighs several times as much. The steps are a file of their own because VHS does not
+nest `Source`; sharing them keeps the GIF and the video from drifting, as `main.tape`,
+`main-hd.tape` and `main-steps.tape` do for the home recording.
+
+`docs/tape-settings.tape` holds the window, the font and the typing speed, and
+`docs/tape-settings-hd.tape` the same at twice the size, so a size change is one edit in
+each. Both give the same columns and rows, so the TUI lays out alike in the GIF and the
+video. `tapes_test.go` fails on a tape under `docs/` laid out any other way, and on HD
+settings that are not twice the base ones. Tapes run from the repo root, where `Source`
+and `Output` paths resolve (`vhs secrets.tape` inside `docs/secrets` fails to find the
+settings): `make tape TAPE=secrets` renders the GIF and its `-hd` video; `make demo`
+skips the `-steps` files.
 
 Pace it for a person watching. A viewer needs about 0.5 s to find what changed after a
 cut, then reads about 3 words a second, and the site video loops muted, so they may join

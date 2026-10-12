@@ -1,6 +1,6 @@
 ---
 name: feature-docs
-description: This skill should be used when the user asks to "document the feature", "write the docs for", "add a tape", "add a VHS recording", or when finishing any new den feature or significant change, which must ship with docs/<feature>/README.md and a .tape.
+description: This skill should be used when the user asks to "document the feature", "write the docs for", "add a tape", "add a VHS recording", or when finishing any new den feature or significant change, which must ship with docs/<feature>/README.md and its tapes (a GIF and an HD video from shared steps).
 ---
 
 # Document a den feature
@@ -21,25 +21,44 @@ Exactly these sections, in this order:
 Use placeholder names (`orders`, `example.com`, `i-0123456789abcdef0`), never real
 hosts, account IDs or profile names.
 
-## 2. `docs/<feature>/<feature>.tape`
+## 2. `docs/<feature>/<feature>.tape` and `<feature>-hd.tape`
 
-A VHS script for this feature only (not an app tour), starting with the `Output` lines
-and the shared settings (window, font, typing speed; tapes run from the repo root):
+A VHS recording of this feature only (not an app tour), in three files so the README's
+GIF and the site's video come from one script (tapes run from the repo root):
 
-```
-Output docs/<feature>/<feature>.gif
-Output docs/<feature>/<feature>.mp4
+- `<feature>-steps.tape`: the scenes, and any `Env` or `Set WaitTimeout` they need; never
+  an `Output`, a `Source` or a `Set` of the look (VHS does not nest `Source`, so the
+  scenes cannot live in the GIF tape).
+- `<feature>.tape`: the GIF at 1200x800, which GitHub shows:
 
-Source docs/tape-settings.tape
-```
+  ```
+  Output docs/<feature>/<feature>.gif
 
-Then navigate, show the configuration, exercise the key interactions. Pace every step by
-the tiers in AGENTS.md (Feature documentation); name the tier on each `Sleep`. Anything
-slow (a connect, a login, a run) is a `Wait+Screen` on a string grepped from the code,
-never a long blind `Sleep`. Add a comment saying what the recording needs (AWS login, a
-sandbox account). Check the tape with `vhs validate <tape>`. Tapes are rendered by a
-person with `make demo` (or `make tape TAPE=<name>` for one), not by an agent: never run
-`vhs <tape>`.
+  Source docs/tape-settings.tape
+  Source docs/<feature>/<feature>-steps.tape
+  ```
+
+- `<feature>-hd.tape`: the MP4 at 2400x1600 with the font doubled, which the site plays
+  in place of the GIF and which looks soft at 1200 px on a retina screen:
+
+  ```
+  Output docs/<feature>/<feature>.mp4
+
+  Source docs/tape-settings-hd.tape
+  Source docs/<feature>/<feature>-steps.tape
+  ```
+
+Every recording, new or old, has all three files: `tapes_test.go` fails on any other
+layout. To change a recording, edit its `-steps.tape`; the other two only pick the output
+and the size.
+
+In the steps, navigate, show the configuration, exercise the key interactions. Pace every
+step by the tiers in AGENTS.md (Feature documentation); name the tier on each `Sleep`.
+Anything slow (a connect, a login, a run) is a `Wait+Screen` on a string grepped from the
+code, never a long blind `Sleep`. Add a comment saying what the recording needs (AWS
+login, a sandbox account). Check both tapes with `vhs validate <tape>`. Tapes are
+rendered by a person with `make demo` (or `make tape TAPE=<name>` for one, which renders
+its `-hd` twin too), not by an agent: never run `vhs <tape>`.
 
 ## 3. Also update
 
