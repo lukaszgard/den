@@ -7,11 +7,13 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/lukaszgard/den/internal/agent"
+	"github.com/lukaszgard/den/internal/config"
 	"github.com/lukaszgard/den/internal/platform"
 	"github.com/lukaszgard/den/internal/runbook"
 	"github.com/lukaszgard/den/internal/termsession"
@@ -102,7 +104,7 @@ func (m *AppModel) openRunbook(msg msgs.OpenRunbookMsg) []tea.Cmd {
 	m.showRunbook = true
 	if msg.AgentEdit {
 		var cmd tea.Cmd
-		m.runbookView, cmd = m.runbookView.EditWithAgent()
+		m.runbookView, cmd = m.runbookView.EditWithAgent(msg.Draft)
 		return []tea.Cmd{cmd}
 	}
 	if msg.Agent != "" {
@@ -126,7 +128,19 @@ func (m *AppModel) openRunbookTerminal(msg msgs.OpenRunbookTerminalMsg) []tea.Cm
 		return m.openAgentTerminal(msg.Name, msg.Request, "", 0, true)
 	}
 	if agentName, ok := m.agentTabs[msg.Name][msg.TabID]; ok && msg.TabID != 0 {
-		return m.openAgentTerminal(msg.Name, "", agentName, msg.TabID, m.agentEdits[msg.Name][msg.TabID])
+		edit := m.agentEdits[msg.Name][msg.TabID]
+		request := ""
+		if saved, ok := m.runbookReg.SavedRequest(msg.Name, draftKind(edit)); ok {
+			// The view asks; its answer comes back as this message, answered.
+			if !msg.Answered && m.showRunbook && m.runbookView.Name() == msg.Name {
+				m.runbookView = m.runbookView.AskResend(msg.TabID, saved.Request)
+				return nil
+			}
+			if msg.Resend {
+				request = saved.Request
+			}
+		}
+		return m.openAgentTerminal(msg.Name, request, agentName, msg.TabID, edit)
 	}
 	// The restart of a failed editor opens its file again, not a shell.
 	if e, ok := m.editorTabs[msg.Name][msg.TabID]; ok && msg.TabID != 0 {
@@ -315,7 +329,7 @@ func (m *AppModel) openAgentTerminal(name, request, agentName string, tabID int,
 	return []tea.Cmd{func() tea.Msg {
 		term, err := start(cmd, cols, rows)
 		if err == nil {
-			term = &keepsEsc{term}
+			term = &keepsEsc{liveTerminal: term}
 		}
 		return terminalStartedMsg{runbook: name, tabID: tabID, name: ag.Label(), term: term, err: err, agent: ag.Name, agentEdit: edit}
 	}}
@@ -324,9 +338,66 @@ func (m *AppModel) openAgentTerminal(name, request, agentName string, tabID int,
 // keepsEsc is an agent's terminal: esc is the agent's own key (Claude Code
 // interrupts with it), so a single esc never gives den the keys back there,
 // whatever the terminal's modes say; a second right after it, or ctrl+t, does.
-type keepsEsc struct{ liveTerminal }
+// It also notes that den closed it: a closed program reports a clean exit,
+// which keep_request: until-exit must not take for the agent being done.
+type keepsEsc struct {
+	liveTerminal
+	closed atomic.Bool
+}
 
 func (k *keepsEsc) FullScreen() bool { return k.Alive() }
+
+func (k *keepsEsc) Close() {
+	k.closed.Store(true)
+	k.liveTerminal.Close()
+}
+
+// exitedByItself reports a program that ended cleanly without den closing it.
+func (k *keepsEsc) exitedByItself() bool {
+	return !k.Alive() && k.ExitErr() == nil && !k.closed.Load()
+}
+
+// agentStarted drops the saved request of an agent's runbook once the agent
+// is up, with runbooks.drafts.keep_request: never.
+func (m *AppModel) agentStarted(name string, edit bool) {
+	if m.runbookReg.KeepRequest() != config.KeepNever {
+		return
+	}
+	if err := m.runbookReg.DropRequest(name, draftKind(edit)); err != nil {
+		m.logger.Warn("runbook drafts: " + err.Error())
+	}
+}
+
+// agentExited drops the saved request of the runbook whose agent term ran,
+// with runbooks.drafts.keep_request: until-exit, when the agent ended cleanly
+// by itself. A failed agent, or one den stopped, keeps it for a restart.
+func (m *AppModel) agentExited(term liveTerminal) {
+	agentTerm, ok := term.(*keepsEsc)
+	if !ok || !agentTerm.exitedByItself() || m.runbookReg.KeepRequest() != config.KeepUntilExit {
+		return
+	}
+	for name, tabs := range m.runbookTabs {
+		for n := 1; n <= tabs.Len(); n++ {
+			p := tabs.Position(n)
+			if tabs.Term(p) != components.Terminal(term) {
+				continue
+			}
+			if err := m.runbookReg.DropRequest(name, draftKind(m.agentEdits[name][tabs.ID(p)])); err != nil {
+				m.logger.Warn("runbook drafts: " + err.Error())
+			}
+			return
+		}
+	}
+}
+
+// draftKind is the kind of request an agent was started with: a change to a
+// runbook, or a new one.
+func draftKind(edit bool) string {
+	if edit {
+		return runbook.DraftEdit
+	}
+	return runbook.DraftNew
+}
 
 // runbookTerminalStarted puts a started program into its runbook's tab and
 // gives it the keyboard. One with nowhere to go — its runbook gone, its tab
@@ -355,6 +426,7 @@ func (m *AppModel) runbookTerminalStarted(msg terminalStartedMsg) []tea.Cmd {
 		m.editorTabs[msg.runbook][id] = *msg.editor
 	}
 	if placed && msg.agent != "" {
+		m.agentStarted(msg.runbook, msg.agentEdit)
 		if m.agentTabs[msg.runbook] == nil {
 			m.agentTabs[msg.runbook] = map[int]string{}
 		}
@@ -530,6 +602,8 @@ func (m *AppModel) runbookKey(msg tea.KeyPressMsg) []tea.Cmd {
 	}
 	if isBack(msg) && !m.runbookView.OwnsBack() {
 		m.showRunbook = false
+		// The view's E may have kept a draft, which is a row of the list.
+		m.runbooksPane = m.runbooksPane.Refresh()
 		return nil
 	}
 	m.runbookView, cmd = m.runbookView.Update(msg)

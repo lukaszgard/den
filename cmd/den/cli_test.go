@@ -947,6 +947,7 @@ func TestPathsJSON(t *testing.T) {
 		"den.yaml":         {Path: path, Exists: true},
 		"config directory": {Path: filepath.Join(cfgHome, "den")},
 		"state directory":  {Path: filepath.Join(state, "den")},
+		"runbook drafts":   {Path: filepath.Join(state, "den", "runbook-drafts")},
 		"data directory":   {Path: filepath.Join(data, "den")},
 		"vpn Office VPN":   {Path: conf, Exists: true},
 		"RDS CA bundle":    {Path: filepath.Join(cfgHome, "den", "global-bundle.pem")},

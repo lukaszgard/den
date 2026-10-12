@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -42,6 +43,22 @@ type newForm struct {
 	// editing is the runbook E asks the agent to change; the form then has
 	// only the request, for the one agent in agents.
 	editing string
+	// draft is what the form saved last, or the draft it was opened from;
+	// its ID is "" until the first save.
+	draft runbook.Draft
+	// edits counts the changes typed: a save waits for typing to pause, and
+	// the tick of an older change is dropped.
+	edits int
+	// initial is what the form opened with, so text it was filled with is
+	// not mistaken for text typed.
+	initial string
+	// asking is set while esc's question, keep it as a draft, is up.
+	asking bool
+	// lastRequest is set when E's question opens with the request the
+	// runbook's agent was given last, which it says.
+	lastRequest bool
+	// closed is set once the form is done with and nothing is to be created.
+	closed bool
 	// top is the first of the request's rows shown once it scrolls.
 	top           int
 	width, height int
@@ -98,6 +115,7 @@ func newNewForm(reg *runbook.Registry, agents []agent.Agent, choice, width, heig
 	})
 
 	f.setSize(width, height)
+	f.initial = f.text()
 	return f, f.name.Focus()
 }
 
@@ -110,6 +128,29 @@ func newEditForm(reg *runbook.Registry, ag agent.Agent, name string, width, heig
 	f.request.Placeholder = "e.g. ask for the environment as a parameter"
 	f.fit()
 	return f, f.focusRequest()
+}
+
+// fill puts dr back into the form, to go on with it: the name, the request
+// and the agent it was typed for, when that one is still offered. The
+// keyboard goes to the request once there is a name.
+func (f *newForm) fill(dr runbook.Draft) tea.Cmd {
+	f.draft = dr
+	f.name.SetValue(dr.Name)
+	// Room for every row first, as in updateRequest: the textarea would
+	// otherwise scroll itself to the cursor at the end.
+	f.request.SetHeight(textRows(dr.Request, f.request.Width()) + 2)
+	f.request.SetValue(dr.Request)
+	f.request.SetHeight(max(f.rows(), 1))
+	for i, a := range f.agents {
+		if a.Name == dr.Agent {
+			f.choice = i
+		}
+	}
+	f.initial = f.text()
+	if f.editing != "" || (len(f.agents) > 0 && strings.TrimSpace(dr.Name) != "") {
+		return f.focusRequest()
+	}
+	return f.focusName()
 }
 
 // setSize fits the form to a pane of width×height.
@@ -149,7 +190,161 @@ func (f *newForm) cycle(delta int) {
 	f.fit()
 }
 
+// draftSaveDelay is how long typing pauses before the form saves its draft.
+var draftSaveDelay = time.Second
+
+// draftSaveMsg asks form to save its draft, unless more was typed since the
+// change seq.
+type draftSaveMsg struct {
+	form *newForm
+	seq  int
+}
+
+// update drives the form: esc and the question it asks, the draft's save once
+// typing pauses, then the fields.
 func (f *newForm) update(msg tea.Msg) tea.Cmd {
+	switch msg := msg.(type) {
+	case draftSaveMsg:
+		if msg.form == f && msg.seq == f.edits && !f.closed && !f.done {
+			_ = f.saveDraft()
+		}
+		return nil
+	case tea.KeyPressMsg:
+		if f.asking {
+			return f.answer(msg)
+		}
+		if msg.String() == "esc" {
+			if f.worthKeeping() {
+				f.asking = true
+			} else {
+				f.closed = true
+			}
+			return nil
+		}
+	}
+	before := f.text()
+	cmd := f.updateFields(msg)
+	if f.text() != before && !f.done {
+		f.edits++
+		cmd = tea.Batch(cmd, f.saveLater())
+	}
+	return cmd
+}
+
+// answer takes the reply to esc's question: y keeps what was typed as a
+// draft, n deletes the draft, esc goes back to the form.
+func (f *newForm) answer(k tea.KeyPressMsg) tea.Cmd {
+	switch k.String() {
+	case "y", "Y":
+		f.asking, f.closed = false, true
+		if f.empty() {
+			if err := f.reg.DeleteDraft(f.draft.ID); err != nil {
+				return warn("the empty draft was not deleted: " + err.Error())
+			}
+			return flash("nothing to keep: the draft is deleted")
+		}
+		if err := f.saveDraft(); err != nil {
+			return warn("not kept as a draft: " + err.Error())
+		}
+		return flash("saved as draft")
+	case "n", "N":
+		f.asking, f.closed = false, true
+		if f.draft.ID == "" {
+			return nil
+		}
+		if err := f.reg.DeleteDraft(f.draft.ID); err != nil {
+			return warn("the draft was not deleted: " + err.Error())
+		}
+		return flash("draft discarded")
+	case "esc":
+		f.asking = false
+	}
+	return nil
+}
+
+// text is what the form holds, as one string to tell a change by.
+func (f *newForm) text() string {
+	agentName := ""
+	if len(f.agents) > 0 {
+		agentName = f.agents[f.choice].Name
+	}
+	return f.name.Value() + "\x00" + f.request.Value() + "\x00" + agentName
+}
+
+// empty reports a form with nothing typed into it.
+func (f *newForm) empty() bool {
+	return strings.TrimSpace(f.name.Value()) == "" && strings.TrimSpace(f.request.Value()) == ""
+}
+
+// worthKeeping reports whether esc should ask to keep a draft: something was
+// typed, or the form has a draft behind it.
+func (f *newForm) worthKeeping() bool {
+	return f.reg.KeepsDrafts() && (f.draft.ID != "" || (!f.empty() && f.text() != f.initial))
+}
+
+// saveLater saves the draft once typing has paused; a change typed in the
+// meantime moves the save after it.
+func (f *newForm) saveLater() tea.Cmd {
+	if !f.reg.KeepsDrafts() {
+		return nil
+	}
+	seq := f.edits
+	return tea.Tick(draftSaveDelay, func(time.Time) tea.Msg { return draftSaveMsg{form: f, seq: seq} })
+}
+
+// asDraft is what the form holds as a draft, over the one it saved last.
+func (f *newForm) asDraft() runbook.Draft {
+	dr := f.draft
+	dr.Request = f.request.Value()
+	dr.Agent = ""
+	if len(f.agents) > 0 {
+		dr.Agent = f.agents[f.choice].Name
+	}
+	if f.editing != "" {
+		dr.Kind, dr.Runbook, dr.Name = runbook.DraftEdit, f.editing, ""
+	} else {
+		dr.Kind, dr.Name = runbook.DraftNew, f.name.Value()
+	}
+	return dr
+}
+
+// saveDraft writes what the form holds as its draft. An empty form writes
+// nothing: there is nothing in it to lose.
+func (f *newForm) saveDraft() error {
+	if f.empty() || !f.reg.KeepsDrafts() {
+		return nil
+	}
+	saved, err := f.reg.SaveDraft(f.asDraft())
+	if err != nil {
+		return err
+	}
+	f.draft = saved
+	return nil
+}
+
+// sent turns the form's draft into the saved request of the runbook called
+// name, in folder, which it created or changed: an agent that fails can be
+// given it again. Without a request there is nothing to give: the draft goes.
+func (f *newForm) sent(name, folder string) error {
+	if !f.reg.KeepsDrafts() {
+		return nil
+	}
+	_, request, _ := f.values()
+	if request == "" {
+		return f.reg.DeleteDraft(f.draft.ID)
+	}
+	dr := f.asDraft()
+	dr.State, dr.Runbook, dr.Folder, dr.Request = runbook.StateCreated, name, folder, request
+	saved, err := f.reg.SaveDraft(dr)
+	if err != nil {
+		return err
+	}
+	f.draft = saved
+	return nil
+}
+
+// updateFields hands msg to the field that has the keyboard.
+func (f *newForm) updateFields(msg tea.Msg) tea.Cmd {
 	if f.editing != "" {
 		return f.updateEdit(msg)
 	}
@@ -389,14 +584,17 @@ func (f *newForm) view(requestRows []string, more string) string {
 	}
 
 	if f.editing != "" {
-		request := append([]string{"What should change in " + f.editing + "?",
-			description(f.agents[0].Label() + " changes it in a terminal tab, in its folder" + startsWithGo(f.agents[0]) + "; empty starts it without a request")},
+		about := f.agents[0].Label() + " changes it in a terminal tab, in its folder" + startsWithGo(f.agents[0]) + "; empty starts it without a request"
+		if f.lastRequest {
+			about = "Below is the request it was given last: enter sends it again. " + about
+		}
+		request := append([]string{"What should change in " + f.editing + "?", description(about)},
 			requestRows...)
 		if more != "" {
 			request = append(request, dim.Render(more))
 		}
 		return f.frame(field(true, request...),
-			components.HintLine(formWidth(f.width), true, key("enter", "start"), key("ctrl+j", "new line"), key("esc", "cancel")))
+			f.footer(key("enter", "start"), key("ctrl+j", "new line"), key("esc", "cancel")))
 	}
 
 	name := []string{"New runbook name", description(f.where()), f.name.View()}
@@ -433,8 +631,16 @@ func (f *newForm) view(requestRows []string, more string) string {
 			hints[0] = key("enter", "next")
 		}
 	}
-	parts = append(parts, components.HintLine(formWidth(f.width), true, hints...))
+	parts = append(parts, f.footer(hints...))
 	return f.frame(parts...)
+}
+
+// footer is the form's key line, or esc's question while it is up.
+func (f *newForm) footer(keys ...components.HelpKey) string {
+	if f.asking {
+		return question("Keep as a draft?", "keep", "discard") + "  " + components.Hints(key("esc", "back to it"))
+	}
+	return components.HintLine(formWidth(f.width), true, keys...)
 }
 
 // frame is the pop-up's border around its parts.

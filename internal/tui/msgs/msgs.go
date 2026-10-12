@@ -49,13 +49,14 @@ type OpenTerminalMsg struct {
 // created; Agent instead starts an agent in a terminal tab to write it from
 // that description, the one called AgentName ("" for runbooks.agent's).
 // AgentEdit instead opens the question E asks, what the runbook's agent
-// should change in it.
+// should change in it, filled with the draft whose ID is Draft when set.
 type OpenRunbookMsg struct {
 	Name      string
 	Edit      bool
 	Agent     string
 	AgentName string
 	AgentEdit bool
+	Draft     string
 }
 
 // DeleteRunbookMsg asks the root model to delete the runbook or sequence
@@ -78,6 +79,8 @@ type RunbookSourceDoneMsg struct {
 // restarts that tab's program after it exited. Scratch is a directory that
 // holds File and goes when the editor exits cleanly. AgentEdit starts the
 // runbook's agent to change it as Request says ("" asks nothing of it).
+// Answered, on the restart of an agent's tab, says the user was asked whether
+// to send the agent its saved request again, and Resend is the answer.
 type OpenRunbookTerminalMsg struct {
 	Name      string
 	Edit      bool
@@ -86,6 +89,8 @@ type OpenRunbookTerminalMsg struct {
 	TabID     int
 	AgentEdit bool
 	Request   string
+	Answered  bool
+	Resend    bool
 }
 
 // DisconnectMsg asks the root model to disconnect a service, once the detail

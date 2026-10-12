@@ -61,6 +61,9 @@ type View struct {
 	mig   migration
 	fork  forkQuestion
 	del   deletion
+	// resend asks, before an agent's tab restarts, whether to send it its
+	// request again.
+	resend resendQuestion
 	// ask is the question E asks: what the agent should change.
 	ask *newForm
 
@@ -162,7 +165,8 @@ func (v View) OwnsBack() bool {
 // into, a tab renamed, a close or a run confirmed, or a parameter answered.
 // The root model must then not act on esc, h or q.
 func (v View) CapturingKeys() bool {
-	return v.strip.Capturing() || v.flow.active() || v.mig.active() || v.fork.active() || v.del.active() || v.ask != nil
+	return v.strip.Capturing() || v.flow.active() || v.mig.active() || v.fork.active() || v.del.active() || v.ask != nil ||
+		v.resend.active()
 }
 
 // AwaitingForm reports that a form is up, the parameters' or the request E
@@ -255,7 +259,7 @@ func (v View) Update(msg tea.Msg) (View, tea.Cmd) {
 	// edited. The pop-ups that ask something take keys, not text, and a form
 	// has had the message above.
 	case tea.PasteMsg:
-		if !v.mig.active() && !v.fork.active() && !v.del.active() && !v.flow.active() {
+		if !v.mig.active() && !v.fork.active() && !v.del.active() && !v.flow.active() && !v.resend.active() {
 			_, cmd = v.strip.Paste(msg)
 		}
 	}
@@ -267,7 +271,7 @@ func (v View) Update(msg tea.Msg) (View, tea.Cmd) {
 func (v View) key(msg tea.KeyPressMsg) (View, tea.Cmd) {
 	// tab in a pop-up does nothing, as in the list: the parameter form would
 	// take it for "next", which on its last field starts the run.
-	if msg.String() == "tab" && (v.flow.active() || v.mig.active() || v.fork.active() || v.del.active()) {
+	if msg.String() == "tab" && (v.flow.active() || v.mig.active() || v.fork.active() || v.del.active() || v.resend.active()) {
 		return v, nil
 	}
 	if v.flow.active() {
@@ -285,6 +289,11 @@ func (v View) key(msg tea.KeyPressMsg) (View, tea.Cmd) {
 		v.fork, cmd = v.fork.key(msg)
 		return v, cmd
 	}
+	if v.resend.active() {
+		var cmd tea.Cmd
+		v.resend, cmd = v.resend.key(msg)
+		return v, cmd
+	}
 	if v.del.active() {
 		var cmd tea.Cmd
 		v.del, cmd = v.del.key(msg)
@@ -296,7 +305,7 @@ func (v View) key(msg tea.KeyPressMsg) (View, tea.Cmd) {
 	}
 	k := msg.String()
 	if k == "E" && !v.strip.Capturing() {
-		return v.EditWithAgent()
+		return v.EditWithAgent("")
 	}
 	if e.isSeq() && (k == "t" || k == "e") && !v.strip.Capturing() {
 		return v, flash("a sequence has no folder of its own: open one of its steps")
@@ -623,6 +632,8 @@ func (v View) Render() (view string, cursor *tea.Cursor) {
 		return components.Overlay(frame, v.fork.view(v.width), v.width, v.height), nil
 	case v.del.active():
 		return components.Overlay(frame, v.del.view(v.width), v.width, v.height), nil
+	case v.resend.active():
+		return components.Overlay(frame, v.resend.view(v.width), v.width, v.height), nil
 	case v.ask != nil:
 		v.ask.setSize(v.width, v.height)
 		return components.Overlay(frame, v.ask.View(), v.width, v.height), nil
@@ -869,6 +880,12 @@ func (v View) helpLine() string {
 	}
 	if v.del.active() {
 		return "  " + components.Hints(key("y", "delete"), key("n", "keep"))
+	}
+	if v.resend.active() {
+		return "  " + components.Hints(resendKeys...)
+	}
+	if v.ask != nil && v.ask.asking {
+		return "  " + components.Hints(key("y", "keep"), key("n", "discard"), key("esc", "back to it"))
 	}
 	if v.ask != nil {
 		return "  " + components.Hints(key("enter", "start"), key("ctrl+j", "new line"), key("esc", "cancel"))

@@ -31,7 +31,7 @@ const columnGap = 2
 const rowIndent = 3
 
 var columns = []column{
-	{title: "STATUS", min: 11, max: 11, cell: func(_ Model, e entry, st runbook.Run) string { return status(e, st) }},
+	{title: "STATUS", min: 11, max: 11, cell: func(m Model, e entry, st runbook.Run) string { return status(e, st, m.now()) }},
 	// Two spaces in front: the names have them, for the ! of one that asks
 	// before running.
 	{title: "  NAME", min: 16, max: 34, comfort: 20, cell: func(_ Model, e entry, _ runbook.Run) string {
@@ -48,7 +48,7 @@ var columns = []column{
 	// comfort: the drop order should keep room for "137 · 2✗", not only the title.
 	{title: "RUNS", min: 4, max: 12, comfort: 10, drop: 1, cell: func(_ Model, e entry, _ runbook.Run) string { return runs(e.tally()) }},
 	{title: "⌨", min: 3, max: 3, cell: func(m Model, e entry, _ runbook.Run) string {
-		if m.terminals == nil {
+		if m.terminals == nil || e.isDraft() {
 			return ""
 		}
 		if n := m.terminals(e.name()); n > 0 {

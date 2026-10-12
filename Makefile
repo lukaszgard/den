@@ -60,14 +60,18 @@ schema: generate ## Same as generate
 snapshot: ## Build release archives locally without publishing
 	goreleaser release --snapshot --clean --skip=publish
 
+# A *-steps.tape holds the scenes a GIF tape and its -hd twin both Source; it has no
+# Output of its own, so rendering it alone would only write a stray out.gif.
 demo: ## Render every VHS tape (drives the real app — needs AWS access)
-	@for tape in main.tape main-hd.tape docs/*/*.tape docs/*/*/*.tape docs/*/*/*/*.tape; do echo "vhs $$tape"; vhs "$$tape" || exit 1; done
+	@for tape in main.tape main-hd.tape docs/*/*.tape docs/*/*/*.tape docs/*/*/*/*.tape; do \
+	case "$$tape" in *-steps.tape) continue;; esac; \
+	echo "vhs $$tape"; vhs "$$tape" || exit 1; done
 
-tape: ## Render one VHS tape from the repo root, where its Source and Output paths resolve: make tape TAPE=secrets (or a path)
+tape: ## Render one VHS tape, and its -hd twin if any, from the repo root, where Source and Output paths resolve: make tape TAPE=secrets (or a path)
 	@t="$(TAPE)"; [ -n "$$t" ] || { echo "usage: make tape TAPE=secrets (or TAPE=docs/secrets/secrets.tape)"; exit 1; }; \
 	[ -f "$$t" ] || t=$$(find main*.tape docs -name "$$t.tape" | head -1); \
 	[ -f "$$t" ] || { echo "no tape called $(TAPE)"; exit 1; }; \
-	echo "vhs $$t"; vhs "$$t"
+	for t in "$$t" "$${t%.tape}-hd.tape"; do [ -f "$$t" ] || continue; echo "vhs $$t"; vhs "$$t" || exit 1; done
 
 site: ## Preview the documentation site (site/, Hugo + Hextra) at http://localhost:1313
 	./scripts/site-lastmod.sh

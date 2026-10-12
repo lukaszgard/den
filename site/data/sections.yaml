@@ -66,6 +66,8 @@
       status: beta
     - src: docs/runbooks/agents/panel/README.md
       status: beta
+    - src: docs/runbooks/agents/drafts/README.md
+      status: beta
     - src: docs/runbooks/agents/mcp/README.md
       status: beta
 

@@ -95,7 +95,8 @@ func runTUI(cmd *cobra.Command, args []string) error {
 	logSkipped(applyConfig(cmd.Context(), mgr, cfg))
 
 	opts := tui.Options{ConfigPath: path, Config: cfg, ConfigProblems: problems, Version: version, RunbookHistory: runbook.UserHistory(),
-		RunbookSources: source.UserStore(), RunbookTrust: runbook.UserTrust(), RunbookState: runbook.UserStateRoot()}
+		RunbookSources: source.UserStore(), RunbookTrust: runbook.UserTrust(), RunbookState: runbook.UserStateRoot(),
+		RunbookDrafts: runbook.UserDrafts()}
 	if path != "" {
 		opts.ConfigFile = &tui.ConfigFile{
 			Check: func() (*config.Config, config.Problems, error) { return config.LoadChecked(path) },
@@ -154,7 +155,8 @@ func connectCmd() *cobra.Command {
 				return err
 			}
 			return runProgram(tui.New(mgr, tui.Options{ConfigPath: path, Config: cfg, ConfigProblems: problems, Version: version, RunbookHistory: runbook.UserHistory(),
-				RunbookSources: source.UserStore(), RunbookTrust: runbook.UserTrust(), RunbookState: runbook.UserStateRoot()}))
+				RunbookSources: source.UserStore(), RunbookTrust: runbook.UserTrust(), RunbookState: runbook.UserStateRoot(),
+				RunbookDrafts: runbook.UserDrafts()}))
 		},
 	}
 }

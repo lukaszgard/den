@@ -35,6 +35,9 @@ type Model struct {
 	gen     uint64
 	cursor  int
 	offset  int
+	// drafts are the requests kept for an agent, read when the pane changes
+	// them and on Refresh, not on every tick: they are files on disk.
+	drafts []runbook.Draft
 
 	searching bool
 	query     string
@@ -43,6 +46,10 @@ type Model struct {
 	mig  migration
 	del  deletion
 	src  sources
+	// picker is what n offers when there are drafts; delDraft asks before D
+	// deletes one.
+	picker   draftPicker
+	delDraft draftDeletion
 	// naming is the prompt for a new runbook's name and, when an agent is
 	// installed, what it should do.
 	naming   *newForm
@@ -65,6 +72,8 @@ func New(reg *runbook.Registry, ctx context.Context, terminals func(string) int,
 		mig:       migration{reg: reg},
 		del:       deletion{reg: reg},
 		src:       sources{reg: reg, ctx: ctx},
+		delDraft:  draftDeletion{reg: reg},
+		drafts:    reg.Drafts(),
 		width:     width,
 		height:    height,
 		now:       time.Now,
@@ -81,14 +90,14 @@ func (m Model) sync() Model {
 	}
 	var current string
 	if e, ok := m.selected(); ok {
-		current = e.name()
+		current = e.key()
 	}
-	m.gen, m.entries = gen, entries(m.reg)
+	m.gen, m.entries = gen, entries(m.reg, m.drafts)
 	if m.entries == nil {
 		m.entries = []entry{}
 	}
 	for i, e := range m.filtered() {
-		if e.name() == current {
+		if e.key() == current {
 			m.cursor = i
 		}
 	}
@@ -103,9 +112,15 @@ func (m Model) WithOutput(out func(name, line string)) Model {
 	return m
 }
 
-// Refresh rebuilds the rows now, rather than at the next tick: after a
-// delete, the row must not stay on screen.
-func (m Model) Refresh() Model { return m.sync() }
+// Refresh reads the drafts again and rebuilds the rows now, rather than at the
+// next tick: after a delete, the row must not stay on screen.
+func (m Model) Refresh() Model {
+	m.drafts = m.reg.Drafts()
+	// The entries point into the old drafts: rebuild them, whatever the
+	// generation says.
+	m.entries = nil
+	return m.sync()
+}
 
 // SetDark switches the pane to the palette of a dark or a light background,
 // which the terminal reports once the program runs. Prompts opened after it
@@ -122,6 +137,14 @@ func (m Model) SetDark(isDark bool) Model {
 // Dark reports whether the pane draws for a dark background.
 func (m Model) Dark() bool { return !m.light }
 
+// SaveDraft writes the open form's draft at once, for a den about to quit:
+// what was typed since the last save would be lost.
+func (m Model) SaveDraft() {
+	if m.naming != nil {
+		_ = m.naming.saveDraft()
+	}
+}
+
 // SetSize resizes in place, keeping the cursor, the filter and any prompt.
 func (m Model) SetSize(width, height int) Model {
 	m.width, m.height = width, height
@@ -132,14 +155,15 @@ func (m Model) SetSize(width, height int) Model {
 // parameter or a new runbook's name — so keys are text, not commands: a q
 // typed into one must not quit den.
 func (m Model) Searching() bool {
-	return m.searching || m.flow.awaitingForm() || m.naming != nil || m.src.awaitingForm()
+	return m.searching || m.flow.awaitingForm() || m.naming != nil || m.src.awaitingForm() || m.picker.active()
 }
 
 // Modal reports that a pop-up is open over the list — a form, a question, the
 // warnings or the sources — which keeps the keyboard: tab does not leave it
 // for the menu. The / filter is not one: it is part of the list.
 func (m Model) Modal() bool {
-	return m.flow.active() || m.mig.active() || m.del.active() || m.naming != nil || m.warnings || m.src.active()
+	return m.flow.active() || m.mig.active() || m.del.active() || m.naming != nil || m.warnings || m.src.active() ||
+		m.picker.active() || m.delDraft.active()
 }
 
 // AwaitingForm reports whether a form is collecting input. The root model
@@ -150,7 +174,8 @@ func (m Model) AwaitingForm() bool {
 
 // Busy reports whether the pane is in a mode that owns the escape key.
 func (m Model) Busy() bool {
-	return m.searching || m.flow.active() || m.mig.active() || m.del.active() || m.naming != nil || m.warnings || m.src.active()
+	return m.searching || m.flow.active() || m.mig.active() || m.del.active() || m.naming != nil || m.warnings || m.src.active() ||
+		m.picker.active() || m.delDraft.active()
 }
 
 // Shortcuts lists the keys of the pane for the shortcuts pop-up (h or ?), and
@@ -163,13 +188,13 @@ func (m Model) Shortcuts() []components.ShortcutGroup {
 	return []components.ShortcutGroup{
 		{Title: "Runbooks", Note: "Outside den: den run <name>", Keys: []components.Shortcut{
 			{Keys: "↑ ↓", Text: "Select a runbook or a sequence (or k, j)"},
-			{Keys: "enter", Text: "Open it: logs, history, about, terminals"},
+			{Keys: "enter", Text: "Open it: logs, history, about, terminals; a draft opens its form again"},
 			{Keys: "r", Text: "Run it (parameters and confirmation first)"},
 			{Keys: "x", Text: "Cancel its run"},
-			{Keys: "n", Text: "New runbook folder; an agent can write it, else it opens in the editor"},
+			{Keys: "n", Text: "New runbook folder; an agent can write it, else it opens in the editor. With drafts, pick one to go on with"},
 			{Keys: "E", Text: "Ask its agent to change it (agent: in runbook.yaml or runbooks.defaults)"},
 			{Keys: "m", Text: "Move a one-script runbook into its own folder"},
-			{Keys: "D", Text: "Delete it for good, with its runs and state (asks first)"},
+			{Keys: "D", Text: "Delete it for good, with its runs and state, or a draft (asks first)"},
 			{Keys: "s", Text: "Runbook sources: your team's runbooks from git"},
 			{Keys: "/", Text: "Filter the list"},
 			{Keys: "w", Text: "Show the discovery warnings"},
@@ -265,6 +290,23 @@ func (m Model) Update(msg tea.Msg, focused bool) (Model, tea.Cmd) {
 			var cmd tea.Cmd
 			m.del, cmd = m.del.key(msg)
 			return m, cmd
+		case m.delDraft.active():
+			var cmd tea.Cmd
+			m.delDraft, cmd = m.delDraft.key(msg)
+			return m.Refresh(), cmd
+		case m.picker.active():
+			var (
+				picked bool
+				draft  *runbook.Draft
+			)
+			m.picker, picked, draft = m.picker.key(msg)
+			switch {
+			case !picked:
+				return m, nil
+			case draft != nil:
+				return m.openDraft(*draft)
+			}
+			return m.newForm()
 		case m.src.active():
 			var cmd tea.Cmd
 			m.src, cmd = m.src.update(msg, m.width)
@@ -282,6 +324,17 @@ func (m Model) Update(msg tea.Msg, focused bool) (Model, tea.Cmd) {
 
 func (m Model) handleListKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	rows := m.filtered()
+	if e, ok := m.selected(); ok && e.isDraft() {
+		switch msg.String() {
+		case "enter":
+			return m.openDraft(*e.draft)
+		case "D":
+			m.delDraft = m.delDraft.begin(*e.draft)
+			return m, nil
+		case "r", "x", "m", "E":
+			return m, flash(errDraft.Error())
+		}
+	}
 	switch msg.String() {
 	case "/":
 		m.searching, m.query = true, ""
@@ -379,8 +432,32 @@ func (m Model) handleSearchKey(msg tea.KeyPressMsg) Model {
 }
 
 // startNaming asks for a new runbook's name and, when an agent is
-// installed, what it should do.
+// installed, what it should do; with drafts of new runbooks, it first offers
+// them to go on with.
 func (m Model) startNaming() (Model, tea.Cmd) {
+	if drafts := newDrafts(m.drafts); len(drafts) > 0 {
+		m.picker = m.picker.begin(drafts)
+		return m, nil
+	}
+	return m.newForm()
+}
+
+// openDraft opens the form d was typed into, filled with it: n's for a new
+// runbook, E's in the runbook's view for a change.
+func (m Model) openDraft(d runbook.Draft) (Model, tea.Cmd) {
+	if d.Kind == runbook.DraftEdit {
+		if _, ok := m.reg.Lookup(d.Runbook); !ok {
+			return m, warn(d.Runbook + " is no longer listed: D deletes the draft")
+		}
+		name, id := d.Runbook, d.ID
+		return m, func() tea.Msg { return msgs.OpenRunbookMsg{Name: name, AgentEdit: true, Draft: id} }
+	}
+	m, _ = m.newForm()
+	return m, m.naming.fill(d)
+}
+
+// newForm opens n's form, empty.
+func (m Model) newForm() (Model, tea.Cmd) {
 	// Without an agent that can start, the form asks only for the name.
 	agents, choice, err := agent.Choices(m.reg.Agents(), m.reg.Agent())
 	if err != nil {
@@ -392,30 +469,41 @@ func (m Model) startNaming() (Model, tea.Cmd) {
 }
 
 func (m Model) updateNaming(msg tea.Msg) (Model, tea.Cmd) {
-	if k, ok := msg.(tea.KeyPressMsg); ok && k.String() == "esc" {
-		m.naming = nil
-		return m, nil
-	}
 	cmd := m.naming.update(msg)
+	if m.naming.closed {
+		m.naming = nil
+		return m.Refresh(), cmd
+	}
 	if !m.naming.done {
 		return m, cmd
 	}
-	name, request, agentName := m.naming.values()
+	form := m.naming
+	name, request, agentName := form.values()
 	m.naming = nil
-	if _, err := m.reg.NewRunbook(name, ""); err != nil {
-		return m, func() tea.Msg {
-			return msgs.StatusFlashMsg{Text: err.Error(), Warn: true, Hold: 6 * time.Second}
+	dir, err := m.reg.NewRunbook(name, "")
+	if err != nil {
+		text := err.Error()
+		// What was typed is not lost to a name that turned out to be taken.
+		if form.worthKeeping() && form.saveDraft() == nil {
+			text += " — kept as a draft"
+		}
+		return m.Refresh(), func() tea.Msg {
+			return msgs.StatusFlashMsg{Text: text, Warn: true, Hold: 6 * time.Second}
 		}
 	}
-	m = m.sync()
+	var kept tea.Cmd
+	if err := form.sent(name, dir); err != nil {
+		kept = warn("the request is not kept for a restart: " + err.Error())
+	}
+	m = m.Refresh()
 	if _, ok := lookup(m.reg, name); !ok {
 		// A runbook.yaml from a template that does not load: w says why.
-		return m, flash("created, but it did not load — press w")
+		return m, tea.Batch(kept, flash("created, but it did not load — press w"))
 	}
 	if request != "" {
-		return m, func() tea.Msg { return msgs.OpenRunbookMsg{Name: name, Agent: request, AgentName: agentName} }
+		return m, tea.Batch(kept, func() tea.Msg { return msgs.OpenRunbookMsg{Name: name, Agent: request, AgentName: agentName} })
 	}
-	return m, func() tea.Msg { return msgs.OpenRunbookMsg{Name: name, Edit: true} }
+	return m, tea.Batch(kept, func() tea.Msg { return msgs.OpenRunbookMsg{Name: name, Edit: true} })
 }
 
 // --- rendering ---
@@ -440,6 +528,10 @@ func (m Model) View(width, height int, focused bool) string {
 		return components.Overlay(view, m.mig.view(width), width, height)
 	case m.del.active():
 		return components.Overlay(view, m.del.view(width), width, height)
+	case m.delDraft.active():
+		return components.Overlay(view, m.delDraft.view(width), width, height)
+	case m.picker.active():
+		return components.Overlay(view, m.picker.view(width, height, m.now()), width, height)
 	case m.warnings:
 		return components.Overlay(view, m.warningsBox(width, height), width, height)
 	case m.src.active():
@@ -538,8 +630,10 @@ func (m Model) hint(width int, focused bool) string {
 		keys = m.flow.help()
 	case m.mig.active():
 		keys = []components.HelpKey{key("y", "move"), key("n", "keep")}
-	case m.del.active():
+	case m.del.active(), m.delDraft.active():
 		keys = []components.HelpKey{key("y", "delete"), key("n", "keep")}
+	case m.picker.active():
+		keys = []components.HelpKey{key("enter", "open"), key("esc", "cancel")}
 	case m.src.active():
 		keys = m.src.help()
 	}

@@ -1,5 +1,41 @@
 # Changelog
 
+## [1.2.0] - 2026-10-12
+
+**What you type for an agent is no longer lost.** The request of the Runbooks pane's `n` and
+the change `E` asks for lived only in their pop-up: `esc`, a quit or a crash lost it, and a
+restarted agent tab started without it. den now keeps them on disk as drafts until you send
+them, and keeps the request a runbook was made with, so an agent that failed can get it again.
+
+### 📜 Runbooks
+
+- The `n` and `E` forms save what you type as a draft a second after you stop typing, and when
+  den quits, so `ctrl+c`, `q` or a crash loses at most that second. `esc` on a form with
+  something in it asks *Keep as a draft?*: `y` keeps it, `n` deletes it, `esc` goes back to the
+  form. An empty form closes as before.
+- A kept draft is a row at the top of the Runbooks list, TYPE `draft`, with its request's first
+  line as the description, so `/` finds it. `enter` opens its form where you left it and `D`
+  deletes it after asking; the run keys say it is a draft instead of running it.
+- `n` first offers your drafts of new runbooks, newest first, beside a new one; with none it
+  opens the form at once, as before. `E` on a runbook with a draft of a change opens that draft.
+- `enter` in either form keeps the request with the runbook. Restarting a failed agent's tab
+  now asks first: `y` (or `enter`) sends the request again, `n` starts the agent empty, `esc`
+  restarts nothing. After den itself restarted, `E` on the runbook opens filled with that
+  request, ready to send again or to change. A runbook that cannot be created keeps what was
+  typed as a draft.
+- Drafts and saved requests are files in den's state directory readable only by you, since a
+  request may hold a password; `den mcp` and `--json` never show them. `den paths` lists the
+  folder, and deleting a runbook deletes its requests.
+
+### 🔧 Configuration and checks
+
+- `runbooks.drafts.keep_request` says how long a request outlives the runbook it created:
+  `until-deleted` (the default) until the runbook is deleted, `until-exit` until its agent exits
+  cleanly by itself, `never` once the agent has started. An agent that fails, or whose tab den
+  closed, keeps it.
+- `runbooks.drafts.days` (default 30) is how long an untouched draft is kept; `0` keeps drafts
+  until you delete them.
+
 ## [1.1.1] - 2026-10-12
 
 **The `den.yaml` schema and the configuration reference describe every key.** Each key is
