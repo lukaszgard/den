@@ -449,7 +449,8 @@ session is yours: it asks before it writes a file or runs a command, as it alway
 Each way has its own recording, with a config and notes of its own:
 [`den runbook new --agent`](agents/cli/README.md),
 [`n` in the panel](agents/panel/README.md) and
-[den registered with your agent](agents/mcp/README.md).
+[den registered with your agent](agents/mcp/README.md). What you type in the panel is kept
+as you type it: see [drafts and saved requests](agents/drafts/README.md).
 
 **From the command line:**
 
@@ -572,7 +573,9 @@ new runbook's view, in its folder, so you watch it work inside den. In that tab 
 is the agent's (Claude Code interrupts with it); `esc` twice or `ctrl+t` gives den the keys
 back. When the
 agent quits, den reads the folder again. Leave the answer empty to get `run.sh` in your
-editor instead.
+editor instead. `esc` with something typed asks *Keep as a draft?*: a kept draft is a row
+of the list and `n` offers it again, and an agent restarted on its tab can be sent its
+request again ([drafts and saved requests](agents/drafts/README.md)).
 
 ### Change one with an agent
 
@@ -662,13 +665,13 @@ that the name and the account stay readable.
 | Key               | Action                                                  |
 |-------------------|---------------------------------------------------------|
 | `↑` `↓` / `k` `j` | Move between entries (`pgup`, `pgdn`, `g`, `G`)         |
-| `enter`           | Open the runbook's view                                 |
+| `enter`           | Open the runbook's view; on a [draft](agents/drafts/README.md), its form again |
 | `r`               | Run it: parameters, then confirmation, then the run     |
 | `x`               | Cancel its run (SIGINT, then kill after a grace period) |
-| `n`               | New runbook folder; an agent can write it, else it opens in the editor |
+| `n`               | New runbook folder; an agent can write it, else it opens in the editor. With drafts, offers them first |
 | `E`               | [Change it with its agent](#change-one-with-an-agent): asks what, then starts the agent in a tab of its view |
 | `m`               | Move a single-script runbook into its own folder        |
-| `D`               | [Delete it for good](#delete-one), after a question listing what goes |
+| `D`               | [Delete it for good](#delete-one), after a question listing what goes; a draft after a question of its own |
 | `s`               | [Runbook sources](../runbook-sources/README.md): add, update, install and uninstall |
 | `/`               | Filter the list                                         |
 | `w`               | Show the discovery warnings                             |

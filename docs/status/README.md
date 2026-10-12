@@ -14,7 +14,7 @@ change between minor versions; a change that breaks an existing `den.yaml` or co
 
 | Feature | Page |
 |---|---|
-| Writing and changing a runbook with an agent: `den runbook new --agent`, `n` and `E` in the Runbooks panel, the `agent:` key and `agents:` entries | [CLI](../runbooks/agents/cli/README.md), [panel](../runbooks/agents/panel/README.md), [MCP](../runbooks/agents/mcp/README.md) |
+| Writing and changing a runbook with an agent: `den runbook new --agent`, `n` and `E` in the Runbooks panel, the `agent:` key and `agents:` entries, drafts and saved requests (`runbooks.drafts`) | [CLI](../runbooks/agents/cli/README.md), [panel](../runbooks/agents/panel/README.md), [MCP](../runbooks/agents/mcp/README.md), [drafts](../runbooks/agents/drafts/README.md) |
 | Runbook sources: runbooks from a git repository, `den.lock`, trust | [Runbook sources](../runbook-sources/README.md) |
 | Terminal tabs: the data store's client inside den | [Terminal tabs](../terminal/README.md) |
 

@@ -10,6 +10,10 @@ new runbook's view, in its folder, so you watch it work inside den. One `esc` is
 agent's there; `esc` twice or `ctrl+t` gives den the keys back. When the agent quits, den reads the folder
 again and the runbook is in the list.
 
+What you type is kept: `esc` asks *Keep as a draft?*, a kept draft is a row of the list
+that `n` offers again, and an agent restarted on its tab can be sent its request again.
+See [drafts and saved requests](../drafts/README.md).
+
 ## Configuration
 
 [`den.yaml`](den.yaml) is the same shape as the [CLI demo](../cli/den.yaml):

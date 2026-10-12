@@ -17,6 +17,7 @@ A runbook is one of your own scripts or commands (shell, Python, Go, anything) t
 - Open a runbook like a service: its log, its history, what den hands it, and terminals that open in its folder with the same environment.
 - Create a runbook from a template, or have an agent CLI write it from a description (`den runbook new NAME "…"`): Claude Code, Codex, OpenCode, Copilot CLI, Qwen Code, Droid, Pi or Kimi Code.
 - Change a runbook with an agent: `E` asks what to change and starts the runbook's own `agent` (`claude --model opus`, say) in a tab of its folder.
+- Keep what you type for an agent: `esc` asks to keep it as a draft, a kept draft is a row of the list that `n` offers again, and an agent restarted on its tab can be sent its request again.
 - Delete a runbook or sequence for good with `D` (`den runbook delete NAME`): its folder or den.yaml entry, its runs and its state folder, after a question that lists all of it.
 - Keys: press `h` in the Runbooks panel or a runbook's view.
 
@@ -241,6 +242,13 @@ Or start from what you already have:
 - A runbook from a team repository: `den runbook fork SOURCE/NAME` copies it into your own folder, to change as you like.
 - Your own starting point: set `runbooks.template` to a folder, and every new runbook starts as a copy of it.
 
+Keep a request for later, and give it back to a failed agent:
+
+1. In `n`'s form (or `E`'s), press `esc` with something typed: *Keep as a draft?* `y` keeps it, `n` deletes it, `esc` goes back. The form also saves itself a second after you stop typing, and when den quits.
+2. The draft is a row at the top of the list, TYPE draft. `enter` on it, or `n` and then the draft, opens the form where you left it; `D` deletes it.
+3. `enter` creates the runbook and keeps the request with it. If the agent fails, `enter` on its exited tab asks *Send the request again?*: `y` sends it, `n` starts the agent empty.
+4. After den itself restarted, `E` on the runbook opens filled with the request.
+
 When a runbook has had its day, select it and press `D`, in the list or its view. The question lists what goes (its folder, script or den.yaml entry, its runs with their logs, its `DEN_RUNBOOK_STATE` folder), what stays, and the sequences that will stop loading without it. Only `y` deletes it; any other key keeps it. From a shell, `den runbook delete NAME` asks the same, and needs `--yes` outside a terminal.
 
 ## Limitations
@@ -258,6 +266,8 @@ When a runbook has had its day, select it and press `D`, in the list or its view
 - A deleted runbook is gone for good: den keeps no copy. Only what was committed to git, when its folder is in a repository, can come back.
 - Deleting a runbook from a source uninstalls it: its checkout is shared with the source's other runbooks, and `den runbook source remove` deletes that.
 - A `den mcp` already running keeps listing a deleted runbook until it reads the folders again, and running it then fails.
+- Drafts and saved requests stay on this machine, in den's state folder; `den mcp` and `--json` never show them. Without a home directory den keeps none.
+- With `keep_request: until-exit`, an agent you quit yourself (`/exit`) counts as a clean exit and takes the request with it.
 
 ## When it goes wrong
 
