@@ -339,7 +339,7 @@ func runbookCmd() *cobra.Command {
 		Use:   "runbook",
 		Short: "Your scripts, run with den's AWS profile, region and tunnels: manage runbook folders",
 	}
-	cmd.AddCommand(runbookNewCmd(), runbookMigrateCmd(), runbookDeleteCmd(), runbookSourceCmd(), runbookBrowseCmd(),
+	cmd.AddCommand(runbookNewCmd(), runbookValidateCmd(), runbookMigrateCmd(), runbookDeleteCmd(), runbookSourceCmd(), runbookBrowseCmd(),
 		runbookSelectCmd(true), runbookSelectCmd(false), runbookForkCmd())
 	return cmd
 }
@@ -569,8 +569,17 @@ func runAgent(cmd *cobra.Command, reg *runbook.Registry, ag agent.Agent, cfgPath
 	runErr := c.Run()
 
 	reg.Rescan()
-	v := reg.ValidateFolder(folder)
 	fmt.Fprintln(out)
+	printValidation(out, folder, reg.ValidateFolder(folder))
+	if ee, ok := errors.AsType[*exec.ExitError](runErr); ok {
+		return exitCodeError{code: ee.ExitCode()}
+	}
+	return runErr
+}
+
+// printValidation says what den makes of a runbook folder: ready and how to
+// run it, or every error that keeps it from loading, then the warnings.
+func printValidation(out io.Writer, folder string, v runbook.Validation) {
 	switch {
 	case v.OK:
 		fmt.Fprintf(out, "%s is ready (%s)\n  run    den run %s\n  or open it in den: Runbooks, then enter\n", v.Name, v.Kind, shellArg(v.Name))
@@ -583,10 +592,57 @@ func runAgent(cmd *cobra.Command, reg *runbook.Registry, ag agent.Agent, cfgPath
 	for _, w := range v.Warnings {
 		fmt.Fprintf(out, "  ! %s\n", w)
 	}
-	if ee, ok := errors.AsType[*exec.ExitError](runErr); ok {
-		return exitCodeError{code: ee.ExitCode()}
+}
+
+func runbookValidateCmd() *cobra.Command {
+	var asJSON bool
+	cmd := &cobra.Command{
+		Use:   "validate [folder]",
+		Short: "Check a runbook folder the way den loads it",
+		Long: "Check a runbook folder the way den loads it, and report what den's validate_runbook\n" +
+			"MCP tool would: whether it is ready, every error that keeps it from loading, and\n" +
+			"warnings. It is for agents without den's MCP server, which run it from their shell.\n\n" +
+			"The folder (default: the current directory) must be directly in one of\n" +
+			"runbooks.dirs; a name that is no path here is taken in the first of them. The exit\n" +
+			"status is 1 when the folder does not load.",
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			reg, err := buildRegistry()
+			if err != nil {
+				return err
+			}
+			folder := "."
+			if len(args) == 1 {
+				folder = args[0]
+			}
+			// A path here is the one meant; ResolveFolder would take a
+			// relative one in the first runbooks directory instead.
+			if _, err := os.Stat(folder); err == nil {
+				if abs, err := filepath.Abs(folder); err == nil {
+					folder = abs
+				}
+			}
+			dir, err := reg.ResolveFolder(folder)
+			if err != nil {
+				return err
+			}
+			v := reg.ValidateFolder(dir)
+			out := cmd.OutOrStdout()
+			if asJSON {
+				if err := writeJSON(out, v); err != nil {
+					return err
+				}
+			} else {
+				printValidation(out, dir, v)
+			}
+			if !v.OK {
+				return exitCodeError{code: 1}
+			}
+			return nil
+		},
 	}
-	return runErr
+	cmd.Flags().BoolVar(&asJSON, "json", false, "print JSON")
+	return cmd
 }
 
 // shellArg quotes s for a shell command line when it needs it.

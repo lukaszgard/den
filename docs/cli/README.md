@@ -442,6 +442,26 @@ den runbook uninstall <source>/<runbook>
 
 Guide: [docs/runbooks](../runbooks/README.md)
 
+## `den runbook validate`
+
+Check a runbook folder the way den loads it
+
+Check a runbook folder the way den loads it, and report what den's validate_runbook MCP tool would: whether it is ready, every error that keeps it from loading, and warnings. It is for agents without den's MCP server, which run it from their shell.
+
+The folder (default: the current directory) must be directly in one of runbooks.dirs; a name that is no path here is taken in the first of them. The exit status is 1 when the folder does not load.
+
+```text
+den runbook validate [folder] [flags]
+```
+
+Guide: [docs/runbooks](../runbooks/README.md)
+
+Flags:
+
+```text
+--json   print JSON
+```
+
 ## `den schema`
 
 Print the JSON Schema for den.yaml

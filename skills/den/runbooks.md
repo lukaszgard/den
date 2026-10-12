@@ -126,7 +126,8 @@ den. Write it so it works there too:
 
 ## Finish
 
-1. Call den's `validate_runbook` with the folder: it loads it exactly as den will and
-   reports every problem. Fix them and call it again until it reports none.
+1. Call den's `validate_runbook` with the folder (an agent without den's MCP tools runs
+   `den runbook validate <folder>`, which reports the same): it loads it exactly as den
+   will and reports every problem. Fix them and call it again until it reports none.
 2. Tell the user how to run it: the Runbooks panel (select it, `r`), or `den run "<name>"`.
    Run it yourself only if the user asks (`run_runbook`, when den allows it).

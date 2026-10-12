@@ -15,6 +15,7 @@ import (
 	"github.com/lukaszgard/den/internal/config"
 	"github.com/lukaszgard/den/internal/doctor"
 	"github.com/lukaszgard/den/internal/prereq"
+	"github.com/lukaszgard/den/internal/runbook"
 	"github.com/lukaszgard/den/internal/service"
 	"github.com/lukaszgard/den/internal/service/kafka"
 )
@@ -561,6 +562,71 @@ func TestRunbookNewWithAnAgent(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "other")); err == nil {
 		t.Fatal("a missing agent left a folder behind")
+	}
+}
+
+// den runbook validate is validate_runbook for an agent's shell: a folder in
+// runbooks.dirs is reported ready or broken through the exit status too, and
+// one anywhere else is refused.
+func TestRunbookValidate(t *testing.T) {
+	cfgPath := tempConfig(t)
+	root := filepath.Join(filepath.Dir(cfgPath), "runbooks")
+	data, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = []byte(strings.Replace(string(data), "runbooks:\n", "runbooks:\n  dirs: [runbooks]\n", 1))
+	if err := os.WriteFile(cfgPath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := runDen(t, "runbook", "new", "Good one", "-c", cfgPath); err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	good := filepath.Join(root, "good-one")
+
+	out, err := runDen(t, "runbook", "validate", good, "-c", cfgPath)
+	if err != nil || !strings.Contains(out, "Good one is ready (bash)") || !strings.Contains(out, "den run 'Good one'") {
+		t.Fatalf("a good folder = %v\n%s", err, out)
+	}
+	out, err = runDen(t, "runbook", "validate", good, "--json", "-c", cfgPath)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	var v runbook.Validation
+	if err := json.Unmarshal([]byte(out), &v); err != nil {
+		t.Fatalf("not JSON: %v\n%s", err, out)
+	}
+	if !v.OK || v.Name != "Good one" || v.Kind != "bash" || v.Errors == nil {
+		t.Errorf("--json = %+v, want the validate_runbook fields", v)
+	}
+	// A name that is no path here is a folder of the first runbooks dir.
+	if out, err := runDen(t, "runbook", "validate", "good-one", "-c", cfgPath); err != nil || !strings.Contains(out, "is ready") {
+		t.Errorf("by name = %v\n%s", err, out)
+	}
+
+	broken := filepath.Join(root, "broken")
+	if err := os.MkdirAll(broken, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(broken, "runbook.yaml"), []byte("name: [\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, err = runDen(t, "runbook", "validate", broken, "-c", cfgPath)
+	var exit exitCodeError
+	if !errors.As(err, &exit) || exit.code != 1 {
+		t.Fatalf("a broken folder = %v, want exit status 1\n%s", err, out)
+	}
+	if !strings.Contains(out, "does not load yet") || !strings.Contains(out, "✗ runbook.yaml") {
+		t.Errorf("the broken folder's error is not listed:\n%s", out)
+	}
+
+	if _, err := runDen(t, "runbook", "validate", t.TempDir(), "-c", cfgPath); err == nil || !strings.Contains(err.Error(), "not a folder directly in a runbooks directory") {
+		t.Errorf("a folder outside runbooks.dirs = %v, want it refused", err)
+	}
+
+	t.Chdir(good)
+	if out, err := runDen(t, "runbook", "validate", "-c", cfgPath); err != nil || !strings.Contains(out, "Good one is ready") {
+		t.Errorf("no argument, in the folder = %v\n%s", err, out)
 	}
 }
 
