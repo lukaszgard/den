@@ -12,7 +12,7 @@ layout: hextra-home
 {{< /hextra/hero-headline >}}
 
 {{< hextra/hero-subtitle style="margin-bottom: 1.5rem" >}}
-  den opens the tunnel, mints and refreshes the IAM credential and hands you a ready connect command for RDS, ElastiCache, MemoryDB, DocumentDB, Redshift, OpenSearch and Neptune.
+  den is a terminal dashboard that opens the tunnel, keeps your IAM credentials fresh and reconnects when the connection drops, for RDS, Aurora, ElastiCache, MemoryDB, DocumentDB, Redshift, OpenSearch and Neptune. Run your team's runbooks against the live tunnels, with the AWS profile, region and ports already set.
 {{< /hextra/hero-subtitle >}}
 
 {{< tabs >}}
@@ -33,12 +33,6 @@ irm https://github.com/lukaszgard/den/releases/latest/download/install.ps1 | iex
 {{< hextra/hero-button text="Install what den needs" link="docs/doctor/install/" style="margin-left: 0.5rem; margin-bottom: 2rem; --den-outline: 1; background: transparent; border: 1px solid currentColor" >}}
 
 {{< den/video src="den/main-hd.mp4" alt="den connecting eight data stores from one list, opening psql on one of them, running a runbook and decrypting a secret" >}}
-
-{{< hextra/hero-subtitle style="margin-top: 2rem; margin-bottom: 1rem" >}}
-  What's new
-{{< /hextra/hero-subtitle >}}
-
-{{< den/whats-new >}}
 
 {{< hextra/feature-grid style="margin-top: 2rem" >}}
   {{< hextra/feature-card title="Every data store, one tunnel" icon="database" link="docs/rds/" subtitle="RDS and Aurora, ElastiCache, MemoryDB, DocumentDB, Redshift, OpenSearch and Neptune: den opens the forward, mints the IAM credential, refreshes it and reconnects when it drops." >}}
