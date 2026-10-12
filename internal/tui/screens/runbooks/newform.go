@@ -127,6 +127,29 @@ func newEditForm(reg *runbook.Registry, ag agent.Agent, name string, width, heig
 	return f, f.focusRequest()
 }
 
+// fill puts dr back into the form, to go on with it: the name, the request
+// and the agent it was typed for, when that one is still offered. The
+// keyboard goes to the request once there is a name.
+func (f *newForm) fill(dr runbook.Draft) tea.Cmd {
+	f.draft = dr
+	f.name.SetValue(dr.Name)
+	// Room for every row first, as in updateRequest: the textarea would
+	// otherwise scroll itself to the cursor at the end.
+	f.request.SetHeight(textRows(dr.Request, f.request.Width()) + 2)
+	f.request.SetValue(dr.Request)
+	f.request.SetHeight(max(f.rows(), 1))
+	for i, a := range f.agents {
+		if a.Name == dr.Agent {
+			f.choice = i
+		}
+	}
+	f.initial = f.text()
+	if f.editing != "" || (len(f.agents) > 0 && strings.TrimSpace(dr.Name) != "") {
+		return f.focusRequest()
+	}
+	return f.focusName()
+}
+
 // setSize fits the form to a pane of width×height.
 func (f *newForm) setSize(width, height int) {
 	if f.width == width && f.height == height {

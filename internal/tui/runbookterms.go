@@ -102,7 +102,7 @@ func (m *AppModel) openRunbook(msg msgs.OpenRunbookMsg) []tea.Cmd {
 	m.showRunbook = true
 	if msg.AgentEdit {
 		var cmd tea.Cmd
-		m.runbookView, cmd = m.runbookView.EditWithAgent()
+		m.runbookView, cmd = m.runbookView.EditWithAgent(msg.Draft)
 		return []tea.Cmd{cmd}
 	}
 	if msg.Agent != "" {
@@ -530,6 +530,8 @@ func (m *AppModel) runbookKey(msg tea.KeyPressMsg) []tea.Cmd {
 	}
 	if isBack(msg) && !m.runbookView.OwnsBack() {
 		m.showRunbook = false
+		// The view's E may have kept a draft, which is a row of the list.
+		m.runbooksPane = m.runbooksPane.Refresh()
 		return nil
 	}
 	m.runbookView, cmd = m.runbookView.Update(msg)

@@ -17,10 +17,13 @@ import (
 )
 
 // entry is one runbook or sequence. The list and the view share it because
-// they share the verbs: run it, watch it, cancel it.
+// they share the verbs: run it, watch it, cancel it. In the list it may also
+// be a draft, a request typed for an agent and kept: it has none of the verbs,
+// and enter opens its form again.
 type entry struct {
 	runner *runbook.Runner
 	seq    *runbook.SequenceRunner
+	draft  *runbook.Draft
 }
 
 // lookup finds the runbook or sequence called name.
@@ -34,9 +37,13 @@ func lookup(reg *runbook.Registry, name string) (entry, bool) {
 	return entry{}, false
 }
 
-// entries lists every runbook, then every sequence, in definition order.
-func entries(reg *runbook.Registry) []entry {
+// entries lists the drafts, the newest first, then every runbook, then every
+// sequence, in definition order.
+func entries(reg *runbook.Registry, drafts []runbook.Draft) []entry {
 	var out []entry
+	for i := range drafts {
+		out = append(out, entry{draft: &drafts[i]})
+	}
 	for _, r := range reg.Runbooks() {
 		out = append(out, entry{runner: r})
 	}
@@ -48,10 +55,20 @@ func entries(reg *runbook.Registry) []entry {
 
 func (e entry) isSeq() bool { return e.seq != nil }
 
+func (e entry) isDraft() bool { return e.draft != nil }
+
+// key tells entries apart: a draft of a change to Greet is not Greet.
+func (e entry) key() string {
+	if e.isDraft() {
+		return "draft " + e.draft.ID
+	}
+	return e.name()
+}
+
 // oldFormat reports a runbook still defined by a header script, without a
 // folder of its own: m moves it into one.
 func (e entry) oldFormat() bool {
-	if e.isSeq() {
+	if e.isSeq() || e.isDraft() {
 		return false
 	}
 	rb := e.runner.Runbook()
@@ -59,13 +76,20 @@ func (e entry) oldFormat() bool {
 }
 
 func (e entry) name() string {
-	if e.isSeq() {
+	switch {
+	case e.isDraft():
+		return draftName(*e.draft)
+	case e.isSeq():
 		return e.seq.Sequence().Name
 	}
 	return e.runner.Runbook().Name
 }
 
 func (e entry) description() string {
+	if e.isDraft() {
+		line, _, _ := strings.Cut(strings.TrimSpace(e.draft.Request), "\n")
+		return line
+	}
 	if e.isSeq() {
 		seq := e.seq.Sequence()
 		if seq.Description != "" {
@@ -77,6 +101,9 @@ func (e entry) description() string {
 }
 
 func (e entry) state() runbook.Run {
+	if e.isDraft() {
+		return runbook.Run{Status: runbook.StatusNeverRun}
+	}
 	if e.isSeq() {
 		return e.seq.State()
 	}
@@ -84,6 +111,9 @@ func (e entry) state() runbook.Run {
 }
 
 func (e entry) tally() runbook.Tally {
+	if e.isDraft() {
+		return runbook.Tally{}
+	}
 	if e.isSeq() {
 		return e.seq.Tally()
 	}
@@ -91,6 +121,9 @@ func (e entry) tally() runbook.Tally {
 }
 
 func (e entry) isRunning() bool {
+	if e.isDraft() {
+		return false
+	}
 	if e.isSeq() {
 		return e.seq.IsRunning()
 	}
@@ -98,6 +131,9 @@ func (e entry) isRunning() bool {
 }
 
 func (e entry) needsConfirm() bool {
+	if e.isDraft() {
+		return false
+	}
 	if e.isSeq() {
 		return e.seq.NeedsConfirm()
 	}
@@ -105,6 +141,9 @@ func (e entry) needsConfirm() bool {
 }
 
 func (e entry) params() []config.ParamSpec {
+	if e.isDraft() {
+		return nil
+	}
 	if e.isSeq() {
 		return e.seq.Params()
 	}
@@ -112,6 +151,9 @@ func (e entry) params() []config.ParamSpec {
 }
 
 func (e entry) cancel() {
+	if e.isDraft() {
+		return
+	}
 	if e.isSeq() {
 		e.seq.Cancel()
 		return
@@ -122,6 +164,9 @@ func (e entry) cancel() {
 // start runs the entry in the background with the given parameter answers;
 // out, when set, gets every line of the run with the entry's name.
 func (e entry) start(ctx context.Context, reg *runbook.Registry, params map[string]string, out func(name, line string)) error {
+	if e.isDraft() {
+		return errDraft
+	}
 	var onLine func(string)
 	if out != nil {
 		name := e.name()
@@ -138,6 +183,9 @@ func (e entry) start(ctx context.Context, reg *runbook.Registry, params map[stri
 
 // where says what the entry runs against: its env, or its step count.
 func (e entry) where() string {
+	if e.isDraft() {
+		return ""
+	}
 	if e.isSeq() {
 		n := len(e.seq.Sequence().Steps)
 		return fmt.Sprintf("%d %s", n, plural(n, "step", "steps"))
@@ -304,6 +352,7 @@ var kindIcons = map[string]kindIcon{
 	"pwsh":      {"\ue683", "#5391FE"},
 	"terraform": {"\ue69a", "#844FBA"},
 	"seq":       {"\uf0cb", "#5BC8AF"},
+	"draft":     {"\uf040", "#9B9B9B"},
 }
 
 // otherIcon is the gear of any other kind.
@@ -313,6 +362,9 @@ var otherIcon = kindIcon{"\uf013", "#9B9B9B"}
 // still a single script that m moves into a folder.
 func (e entry) kind() string {
 	var cell string
+	if e.isDraft() {
+		return kindCell("draft", "draft")
+	}
 	if e.isSeq() {
 		cell = kindCell("seq", fmt.Sprintf("seq · %d", len(e.seq.Sequence().Steps)))
 	} else {
@@ -337,6 +389,9 @@ func kindCell(kind, label string) string {
 // envs are the env: keys the entry runs with: its own, or those of a
 // sequence's steps.
 func (e entry) envs(reg *runbook.Registry) []string {
+	if e.isDraft() {
+		return nil
+	}
 	if !e.isSeq() {
 		if env := e.runner.Runbook().Env; env != "" {
 			return []string{env}
@@ -370,8 +425,12 @@ func (e entry) account(reg *runbook.Registry) string {
 	return "mixed: " + strings.Join(envs, ", ")
 }
 
-// status is the STATUS cell: how the last run ended, or how far it is.
-func status(e entry, st runbook.Run) string {
+// status is the STATUS cell: how the last run ended, or how far it is; for
+// a draft, when it was saved last.
+func status(e entry, st runbook.Run, now time.Time) string {
+	if e.isDraft() {
+		return muted.Render("✎ " + ago(e.draft.Updated, now))
+	}
 	text := st.Summary()
 	switch st.Status {
 	case runbook.StatusNeverRun:

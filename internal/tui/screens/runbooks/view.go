@@ -296,7 +296,7 @@ func (v View) key(msg tea.KeyPressMsg) (View, tea.Cmd) {
 	}
 	k := msg.String()
 	if k == "E" && !v.strip.Capturing() {
-		return v.EditWithAgent()
+		return v.EditWithAgent("")
 	}
 	if e.isSeq() && (k == "t" || k == "e") && !v.strip.Capturing() {
 		return v, flash("a sequence has no folder of its own: open one of its steps")

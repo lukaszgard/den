@@ -25,8 +25,10 @@ func editHint(reg *runbook.Registry, rb runbook.Runbook) string {
 // EditWithAgent opens the question E asks, what the runbook's agent should
 // change in it, or says why it cannot: a sequence has no folder, a source's
 // runbook is copied first, and one that is not in a folder of its own would
-// have an agent rewrite den.yaml or a script's neighbours.
-func (v View) EditWithAgent() (View, tea.Cmd) {
+// have an agent rewrite den.yaml or a script's neighbours. The question is
+// filled with the draft whose ID is draftID, else the newest draft of a
+// change to the runbook.
+func (v View) EditWithAgent(draftID string) (View, tea.Cmd) {
 	e, ok := lookup(v.reg, v.name)
 	if !ok {
 		return v, nil
@@ -50,7 +52,22 @@ func (v View) EditWithAgent() (View, tea.Cmd) {
 	}
 	var cmd tea.Cmd
 	v.ask, cmd = newEditForm(v.reg, ag, v.name, v.width, v.height, !v.light)
+	if dr, ok := v.editDraft(draftID); ok {
+		cmd = v.ask.fill(dr)
+	}
 	return v, cmd
+}
+
+// editDraft is the draft E's question opens with: the one whose ID is id,
+// else the newest draft of a change to the runbook on screen.
+func (v View) editDraft(id string) (runbook.Draft, bool) {
+	drafts := v.reg.Drafts()
+	for _, d := range drafts {
+		if id != "" && d.ID == id {
+			return d, true
+		}
+	}
+	return editDraft(drafts, v.name)
 }
 
 // updateAsk drives the question: enter starts the agent with the request, esc

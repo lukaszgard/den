@@ -49,13 +49,14 @@ type OpenTerminalMsg struct {
 // created; Agent instead starts an agent in a terminal tab to write it from
 // that description, the one called AgentName ("" for runbooks.agent's).
 // AgentEdit instead opens the question E asks, what the runbook's agent
-// should change in it.
+// should change in it, filled with the draft whose ID is Draft when set.
 type OpenRunbookMsg struct {
 	Name      string
 	Edit      bool
 	Agent     string
 	AgentName string
 	AgentEdit bool
+	Draft     string
 }
 
 // DeleteRunbookMsg asks the root model to delete the runbook or sequence
