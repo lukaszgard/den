@@ -45,6 +45,8 @@ type Registry struct {
 	trust   *Trust
 	// stateRoot holds each runbook's DEN_RUNBOOK_STATE folder; "" keeps none.
 	stateRoot string
+	// drafts keeps requests typed for an agent; nil keeps none.
+	drafts *Drafts
 }
 
 // NewRegistry merges the inline runbooks from den.yaml with those discovered in

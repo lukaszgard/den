@@ -288,14 +288,14 @@ func (r *Registry) drop(d Deletion) {
 }
 
 // forget deletes what den keeps for name outside its definition: its runs in
-// the state directory, its DEN_RUNBOOK_STATE folder and the record of the
-// user having run it. All three go by name, so a runbook given it later would
-// otherwise inherit them.
+// the state directory, its DEN_RUNBOOK_STATE folder, the record of the user
+// having run it and the requests typed for its agent. All go by name, so a
+// runbook given it later would otherwise inherit them.
 func (r *Registry) forget(name string) error {
 	r.mu.RLock()
-	h, trust, root := r.history, r.trust, r.stateRoot
+	h, trust, root, drafts := r.history, r.trust, r.stateRoot, r.drafts
 	r.mu.RUnlock()
-	errs := []error{h.Forget(name), trust.Forget(name)}
+	errs := []error{h.Forget(name), trust.Forget(name), drafts.Forget(name)}
 	if root != "" {
 		errs = append(errs, os.RemoveAll(filepath.Join(root, folderName(name))))
 	}
