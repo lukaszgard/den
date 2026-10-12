@@ -21,6 +21,6 @@ environments:
 runbooks:
   dirs: [runbooks]                  # new runbooks are written here (git-ignored)
   template: ../template             # a new folder starts as a copy of this one
-  agent: claude                     # claude, codex or auto
+  agent: claude                     # a kind such as claude, codex or opencode, or auto
   defaults:
     history: 5

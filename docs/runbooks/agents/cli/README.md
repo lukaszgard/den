@@ -2,8 +2,9 @@
 
 ## What it is
 
-One command: den makes the runbook's folder and starts Claude Code (or Codex) in it,
-with den's MCP server and its runbook guide already connected. You describe the runbook
+One command: den makes the runbook's folder and starts Claude Code (or another agent CLI
+den can start, such as Codex or OpenCode) in it, with den's MCP server and its runbook
+guide already connected. You describe the runbook
 in a sentence; the agent writes it, builds it and checks it with `validate_runbook`; den
 then says whether the folder loads.
 
@@ -17,11 +18,11 @@ then says whether the folder loads.
 | `environments.demo-e2e` | A placeholder environment; the agent's runbook reads its profile, region and bastion from what den sets |
 | `runbooks.dirs` | `runbooks`, next to this file: where the new folder is made (git-ignored) |
 | `runbooks.template` | `../template`: a new folder starts as a copy. Its `.claude/settings.json` pre-allows file writes and the build **for this recording**; normally the agent asks before each |
-| `runbooks.agent` | `claude`, `codex`, `auto` (the first one installed) or a `runbooks.agents` name |
+| `runbooks.agent` | A kind such as `claude`, `codex` or `opencode`, `auto` (the first one installed) or a `runbooks.agents` name |
 
 ## Prerequisites
 
-Claude Code, logged in (or Codex), and `cargo` for the Rust runbook the demo asks for.
+Claude Code, logged in (or another agent CLI den can start), and `cargo` for the Rust runbook the demo asks for.
 No AWS.
 
 ## Usage
