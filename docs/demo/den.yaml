@@ -129,9 +129,17 @@ environments:                       # named bastion targets; services reference
       host: ops@bastion.example.com
       args: [-i, ~/.ssh/acme_lab_ed25519]
 
+  demo-e2e:                         # the env the runbooks of docs/runbooks/demo name;
+    region: eu                      # here it is the demo account, so they read real data
+    environment: e2e
+    ec2_instance_id: "i-0123456789abcdef0"
+    aws_profile: "acme-dev"
+    aws_region_code: "eu-central-1"
+
 runbooks:                           # user-defined scripts, run with den's context
   dirs:                             # every folder in them with a runbook.yaml is one runbook
     - runbooks                      # docs/demo/runbooks; relative paths: to this file
+    - ../runbooks/demo              # docs/runbooks/demo: the same scripts in Python, Go, Rust and bash
   # rescan: true                    # pick up folders added/changed/removed while den runs
   # template: ~/.config/den/runbook-template   # folder copied for a new runbook
   # agent: auto                     # writes a runbook from a description: auto, claude, codex or a name below

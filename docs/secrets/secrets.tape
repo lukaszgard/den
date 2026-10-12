@@ -6,18 +6,21 @@ Source docs/tape-settings.tape
 Env SOPS_AGE_KEY_FILE "/tmp/den-secrets-demo/demo-age.key"
 Env EDITOR "vi"
 Env XDG_STATE_HOME "/tmp/den-secrets-demo/state"
+Env VAULT_TOKEN "demo"
 
-# Secrets without leaving den: a SOPS file (decrypt, reveal, copy, edit) and a
-# KeePassXC database (master password, then an entry). Needs sops 3.9 or newer and
-# keepassxc-cli; no AWS. It runs on docs/secrets/den.yaml and a copy of
-# docs/secrets/demo in /tmp/den-secrets-demo (fake values, master password "demo"),
-# so the edit below never changes the repository. Run from the repository root:
+# Secrets without leaving den: a SOPS file (decrypt, reveal, copy, edit), a
+# KeePassXC database (master password, then an entry) and HashiCorp Vault (one
+# secret, then a folder to pick from). Needs sops 3.9 or newer, keepassxc-cli and
+# vault; no AWS. It runs on docs/secrets/den.yaml and a copy of docs/secrets/demo in
+# /tmp/den-secrets-demo (fake values, master password "demo", a Vault dev server on
+# 127.0.0.1:18200 with token "demo" that demo/vault-demo.sh starts and stops), so the
+# edit below never changes the repository. Run from the repository root:
 # make tape TAPE=secrets. The shortcuts pop-up (h) is in docs/shortcuts.
 
-# The build, the copy and the launch are hidden; the recording opens on the
-# Secrets pane.
+# The build, the copy, the Vault dev server and the launch are hidden; the
+# recording opens on the Secrets pane.
 Hide
-Type "rm -rf /tmp/den-secrets-demo && mkdir -p /tmp/den-secrets-demo && cp docs/secrets/demo/demo-age.key docs/secrets/demo/demo.enc.yaml docs/secrets/demo/team.kdbx /tmp/den-secrets-demo/ && go build -o ./den ./cmd/den && clear"
+Type "rm -rf /tmp/den-secrets-demo && mkdir -p /tmp/den-secrets-demo && cp docs/secrets/demo/demo-age.key docs/secrets/demo/demo.enc.yaml docs/secrets/demo/team.kdbx /tmp/den-secrets-demo/ && docs/secrets/demo/vault-demo.sh start && go build -o ./den ./cmd/den && clear"
 Enter
 Type "./den -c docs/secrets/den.yaml"
 Enter
@@ -106,7 +109,42 @@ Sleep 1s     # Back: the entries
 Escape
 Sleep 1s     # Back: the list
 
+# ── Vault: the token is the one `vault login` left, den never asks for it ────
+# Notice: den runs `vault kv get` with the entry's address and your own token
+# (VAULT_TOKEN here, ~/.vault-token for a person); no password prompt.
+Down
+Sleep 1s     # Act: enter opens Grafana admin
+Enter
+Wait+Screen@30s /••••/
+Sleep 3.5s   # Look: the secret's keys, values masked
+Down
+Sleep 700ms  # Transit
+Type "r"
+Sleep 3s     # Read: one value shown
+Escape
+Sleep 1s     # Back: the list
+
+# ── A folder: every secret under it, to pick from ────────────────────────────
+Down
+Sleep 1s     # Act: enter lists AMS apps
+Enter
+Wait+Screen@30s /apps\/ams\/kafka\/e2e/
+Sleep 3.5s   # Look: full paths of every secret under the folder, subfolders included
+Down
+Sleep 700ms  # Transit
+Sleep 1s     # Act: enter opens one secret
+Enter
+Wait+Screen@30s /bootstrap/
+Sleep 3s     # Read: the secret's keys
+Escape
+Sleep 1s     # Back: the entries
+Escape
+Sleep 1s     # Back: the list
+
 # ── End ───────────────────────────────────────────────────────────────────────
 Hide
 Type "q"
+Sleep 500ms
+Type "docs/secrets/demo/vault-demo.sh stop && clear"
+Enter
 Sleep 500ms

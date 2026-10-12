@@ -4,6 +4,8 @@
 
 Private databases and caches in AWS sit behind a bastion, and reaching one by hand means an `aws ssm start-session` command, a token command and a `~/.pgpass` edit, redone every 15 minutes. den does all three from one dashboard: it opens the tunnel, mints and refreshes the IAM credential, and reconnects when the tunnel drops.
 
+<p align="center"><img src="main.gif" alt="den in action" /></p>
+
 New to den? The [Quickstart](docs/quickstart/README.md) goes from a fresh machine to a `psql` prompt on a private database.
 
 ## Features

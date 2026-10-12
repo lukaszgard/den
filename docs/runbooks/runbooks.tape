@@ -29,7 +29,7 @@ Sleep 3.5s   # Look: the table, with focus
 
 # ── Open one and run it ───────────────────────────────────────────────────────
 # Notice: logs, history, about, files and terminals are tabs of its view.
-Down@200ms 2
+Down@200ms 4 # past Bastion status, CloudWatch alarms and Disk usage
 Sleep 1s     # Act: enter opens Env report
 Enter
 Sleep 3.5s   # Look: the view, on Logs

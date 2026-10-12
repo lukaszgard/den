@@ -1,0 +1,5 @@
+name: S3 buckets
+description: The newest S3 buckets of the account, in Go
+command: go run .
+env: demo-e2e
+timeout: 5m

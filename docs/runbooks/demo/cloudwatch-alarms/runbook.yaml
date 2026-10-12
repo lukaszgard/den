@@ -1,0 +1,5 @@
+name: CloudWatch alarms
+description: Alarms firing in the account; fails when any is. In Rust
+command: cargo run --quiet --release
+env: demo-e2e
+timeout: 10m
