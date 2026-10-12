@@ -247,7 +247,7 @@ one for your account, and [the JSON Schema](../schema/README.md) gives your edit
 completion and inline errors. Each feature's page has the keys in context, with
 examples; this page is the complete list.
 
-` + "A key marked **required** must be set in the entry itself. The others are optional, and many can instead come from a named environment (`environments`).\n\n")
+` + "**Required** says whether den refuses the file when the key is missing from its entry. A key marked **no** is optional, or comes from somewhere else, such as the named environment (`environments`) a service picks with `env`, or is needed only in some setups, which its description names.\n\n")
 
 	b.WriteString("## Top-level keys\n\n")
 	if err := table(&b, root, "", anchor, paths); err != nil {
@@ -313,18 +313,14 @@ func table(b *bytes.Buffer, s *schema, path string, anchor, paths map[string]str
 	for _, r := range s.Required {
 		required[r] = true
 	}
-	b.WriteString("| Key | Type | Required | Allowed values | Description |\n|---|---|---|---|---|\n")
+	b.WriteString("| Key | Type | Required | Description |\n|---|---|---|---|\n")
 	for _, p := range s.Properties {
-		req := ""
+		req := "no"
 		if required[p.Name] {
 			req = "yes"
 		}
-		var vals []string
-		for _, e := range enumOf(p.S) {
-			vals = append(vals, fmt.Sprintf("`%v`", e))
-		}
-		fmt.Fprintf(b, "| `%s` | %s | %s | %s | %s |\n", p.Name, typeOf(p.S, anchor, paths), req,
-			strings.Join(vals, ", "), cell(keyLede(p.Name, oneLine(p.S.Description))))
+		fmt.Fprintf(b, "| `%s` | %s | %s | %s |\n", p.Name, typeOf(p.S, anchor, paths), req,
+			cell(keyLede(p.Name, oneLine(p.S.Description))))
 	}
 	return nil
 }
@@ -338,10 +334,22 @@ func enumOf(s *schema) []any {
 }
 
 // typeOf writes a key's type, linking an object to the table of its keys.
+// A key with a fixed set of values lists them here: they are a handful of
+// keys, and a column of their own stood empty on every other row.
 func typeOf(s *schema, anchor, paths map[string]string) string {
 	link := func(ref string) string {
 		name := defName(ref)
 		return fmt.Sprintf("[`%s`](#%s)", paths[name], anchor[name])
+	}
+	if enum := enumOf(s); len(enum) > 0 {
+		vals := make([]string, len(enum))
+		for i, e := range enum {
+			vals[i] = fmt.Sprintf("`%v`", e)
+		}
+		if s.Items != nil {
+			return "list of " + s.Items.Type + ", each one of " + strings.Join(vals, ", ")
+		}
+		return s.Type + ", one of " + strings.Join(vals, ", ")
 	}
 	switch {
 	case s.Ref != "":

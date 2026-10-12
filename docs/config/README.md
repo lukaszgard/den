@@ -12,498 +12,564 @@ one for your account, and [the JSON Schema](../schema/README.md) gives your edit
 completion and inline errors. Each feature's page has the keys in context, with
 examples; this page is the complete list.
 
-A key marked **required** must be set in the entry itself. The others are optional, and many can instead come from a named environment (`environments`).
+**Required** says whether den refuses the file when the key is missing from its entry. A key marked **no** is optional, or comes from somewhere else, such as the named environment (`environments`) a service picks with `env`, or is needed only in some setups, which its description names.
 
 ## Top-level keys
 
-| Key | Type | Required | Allowed values | Description |
-|---|---|---|---|---|
-| `version` | string |  |  |  |
-| `title` | string |  |  |  |
-| `aws` | object, keys in [`aws`](#aws) |  |  |  |
-| `menu_order` | list of string |  | `connect`, `tunnel`, `runbooks`, `vpn`, `aws`, `secrets`, `create-env`, `config`, `logs`, `help`, `updates` |  |
-| `disabled_panes` | list of string |  | `connect`, `tunnel`, `runbooks`, `vpn`, `aws`, `secrets`, `create-env`, `config`, `logs`, `help`, `updates` |  |
-| `environments` | map of name → object, keys in [`environments.<name>`](#environmentsname) |  |  |  |
-| `services` | list of objects, keys in [`services[]`](#services) |  |  |  |
-| `tunnels` | list of objects, keys in [`tunnels[]`](#tunnels) |  |  |  |
-| `vpn` | list of objects, keys in [`vpn[]`](#vpn) |  |  |  |
-| `runbooks` | object, keys in [`runbooks`](#runbooks) |  |  |  |
-| `secrets` | object, keys in [`secrets`](#secrets) |  |  |  |
-| `logs` | object, keys in [`logs`](#logs) |  |  |  |
-| `updates` | object, keys in [`updates`](#updates) |  |  |  |
-| `mcp` | object, keys in [`mcp`](#mcp) |  |  |  |
-| `ai` | object, keys in [`ai`](#ai) |  |  |  |
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `version` | string | no | Config format version, "1" |
+| `title` | string | no | The dashboard's header line; "den — Developer Environment Navigator" when unset |
+| `aws` | object, keys in [`aws`](#aws) | no | Where the AWS CLI files are and which SSO sessions to show |
+| `menu_order` | list of string, each one of `connect`, `tunnel`, `runbooks`, `vpn`, `aws`, `secrets`, `create-env`, `config`, `logs`, `help`, `updates` | no | panels to show, in this order; every panel when empty |
+| `disabled_panes` | list of string, each one of `connect`, `tunnel`, `runbooks`, `vpn`, `aws`, `secrets`, `create-env`, `config`, `logs`, `help`, `updates` | no | panels to hide |
+| `environments` | map of name → object, keys in [`environments.<name>`](#environmentsname) | no | Named groups of shared bastion and profile settings; a service picks one with env: |
+| `services` | list of objects, keys in [`services[]`](#services) | no | The data stores and stacks the Connect panel lists |
+| `tunnels` | list of objects, keys in [`tunnels[]`](#tunnels) | no | SSH and SOCKS tunnels |
+| `vpn` | list of objects, keys in [`vpn[]`](#vpn) | no | Openfortivpn connections |
+| `runbooks` | object, keys in [`runbooks`](#runbooks) | no | Your scripts, run with den's connection context |
+| `secrets` | object, keys in [`secrets`](#secrets) | no | The Secrets panel's sources |
+| `logs` | object, keys in [`logs`](#logs) | no | The log file and level of den itself |
+| `updates` | object, keys in [`updates`](#updates) | no | Where den looks for new releases |
+| `mcp` | object, keys in [`mcp`](#mcp) | no | What AI agents may do through den mcp |
+| `ai` | object, keys in [`ai`](#ai) | no | The model behind den doctor --explain |
 
 ## `aws`
 
+This block holds AWS-related configuration paths.
+
 Guide: [docs/aws](../aws/README.md)
 
-| Key | Type | Required | Allowed values | Description |
-|---|---|---|---|---|
-| `config_path` | string |  |  |  |
-| `credentials_path` | string |  |  |  |
-| `sessions` | list of objects, keys in [`aws.sessions[]`](#awssessions) |  |  |  |
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `config_path` | string | no | default: ~/.aws/config |
+| `credentials_path` | string | no | default: ~/.aws/credentials |
+| `sessions` | list of objects, keys in [`aws.sessions[]`](#awssessions) | no | `sessions` curates which discovered SSO sessions den shows, and in what order. Empty means show every session found in the AWS config. |
 
 ## `aws.sessions[]`
 
+Each entry curates one [sso-session ...] discovered in the AWS config.
+
 Guide: [docs/aws](../aws/README.md)
 
-| Key | Type | Required | Allowed values | Description |
-|---|---|---|---|---|
-| `session` | string | yes |  |  |
-| `name` | string |  |  |  |
-| `description` | string |  |  |  |
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `session` | string | yes | must match an [sso-session X] section |
+| `name` | string | no | display name (default: Session) |
+| `description` | string | no | shown as subtitle |
 
 ## `environments.<name>`
 
-| Key | Type | Required | Allowed values | Description |
-|---|---|---|---|---|
-| `region` | string |  |  |  |
-| `environment` | string |  |  |  |
-| `production` | boolean |  |  |  |
-| `ec2_instance_id` | string |  |  |  |
-| `aws_profile` | string |  |  |  |
-| `credential_profile` | string |  |  |  |
-| `aws_region_code` | string |  |  |  |
-| `transport` | object, keys in [`environments.<name>.transport`](#environmentsnametransport) |  |  |  |
+Each entry holds the shared AWS/bastion fields for a named environment group.
+
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `region` | string | no | a label you choose, e.g. eu or us; shown to people and runbooks, den does not interpret it |
+| `environment` | string | no | a label you choose, e.g. dev, staging or prod; prod and production count as production |
+| `production` | boolean | no | an agent connects a production service only if mcp.allow_production is set, and then asks the user; implied by environment: prod |
+| `ec2_instance_id` | string | no | the bastion instance the SSM transport forwards through |
+| `aws_profile` | string | no | profile the SSM session runs as |
+| `credential_profile` | string | no | profile the credential is minted as, and the identity the data store sees; aws_profile when unset |
+| `aws_region_code` | string | no | AWS region of the bastion and of the credential calls, e.g. eu-central-1 |
+| `transport` | object, keys in [`environments.<name>.transport`](#environmentsnametransport) | no | how the network is reached; SSM through ec2_instance_id when unset |
 
 ## `environments.<name>.transport`
 
+This block says how den reaches the network a service lives in.
+
 Guide: [docs/transports](../transports/README.md)
 
-| Key | Type | Required | Allowed values | Description |
-|---|---|---|---|---|
-| `type` | string | yes | `ssm`, `ssh`, `eice`, `kubectl` |  |
-| `host` | string |  |  |  |
-| `args` | list of string |  |  |  |
-| `endpoint_id` | string |  |  |  |
-| `resource` | string |  |  |  |
-| `context` | string |  |  |  |
-| `namespace` | string |  |  |  |
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `type` | string, one of `ssm`, `ssh`, `eice`, `kubectl` | yes | how the network is reached; a service without a transport block uses ssm |
+| `host` | string | no | Required by ssh: the destination (user@host) and extra ssh arguments such as [-i, ~/.ssh/key, -J, jump.example.com]. Key or agent auth only: den cannot answer a password prompt. |
+| `args` | list of string | no | ssh: extra arguments, e.g. [-i, ~/.ssh/key] |
+| `endpoint_id` | string | no | Required by eice: the EC2 Instance Connect Endpoint ID. The service host is resolved to an IP first, since the endpoint only tunnels to IPs. |
+| `resource` | string | no | Required by kubectl: the resource to forward to (svc/x, deploy/x, pod/x), which must itself serve the service's port — typically a proxy in front of the database — plus an optional context and namespace. |
+| `context` | string | no | kubectl: the kubeconfig context; the current one when empty |
+| `namespace` | string | no | kubectl: the namespace; the context's when empty |
 
 ## `services[]`
 
-| Key | Type | Required | Allowed values | Description |
-|---|---|---|---|---|
-| `name` | string | yes |  |  |
-| `type` | string | yes | `rds`, `redis`, `documentdb`, `redshift`, `opensearch`, `neptune`, `kafka`, `docker` |  |
-| `env` | string |  |  |  |
-| `rds` | object, keys in [`services[].rds`](#servicesrds) |  |  |  |
-| `kafka` | object, keys in [`services[].kafka`](#serviceskafka) |  |  |  |
-| `redis` | object, keys in [`services[].redis`](#servicesredis) |  |  |  |
-| `documentdb` | object, keys in [`services[].documentdb`](#servicesdocumentdb) |  |  |  |
-| `redshift` | object, keys in [`services[].redshift`](#servicesredshift) |  |  |  |
-| `opensearch` | object, keys in [`services[].opensearch`](#servicesopensearch) |  |  |  |
-| `neptune` | object, keys in [`services[].neptune`](#servicesneptune) |  |  |  |
-| `docker` | object, keys in [`services[].docker`](#servicesdocker) |  |  |  |
+Each entry describes one service entry in the config file.
+
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | shown in the Connect list |
+| `type` | string, one of `rds`, `redis`, `documentdb`, `redshift`, `opensearch`, `neptune`, `kafka`, `docker` | yes | which section below holds its settings; that section is required |
+| `env` | string | no | an entry of environments: its keys fill what the section leaves out |
+| `rds` | object, keys in [`services[].rds`](#servicesrds) | no | type: rds — RDS or Aurora |
+| `kafka` | object, keys in [`services[].kafka`](#serviceskafka) | no | type: kafka — Kafka (planned, not implemented) |
+| `redis` | object, keys in [`services[].redis`](#servicesredis) | no | type: redis — ElastiCache or MemoryDB |
+| `documentdb` | object, keys in [`services[].documentdb`](#servicesdocumentdb) | no | type: documentdb — DocumentDB |
+| `redshift` | object, keys in [`services[].redshift`](#servicesredshift) | no | type: redshift — Redshift |
+| `opensearch` | object, keys in [`services[].opensearch`](#servicesopensearch) | no | type: opensearch — OpenSearch |
+| `neptune` | object, keys in [`services[].neptune`](#servicesneptune) | no | type: neptune — Neptune |
+| `docker` | object, keys in [`services[].docker`](#servicesdocker) | no | type: docker — Docker Compose |
 
 ## `services[].rds`
 
+This block holds RDS-specific config.
+
 Guide: [docs/rds](../rds/README.md)
 
-| Key | Type | Required | Allowed values | Description |
-|---|---|---|---|---|
-| `region` | string |  |  |  |
-| `environment` | string |  |  |  |
-| `production` | boolean |  |  |  |
-| `local_port` | integer |  |  |  |
-| `reconnect` | boolean |  |  |  |
-| `ec2_instance_id` | string |  |  |  |
-| `aws_profile` | string |  |  |  |
-| `credential_profile` | string |  |  |  |
-| `aws_region_code` | string |  |  |  |
-| `transport` | object, keys in [`environments.<name>.transport`](#environmentsnametransport) |  |  |  |
-| `engine` | string |  | `postgres`, `mysql` |  |
-| `update_pgpass` | boolean |  |  |  |
-| `rds_host` | string |  |  |  |
-| `db_name` | string |  |  |  |
-| `db_user` | string |  |  |  |
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `region` | string | no | a label you choose, e.g. eu or us; shown to people and runbooks, den does not interpret it |
+| `environment` | string | no | a label you choose, e.g. dev, staging or prod; prod and production count as production |
+| `production` | boolean | no | an agent connects a production service only if mcp.allow_production is set, and then asks the user; implied by environment: prod |
+| `local_port` | integer | no | local end of the tunnel; each type has its own default (RDS 50432, Redshift 55439, Redis 16379, DocumentDB 27017, OpenSearch 59200, Neptune 58182) |
+| `reconnect` | boolean | no | auto-reopen the SSM port-forward if it drops (e.g. SSM idle timeout); the IAM token is renewed while connected either way |
+| `ec2_instance_id` | string | no | the bastion instance the SSM transport forwards through; that transport requires it, here or from the service's env |
+| `aws_profile` | string | no | profile the SSM session runs as |
+| `credential_profile` | string | no | profile credentials are minted as, and the identity the data store sees; aws_profile when unset |
+| `aws_region_code` | string | no | AWS region of the bastion and of the credential calls; required, here or from the service's env |
+| `transport` | object, keys in [`environments.<name>.transport`](#environmentsnametransport) | no | how the network is reached; SSM when unset |
+| `engine` | string, one of `postgres`, `mysql` | no | the database engine; postgres when empty |
+| `update_pgpass` | boolean | no | postgres only |
+| `rds_host` | string | yes | endpoint to forward to: instance, cluster or RDS Proxy |
+| `db_name` | string | no | optional; the client's own default (PostgreSQL: the user name) when empty |
+| `db_user` | string | yes | the database user the IAM token is minted for |
 
 ## `services[].kafka`
 
-| Key | Type | Required | Allowed values | Description |
-|---|---|---|---|---|
-| `region` | string |  |  |  |
-| `environment` | string |  |  |  |
-| `production` | boolean |  |  |  |
-| `local_port` | integer |  |  |  |
-| `reconnect` | boolean |  |  |  |
-| `ec2_instance_id` | string |  |  |  |
-| `aws_profile` | string |  |  |  |
-| `credential_profile` | string |  |  |  |
-| `aws_region_code` | string |  |  |  |
-| `transport` | object, keys in [`environments.<name>.transport`](#environmentsnametransport) |  |  |  |
-| `kafka_host` | string |  |  |  |
+This block holds Kafka-specific config.
+
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `region` | string | no | a label you choose, e.g. eu or us; shown to people and runbooks, den does not interpret it |
+| `environment` | string | no | a label you choose, e.g. dev, staging or prod; prod and production count as production |
+| `production` | boolean | no | an agent connects a production service only if mcp.allow_production is set, and then asks the user; implied by environment: prod |
+| `local_port` | integer | no | local end of the tunnel; each type has its own default (RDS 50432, Redshift 55439, Redis 16379, DocumentDB 27017, OpenSearch 59200, Neptune 58182) |
+| `reconnect` | boolean | no | auto-reopen the SSM port-forward if it drops (e.g. SSM idle timeout); the IAM token is renewed while connected either way |
+| `ec2_instance_id` | string | no | the bastion instance the SSM transport forwards through; that transport requires it, here or from the service's env |
+| `aws_profile` | string | no | profile the SSM session runs as |
+| `credential_profile` | string | no | profile credentials are minted as, and the identity the data store sees; aws_profile when unset |
+| `aws_region_code` | string | no | AWS region of the bastion and of the credential calls; required, here or from the service's env |
+| `transport` | object, keys in [`environments.<name>.transport`](#environmentsnametransport) | no | how the network is reached; SSM when unset |
+| `kafka_host` | string | no | the broker to forward to (connecting reports that Kafka is planned) |
 
 ## `services[].redis`
 
+This block holds Redis-specific config.
+
 Guide: [docs/elasticache](../elasticache/README.md)
 
-| Key | Type | Required | Allowed values | Description |
-|---|---|---|---|---|
-| `region` | string |  |  |  |
-| `environment` | string |  |  |  |
-| `production` | boolean |  |  |  |
-| `local_port` | integer |  |  |  |
-| `reconnect` | boolean |  |  |  |
-| `ec2_instance_id` | string |  |  |  |
-| `aws_profile` | string |  |  |  |
-| `credential_profile` | string |  |  |  |
-| `aws_region_code` | string |  |  |  |
-| `transport` | object, keys in [`environments.<name>.transport`](#environmentsnametransport) |  |  |  |
-| `cache_name` | string |  |  |  |
-| `user_id` | string |  |  |  |
-| `serverless` | boolean |  |  |  |
-| `memorydb` | boolean |  |  |  |
-| `redis_host` | string |  |  |  |
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `region` | string | no | a label you choose, e.g. eu or us; shown to people and runbooks, den does not interpret it |
+| `environment` | string | no | a label you choose, e.g. dev, staging or prod; prod and production count as production |
+| `production` | boolean | no | an agent connects a production service only if mcp.allow_production is set, and then asks the user; implied by environment: prod |
+| `local_port` | integer | no | local end of the tunnel; each type has its own default (RDS 50432, Redshift 55439, Redis 16379, DocumentDB 27017, OpenSearch 59200, Neptune 58182) |
+| `reconnect` | boolean | no | auto-reopen the SSM port-forward if it drops (e.g. SSM idle timeout); the IAM token is renewed while connected either way |
+| `ec2_instance_id` | string | no | the bastion instance the SSM transport forwards through; that transport requires it, here or from the service's env |
+| `aws_profile` | string | no | profile the SSM session runs as |
+| `credential_profile` | string | no | profile credentials are minted as, and the identity the data store sees; aws_profile when unset |
+| `aws_region_code` | string | no | AWS region of the bastion and of the credential calls; required, here or from the service's env |
+| `transport` | object, keys in [`environments.<name>.transport`](#environmentsnametransport) | no | how the network is reached; SSM when unset |
+| `cache_name` | string | no | ElastiCache / MemoryDB IAM auth |
+| `user_id` | string | no | ElastiCache / MemoryDB user ID |
+| `serverless` | boolean | no | true for ElastiCache Serverless |
+| `memorydb` | boolean | no | true for MemoryDB (tokens are signed for memorydb, not elasticache) |
+| `redis_host` | string | no | endpoint to forward to |
 
 ## `services[].documentdb`
 
+This block holds Amazon DocumentDB-specific config.
+
 Guide: [docs/documentdb](../documentdb/README.md)
 
-| Key | Type | Required | Allowed values | Description |
-|---|---|---|---|---|
-| `region` | string |  |  |  |
-| `environment` | string |  |  |  |
-| `production` | boolean |  |  |  |
-| `local_port` | integer |  |  |  |
-| `reconnect` | boolean |  |  |  |
-| `ec2_instance_id` | string |  |  |  |
-| `aws_profile` | string |  |  |  |
-| `credential_profile` | string |  |  |  |
-| `aws_region_code` | string |  |  |  |
-| `transport` | object, keys in [`environments.<name>.transport`](#environmentsnametransport) |  |  |  |
-| `documentdb_host` | string |  |  |  |
-| `db_name` | string |  |  |  |
-| `ca_file` | string |  |  |  |
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `region` | string | no | a label you choose, e.g. eu or us; shown to people and runbooks, den does not interpret it |
+| `environment` | string | no | a label you choose, e.g. dev, staging or prod; prod and production count as production |
+| `production` | boolean | no | an agent connects a production service only if mcp.allow_production is set, and then asks the user; implied by environment: prod |
+| `local_port` | integer | no | local end of the tunnel; each type has its own default (RDS 50432, Redshift 55439, Redis 16379, DocumentDB 27017, OpenSearch 59200, Neptune 58182) |
+| `reconnect` | boolean | no | auto-reopen the SSM port-forward if it drops (e.g. SSM idle timeout); the IAM token is renewed while connected either way |
+| `ec2_instance_id` | string | no | the bastion instance the SSM transport forwards through; that transport requires it, here or from the service's env |
+| `aws_profile` | string | no | profile the SSM session runs as |
+| `credential_profile` | string | no | profile credentials are minted as, and the identity the data store sees; aws_profile when unset |
+| `aws_region_code` | string | no | AWS region of the bastion and of the credential calls; required, here or from the service's env |
+| `transport` | object, keys in [`environments.<name>.transport`](#environmentsnametransport) | no | how the network is reached; SSM when unset |
+| `documentdb_host` | string | yes | cluster endpoint |
+| `db_name` | string | no | optional, placed in the URI path |
+| `ca_file` | string | no | optional, defaults to ~/.config/den/global-bundle.pem |
 
 ## `services[].redshift`
 
+This block holds Amazon Redshift config.
+
 Guide: [docs/redshift](../redshift/README.md)
 
-| Key | Type | Required | Allowed values | Description |
-|---|---|---|---|---|
-| `region` | string |  |  |  |
-| `environment` | string |  |  |  |
-| `production` | boolean |  |  |  |
-| `local_port` | integer |  |  |  |
-| `reconnect` | boolean |  |  |  |
-| `ec2_instance_id` | string |  |  |  |
-| `aws_profile` | string |  |  |  |
-| `credential_profile` | string |  |  |  |
-| `aws_region_code` | string |  |  |  |
-| `transport` | object, keys in [`environments.<name>.transport`](#environmentsnametransport) |  |  |  |
-| `update_pgpass` | boolean |  |  |  |
-| `redshift_host` | string |  |  |  |
-| `cluster_identifier` | string |  |  |  |
-| `workgroup_name` | string |  |  |  |
-| `db_name` | string |  |  |  |
-| `db_user` | string |  |  |  |
-| `credential_ttl` | string |  |  |  |
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `region` | string | no | a label you choose, e.g. eu or us; shown to people and runbooks, den does not interpret it |
+| `environment` | string | no | a label you choose, e.g. dev, staging or prod; prod and production count as production |
+| `production` | boolean | no | an agent connects a production service only if mcp.allow_production is set, and then asks the user; implied by environment: prod |
+| `local_port` | integer | no | local end of the tunnel; each type has its own default (RDS 50432, Redshift 55439, Redis 16379, DocumentDB 27017, OpenSearch 59200, Neptune 58182) |
+| `reconnect` | boolean | no | auto-reopen the SSM port-forward if it drops (e.g. SSM idle timeout); the IAM token is renewed while connected either way |
+| `ec2_instance_id` | string | no | the bastion instance the SSM transport forwards through; that transport requires it, here or from the service's env |
+| `aws_profile` | string | no | profile the SSM session runs as |
+| `credential_profile` | string | no | profile credentials are minted as, and the identity the data store sees; aws_profile when unset |
+| `aws_region_code` | string | no | AWS region of the bastion and of the credential calls; required, here or from the service's env |
+| `transport` | object, keys in [`environments.<name>.transport`](#environmentsnametransport) | no | how the network is reached; SSM when unset |
+| `update_pgpass` | boolean | no | keep ~/.pgpass in sync with the current credential |
+| `redshift_host` | string | yes | cluster or workgroup endpoint |
+| `cluster_identifier` | string | no | provisioned: the cluster; set this or workgroup_name |
+| `workgroup_name` | string | no | Serverless: the workgroup; set this or cluster_identifier |
+| `db_name` | string | no | default "dev" |
+| `db_user` | string | no | `db_user` is provisioned-only: set, den calls GetClusterCredentials for that user; unset, GetClusterCredentialsWithIAM maps the caller's IAM identity. |
+| `credential_ttl` | string | no | Go duration, 15m–1h (default 15m) |
 
 ## `services[].opensearch`
 
+This block holds Amazon OpenSearch Service config: a VPC domain, or an OpenSearch Serverless collection reached through its VPC endpoint.
+
 Guide: [docs/opensearch](../opensearch/README.md)
 
-| Key | Type | Required | Allowed values | Description |
-|---|---|---|---|---|
-| `region` | string |  |  |  |
-| `environment` | string |  |  |  |
-| `production` | boolean |  |  |  |
-| `local_port` | integer |  |  |  |
-| `reconnect` | boolean |  |  |  |
-| `ec2_instance_id` | string |  |  |  |
-| `aws_profile` | string |  |  |  |
-| `credential_profile` | string |  |  |  |
-| `aws_region_code` | string |  |  |  |
-| `transport` | object, keys in [`environments.<name>.transport`](#environmentsnametransport) |  |  |  |
-| `opensearch_host` | string |  |  |  |
-| `serverless` | boolean |  |  |  |
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `region` | string | no | a label you choose, e.g. eu or us; shown to people and runbooks, den does not interpret it |
+| `environment` | string | no | a label you choose, e.g. dev, staging or prod; prod and production count as production |
+| `production` | boolean | no | an agent connects a production service only if mcp.allow_production is set, and then asks the user; implied by environment: prod |
+| `local_port` | integer | no | local end of the tunnel; each type has its own default (RDS 50432, Redshift 55439, Redis 16379, DocumentDB 27017, OpenSearch 59200, Neptune 58182) |
+| `reconnect` | boolean | no | auto-reopen the SSM port-forward if it drops (e.g. SSM idle timeout); the IAM token is renewed while connected either way |
+| `ec2_instance_id` | string | no | the bastion instance the SSM transport forwards through; that transport requires it, here or from the service's env |
+| `aws_profile` | string | no | profile the SSM session runs as |
+| `credential_profile` | string | no | profile credentials are minted as, and the identity the data store sees; aws_profile when unset |
+| `aws_region_code` | string | no | AWS region of the bastion and of the credential calls; required, here or from the service's env |
+| `transport` | object, keys in [`environments.<name>.transport`](#environmentsnametransport) | no | how the network is reached; SSM when unset |
+| `opensearch_host` | string | yes | domain or collection endpoint |
+| `serverless` | boolean | no | collection: requests are signed for aoss, not es |
 
 ## `services[].neptune`
 
+This block holds Amazon Neptune config.
+
 Guide: [docs/neptune](../neptune/README.md)
 
-| Key | Type | Required | Allowed values | Description |
-|---|---|---|---|---|
-| `region` | string |  |  |  |
-| `environment` | string |  |  |  |
-| `production` | boolean |  |  |  |
-| `local_port` | integer |  |  |  |
-| `reconnect` | boolean |  |  |  |
-| `ec2_instance_id` | string |  |  |  |
-| `aws_profile` | string |  |  |  |
-| `credential_profile` | string |  |  |  |
-| `aws_region_code` | string |  |  |  |
-| `transport` | object, keys in [`environments.<name>.transport`](#environmentsnametransport) |  |  |  |
-| `neptune_host` | string |  |  |  |
-| `port` | integer |  |  |  |
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `region` | string | no | a label you choose, e.g. eu or us; shown to people and runbooks, den does not interpret it |
+| `environment` | string | no | a label you choose, e.g. dev, staging or prod; prod and production count as production |
+| `production` | boolean | no | an agent connects a production service only if mcp.allow_production is set, and then asks the user; implied by environment: prod |
+| `local_port` | integer | no | local end of the tunnel; each type has its own default (RDS 50432, Redshift 55439, Redis 16379, DocumentDB 27017, OpenSearch 59200, Neptune 58182) |
+| `reconnect` | boolean | no | auto-reopen the SSM port-forward if it drops (e.g. SSM idle timeout); the IAM token is renewed while connected either way |
+| `ec2_instance_id` | string | no | the bastion instance the SSM transport forwards through; that transport requires it, here or from the service's env |
+| `aws_profile` | string | no | profile the SSM session runs as |
+| `credential_profile` | string | no | profile credentials are minted as, and the identity the data store sees; aws_profile when unset |
+| `aws_region_code` | string | no | AWS region of the bastion and of the credential calls; required, here or from the service's env |
+| `transport` | object, keys in [`environments.<name>.transport`](#environmentsnametransport) | no | how the network is reached; SSM when unset |
+| `neptune_host` | string | yes | cluster, reader or instance endpoint |
+| `port` | integer | no | cluster port (default 8182) |
 
 ## `services[].docker`
 
+This block holds docker-compose-specific config.
+
 Guide: [docs/docker](../docker/README.md)
 
-| Key | Type | Required | Allowed values | Description |
-|---|---|---|---|---|
-| `compose_file` | string | yes |  |  |
-| `services` | list of string |  |  |  |
-| `env_file` | string |  |  |  |
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `compose_file` | string | yes | the Compose file, relative to where den runs or absolute |
+| `services` | list of string | no | the Compose services to start; every one when empty |
+| `env_file` | string | no | passed to docker compose with --env-file |
 
 ## `tunnels[]`
 
+Each entry describes one SSH tunnel entry in the config file.
+
 Guide: [docs/tunnel](../tunnel/README.md)
 
-| Key | Type | Required | Allowed values | Description |
-|---|---|---|---|---|
-| `name` | string | yes |  |  |
-| `description` | string |  |  |  |
-| `command` | string | yes |  |  |
-| `reconnect` | boolean |  |  |  |
-| `health_check` | string |  |  |  |
-| `monitor` | boolean |  |  |  |
-| `auto_connect` | object, keys in [`tunnels[].auto_connect`](#tunnelsauto_connect) |  |  |  |
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | shown in the Tunnel list |
+| `description` | string | no | shown as subtitle |
+| `command` | string | yes | full shell command, e.g. "ssh -D 5555 -L ... user@host" |
+| `reconnect` | boolean | no | restart the tunnel after it drops, with backoff |
+| `health_check` | string | no | host:port dialled through the command's -D SOCKS proxy to confirm the far side is reachable |
+| `monitor` | boolean | no | re-run the connection checks every 15 s while connected; two misses count as a drop |
+| `auto_connect` | object, keys in [`tunnels[].auto_connect`](#tunnelsauto_connect) | no | `auto_connect` ties the tunnel to the VPN it runs over: den connects it once that VPN is connected and stops it when the VPN goes down. |
 
 ## `tunnels[].auto_connect`
 
+This block names the VPN a tunnel runs over.
+
 Guide: [docs/tunnel](../tunnel/README.md)
 
-| Key | Type | Required | Allowed values | Description |
-|---|---|---|---|---|
-| `vpn` | string | yes |  |  |
-| `enabled` | boolean |  |  |  |
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `vpn` | string | yes | name of an entry in the vpn: section |
+| `enabled` | boolean | no | `enabled` switches the behaviour on (the default) or off, keeping the link so den can still warn about a manual connect without the VPN. |
 
 ## `vpn[]`
 
+Each entry describes one VPN entry in the config file.
+
 Guide: [docs/vpn](../vpn/README.md)
 
-| Key | Type | Required | Allowed values | Description |
-|---|---|---|---|---|
-| `name` | string | yes |  |  |
-| `gateway` | string |  |  |  |
-| `description` | string |  |  |  |
-| `config_file` | string |  |  |  |
-| `extra_args` | list of string |  |  |  |
-| `health_check` | string |  |  |  |
-| `reconnect` | boolean |  |  |  |
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | shown in the VPN list |
+| `gateway` | string | no | `gateway` host[:port]; required unless config_file is set |
+| `description` | string | no | shown as subtitle |
+| `config_file` | string | no | path to openfortivpn INI config file (-c flag); required unless gateway is set |
+| `extra_args` | list of string | no | more openfortivpn arguments |
+| `health_check` | string | no | host:port reachable ONLY via the VPN; probed to confirm the data path is alive |
+| `reconnect` | boolean | no | `reconnect` re-establishes a tunnel that dropped after being fully connected. Deliberately unlike tunnels: openfortivpn logs in through SAML, which opens a browser tab, so retries are capped (see reconnectDelays) and a login that times out is never retried — repeated half-finished logins burn the account's FortiGate session slots until the gateway 403s every new login. |
 
 ## `runbooks`
 
+This block holds user-defined operational scripts.
+
 Guide: [docs/runbooks](../runbooks/README.md)
 
-| Key | Type | Required | Allowed values | Description |
-|---|---|---|---|---|
-| `dirs` | list of string |  |  |  |
-| `rescan` | boolean |  |  |  |
-| `template` | string |  |  |  |
-| `agent` | string |  |  |  |
-| `agents` | list of objects, keys in [`runbooks.agents[]`](#runbooksagents) |  |  |  |
-| `defaults` | object, keys in [`runbooks.defaults`](#runbooksdefaults) |  |  |  |
-| `items` | list of objects, keys in [`runbooks.items[]`](#runbooksitems) |  |  |  |
-| `sequences` | list of objects, keys in [`runbooks.sequences[]`](#runbookssequences) |  |  |  |
-| `sources` | list of objects, keys in [`runbooks.sources[]`](#runbookssources) |  |  |  |
-| `allow_sources` | list of string |  |  |  |
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `dirs` | list of string | no | `dirs` are scanned for runbooks: every folder in them holding a runbook.yaml is one, and so is an executable carrying a "# den:name" header. Relative paths are read against den.yaml's directory. |
+| `rescan` | boolean | no | `rescan` picks up runbook folders added, changed or removed while den runs. On unless set to false. |
+| `template` | string | no | `template` is a folder copied for a new runbook by `den runbook new` and the Runbooks pane's n; empty uses the built-in one. |
+| `agent` | string | no | `agent` is the agent that writes a runbook from a description (`den runbook new --agent`, the pane's n): auto (the first agent CLI installed, in the order agents' kind lists them), a kind such as claude or opencode, or the name of an agents entry. Default auto, or the first entry of agents when there are any. |
+| `agents` | list of objects, keys in [`runbooks.agents[]`](#runbooksagents) | no | `agents` are command lines that write a runbook, for a model other than the CLI's default or a wrapper such as `ollama launch opencode`. The Runbooks pane's n offers them when there are two or more. |
+| `defaults` | object, keys in [`runbooks.defaults`](#runbooksdefaults) | no | `defaults` apply to every runbook; a runbook.yaml or an items entry overrides them one key at a time. |
+| `items` | list of objects, keys in [`runbooks.items[]`](#runbooksitems) | no | `items` are runbooks declared inline, for the curated team-shared set. |
+| `sequences` | list of objects, keys in [`runbooks.sequences[]`](#runbookssequences) | no | runbooks run in order, stopping at the first failure |
+| `sources` | list of objects, keys in [`runbooks.sources[]`](#runbookssources) | no | `sources` are git repositories of runbook folders that den checks out and lists beside your own, each runbook under its source's name: platform-ops/rds-status. Nothing updates on its own: `den runbook source update` moves a source to the newest commit of its ref. |
+| `allow_sources` | list of string | no | `allow_sources` limits the repositories a source may come from, as host/owner/repo patterns with * wildcards: "ghe.acme.com/ops/*". Empty allows any. |
 
 ## `runbooks.agents[]`
 
+Each entry is one named way to start an agent that writes a runbook.
+
 Guide: [docs/runbooks/agents/cli](../runbooks/agents/cli/README.md)
 
-| Key | Type | Required | Allowed values | Description |
-|---|---|---|---|---|
-| `name` | string | yes |  |  |
-| `command` | string | yes |  |  |
-| `kind` | string |  | `claude`, `codex`, `opencode`, `copilot`, `qwen`, `droid`, `pi`, `kimi` |  |
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | `name` is what the pop-up shows and what runbooks.agent and `den runbook new --agent` refer to. |
+| `command` | string | yes | `command` is the command line, split on whitespace (no shell quoting): `claude --model opus`, `ollama launch claude --model glm-5:cloud`. den adds its own arguments after it. |
+| `kind` | string, one of `claude`, `codex`, `opencode`, `copilot`, `qwen`, `droid`, `pi`, `kimi` | no | `kind` says which agent CLI the command starts, so den passes the arguments that CLI takes: claude (Claude Code), codex (Codex), opencode (OpenCode), copilot (Copilot CLI), qwen (Qwen Code), droid (Droid), pi (Pi) or kimi (Kimi Code). Empty infers it from a command starting with one of them, or `ollama launch <kind>` (copilot-cli for copilot); any other wrapper needs it. |
 
 ## `runbooks.defaults`
 
+These are how den presents a runbook rather than what it runs.
+
 Guide: [docs/runbooks](../runbooks/README.md)
 
-| Key | Type | Required | Allowed values | Description |
-|---|---|---|---|---|
-| `history` | integer |  |  |  |
-| `about` | boolean |  |  |  |
-| `shell` | string |  |  |  |
-| `editor` | string |  |  |  |
-| `agent` | string |  |  |  |
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `history` | integer | no | `history` is how many finished runs are kept on disk; 0 keeps only the last run, in memory. Default 20. |
+| `about` | boolean | no | `about` shows the About tab: the folder's README.md, the environment den sets and the parameters. Default true. |
+| `shell` | string | no | `shell` is the command t opens in the runbook's folder, e.g. "bash --rcfile .venv/bin/activate". Default $SHELL. |
+| `editor` | string | no | `editor` is the command e opens the runbook's script with, and o a run's log. Default $VISUAL, then $EDITOR, then vi. |
+| `agent` | string | no | `agent` is the agent E changes the runbook with: a command line such as `claude --model opus`, the name of a runbooks.agents entry, a kind such as claude or opencode, or auto. Default runbooks.agent. |
 
 ## `runbooks.items[]`
 
+Each entry describes one runbook.
+
 Guide: [docs/runbooks](../runbooks/README.md)
 
-| Key | Type | Required | Allowed values | Description |
-|---|---|---|---|---|
-| `name` | string | yes |  |  |
-| `description` | string |  |  |  |
-| `command` | string | yes |  |  |
-| `cwd` | string |  |  |  |
-| `env` | string |  |  |  |
-| `env_vars` | map of string → string |  |  |  |
-| `params` | list of objects, keys in [`runbooks.items[].params[]`](#runbooksitemsparams) |  |  |  |
-| `confirm` | boolean |  |  |  |
-| `timeout` | string |  |  |  |
-| `retry` | object, keys in [`runbooks.items[].retry`](#runbooksitemsretry) |  |  |  |
-| `history` | integer |  |  |  |
-| `about` | boolean |  |  |  |
-| `shell` | string |  |  |  |
-| `editor` | string |  |  |  |
-| `agent` | string |  |  |  |
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | what the Runbooks list shows and sequences refer to |
+| `description` | string | no | shown as subtitle |
+| `command` | string | yes | run with sh -c |
+| `cwd` | string | no | working directory; relative to den.yaml's directory |
+| `env` | string | no | key into Config.Environments |
+| `env_vars` | map of string → string | no | extra environment variables for the run |
+| `params` | list of objects, keys in [`runbooks.items[].params[]`](#runbooksitemsparams) | no | values asked for before the run |
+| `confirm` | boolean | no | ask before every run, also when an agent starts it |
+| `timeout` | string | no | Go duration, e.g. "5m" |
+| `retry` | object, keys in [`runbooks.items[].retry`](#runbooksitemsretry) | no | run again until it exits 0 |
+| `history` | integer | no | `history` is how many finished runs are kept on disk; 0 keeps only the last run, in memory. Default 20. |
+| `about` | boolean | no | `about` shows the About tab: the folder's README.md, the environment den sets and the parameters. Default true. |
+| `shell` | string | no | `shell` is the command t opens in the runbook's folder, e.g. "bash --rcfile .venv/bin/activate". Default $SHELL. |
+| `editor` | string | no | `editor` is the command e opens the runbook's script with, and o a run's log. Default $VISUAL, then $EDITOR, then vi. |
+| `agent` | string | no | `agent` is the agent E changes the runbook with: a command line such as `claude --model opus`, the name of a runbooks.agents entry, a kind such as claude or opencode, or auto. Default runbooks.agent. |
 
 ## `runbooks.items[].params[]`
 
-| Key | Type | Required | Allowed values | Description |
-|---|---|---|---|---|
-| `name` | string |  |  |  |
-| `description` | string |  |  |  |
-| `default` | string |  |  |  |
-| `options` | list of string |  |  |  |
-| `required` | boolean |  |  |  |
-| `secret` | boolean |  |  |  |
+Each entry is one value prompted for before a runbook runs.
+
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | the parameter's name; DEN_PARAM_ plus this, in capitals |
+| `description` | string | no | shown beside the prompt |
+| `default` | string | no | pre-filled value |
+| `options` | list of string | no | non-empty renders a select |
+| `required` | boolean | no | the prompt does not accept an empty value |
+| `secret` | boolean | no | masked input, redacted from logs |
 
 ## `runbooks.items[].retry`
 
-| Key | Type | Required | Allowed values | Description |
-|---|---|---|---|---|
-| `until_success` | boolean |  |  |  |
-| `interval` | string | yes |  |  |
-| `max_attempts` | integer |  |  |  |
-| `timeout` | string |  |  |  |
+This block re-runs a runbook until it exits 0.
+
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `until_success` | boolean | no | run again until the exit code is 0; needs max_attempts or timeout |
+| `interval` | string | yes | Go duration between attempts |
+| `max_attempts` | integer | no | 0 = unlimited |
+| `timeout` | string | no | overall ceiling across attempts |
 
 ## `runbooks.sequences[]`
 
+Each entry runs named runbooks in order, stopping at the first failure.
+
 Guide: [docs/runbooks](../runbooks/README.md)
 
-| Key | Type | Required | Allowed values | Description |
-|---|---|---|---|---|
-| `name` | string | yes |  |  |
-| `description` | string |  |  |  |
-| `steps` | list of string | yes |  |  |
-| `confirm` | boolean |  |  |  |
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | shown in the Runbooks list |
+| `description` | string | no | shown as subtitle |
+| `steps` | list of string | yes | runbook names |
+| `confirm` | boolean | no | ask before running the sequence |
 
 ## `runbooks.sources[]`
 
+Each entry is a git repository of runbook folders.
+
 Guide: [docs/runbook-sources](../runbook-sources/README.md)
 
-| Key | Type | Required | Allowed values | Description |
-|---|---|---|---|---|
-| `name` | string | yes |  |  |
-| `url` | string | yes |  |  |
-| `ref` | string |  |  |  |
-| `path` | string |  |  |  |
-| `include` | list of string |  |  |  |
-| `exclude` | list of string |  |  |  |
-| `env_map` | map of string → string |  |  |  |
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | `name` prefixes the names of its runbooks: lower case letters, digits and dashes. |
+| `url` | string | yes | `url` is the repository: https://host/owner/repo, git@host:owner/repo.git, host/owner/repo, or owner/repo on GitHub. Credentials come from git (a credential helper or an SSH key), never from the URL. |
+| `ref` | string | no | `ref` is the tag, branch or commit to check out; empty is the repository's default branch. A tag or a commit stays put; a branch moves on `den runbook source update`. |
+| `path` | string | no | `path` is the folder of the repository holding the runbook folders; empty is its root. |
+| `include` | list of string | no | `include` lists the runbook folders to show, with * wildcards; empty shows every one. `den runbook install` and `uninstall` edit it. |
+| `exclude` | list of string | no | `exclude` hides runbook folders Include would show. |
+| `env_map` | map of string → string | no | `env_map` maps the env names the source's runbooks use to entries of environments. A runbook whose env is not mapped is not shown: its author's "prod" is not necessarily yours. |
 
 ## `secrets`
 
+This block lists the secret sources shown in the Secrets pane, grouped by provider.
+
 Guide: [docs/secrets](../secrets/README.md)
 
-| Key | Type | Required | Allowed values | Description |
-|---|---|---|---|---|
-| `sops` | list of objects, keys in [`secrets.sops[]`](#secretssops) |  |  |  |
-| `aws_secretsmanager` | list of objects, keys in [`secrets.aws_secretsmanager[]`](#secretsaws_secretsmanager) |  |  |  |
-| `keepassxc` | list of objects, keys in [`secrets.keepassxc[]`](#secretskeepassxc) |  |  |  |
-| `vault` | list of objects, keys in [`secrets.vault[]`](#secretsvault) |  |  |  |
-| `view` | string |  | `tree`, `flat` |  |
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `sops` | list of objects, keys in [`secrets.sops[]`](#secretssops) | no | SOPS-encrypted files |
+| `aws_secretsmanager` | list of objects, keys in [`secrets.aws_secretsmanager[]`](#secretsaws_secretsmanager) | no | AWS Secrets Manager secrets |
+| `keepassxc` | list of objects, keys in [`secrets.keepassxc[]`](#secretskeepassxc) | no | entries of KeePass databases |
+| `vault` | list of objects, keys in [`secrets.vault[]`](#secretsvault) | no | HashiCorp Vault KV secrets |
+| `view` | string, one of `tree`, `flat` | no | `view` is how secrets with nested values open, unless one sets its own. |
 
 ## `secrets.sops[]`
 
+Each entry is one SOPS-encrypted file.
+
 Guide: [docs/secrets](../secrets/README.md)
 
-| Key | Type | Required | Allowed values | Description |
-|---|---|---|---|---|
-| `name` | string | yes |  |  |
-| `description` | string |  |  |  |
-| `file` | string | yes |  |  |
-| `aws_profile` | string |  |  |  |
-| `aws_region` | string |  |  |  |
-| `auto_reveal` | boolean |  |  |  |
-| `view` | string |  | `tree`, `flat` |  |
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | shown in the Secrets list |
+| `description` | string | no | shown as subtitle |
+| `file` | string | yes | ~ is expanded |
+| `aws_profile` | string | no | exported as AWS_PROFILE for KMS keys |
+| `aws_region` | string | no | exported as AWS_REGION |
+| `auto_reveal` | boolean | no | show every value in clear when the file opens |
+| `view` | string, one of `tree`, `flat` | no | how this secret opens when its values are nested; secrets.view when empty |
 
 ## `secrets.aws_secretsmanager[]`
 
+Each entry is one AWS Secrets Manager secret, read with the SDK as aws_profile.
+
 Guide: [docs/secrets](../secrets/README.md)
 
-| Key | Type | Required | Allowed values | Description |
-|---|---|---|---|---|
-| `name` | string | yes |  |  |
-| `description` | string |  |  |  |
-| `secret_id` | string | yes |  |  |
-| `aws_profile` | string |  |  |  |
-| `aws_region` | string |  |  |  |
-| `version_stage` | string |  |  |  |
-| `auto_reveal` | boolean |  |  |  |
-| `view` | string |  | `tree`, `flat` |  |
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | shown in the Secrets list |
+| `description` | string | no | shown as subtitle |
+| `secret_id` | string | yes | name or full ARN |
+| `aws_profile` | string | no | default credential chain when empty |
+| `aws_region` | string | no | the profile's region when empty |
+| `version_stage` | string | no | AWSCURRENT (default), AWSPREVIOUS, ... |
+| `auto_reveal` | boolean | no | show every value in clear when opened |
+| `view` | string, one of `tree`, `flat` | no | how this secret opens when its values are nested; secrets.view when empty |
 
 ## `secrets.keepassxc[]`
 
+Each entry is one entry of a KeePass database, read with keepassxc-cli.
+
 Guide: [docs/secrets](../secrets/README.md)
 
-| Key | Type | Required | Allowed values | Description |
-|---|---|---|---|---|
-| `name` | string | yes |  |  |
-| `description` | string |  |  |  |
-| `database` | string | yes |  |  |
-| `entry` | string |  |  |  |
-| `group` | string |  |  |  |
-| `key_file` | string |  |  |  |
-| `no_password` | boolean |  |  |  |
-| `attributes` | list of string |  |  |  |
-| `totp` | boolean |  |  |  |
-| `remember_password` | string |  |  |  |
-| `cli_path` | string |  |  |  |
-| `auto_reveal` | boolean |  |  |  |
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | shown in the Secrets list |
+| `description` | string | no | shown as subtitle |
+| `database` | string | yes | .kdbx, ~ is expanded |
+| `entry` | string | no | group/entry path, e.g. CI/Jenkins; unset = pick from a list |
+| `group` | string | no | with no entry: list only entries under this group |
+| `key_file` | string | no | ~ is expanded; required with no_password |
+| `no_password` | boolean | no | key file only; never prompts |
+| `attributes` | list of string | no | default UserName, Password, URL, Notes |
+| `totp` | boolean | no | add the current TOTP code |
+| `remember_password` | string | no | Go duration; unset = ask every time |
+| `cli_path` | string | no | default: PATH, then the macOS app |
+| `auto_reveal` | boolean | no | show every value in clear when opened |
 
 ## `secrets.vault[]`
 
+Each entry is one HashiCorp Vault KV secret, or a folder of them when Path ends in "/", read with the vault CLI and the user's own token.
+
 Guide: [docs/secrets](../secrets/README.md)
 
-| Key | Type | Required | Allowed values | Description |
-|---|---|---|---|---|
-| `name` | string | yes |  |  |
-| `description` | string |  |  |  |
-| `address` | string |  |  |  |
-| `namespace` | string |  |  |  |
-| `ca_cert` | string |  |  |  |
-| `mount` | string |  |  |  |
-| `path` | string | yes |  |  |
-| `field` | string |  |  |  |
-| `version` | integer |  |  |  |
-| `login` | string |  |  |  |
-| `cli_path` | string |  |  |  |
-| `auto_reveal` | boolean |  |  |  |
-| `view` | string |  | `tree`, `flat` |  |
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | shown in the Secrets list |
+| `description` | string | no | shown as subtitle |
+| `address` | string | no | VAULT_ADDR; your environment's when empty |
+| `namespace` | string | no | VAULT_NAMESPACE (Enterprise / HCP) |
+| `ca_cert` | string | no | VAULT_CACERT, ~ is expanded |
+| `mount` | string | no | KV mount, default "secret" |
+| `path` | string | yes | secret path; a trailing "/" lists a folder |
+| `field` | string | no | one key only |
+| `version` | integer | no | KV v2 version; latest when 0 |
+| `login` | string | no | shell command run by L, e.g. vault login -method=oidc |
+| `cli_path` | string | no | default: vault on PATH |
+| `auto_reveal` | boolean | no | show every value in clear when opened |
+| `view` | string, one of `tree`, `flat` | no | how this secret opens when its values are nested; secrets.view when empty |
 
 ## `logs`
 
-| Key | Type | Required | Allowed values | Description |
-|---|---|---|---|---|
-| `level` | string |  | `trace`, `debug`, `info`, `warn`, `error` |  |
-| `file_location` | string |  |  |  |
+This block controls file-based logging and log level filtering.
+
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `level` | string, one of `trace`, `debug`, `info`, `warn`, `error` | no | the least severe level written; info when empty |
+| `file_location` | string | no | e.g. ./dist/logs/den.log |
 
 ## `updates`
 
+This block controls where den checks for and downloads new releases.
+
 Guide: [docs/updates](../updates/README.md)
 
-| Key | Type | Required | Allowed values | Description |
-|---|---|---|---|---|
-| `github_api` | string |  |  |  |
-| `s3_bucket` | string |  |  |  |
-| `s3_prefix` | string |  |  |  |
-| `aws_profile` | string |  |  |  |
-| `aws_region` | string |  |  |  |
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `github_api` | string | no | releases/latest API URL of a fork or GitHub Enterprise server, e.g. https://api.github.com/repos/you/den/releases/latest; a fork on api.github.com reads its own release feed, and GITHUB_TOKEN, when set, makes den use the API |
+| `s3_bucket` | string | no | an S3 mirror of the releases; wins over github_api |
+| `s3_prefix` | string | no | e.g. "den/releases/" — no leading slash |
+| `aws_profile` | string | no | uses default AWS profile if omitted |
+| `aws_region` | string | no | e.g. "eu-west-1" |
 
 ## `mcp`
 
+This block limits what an AI agent may do through `den mcp`.
+
 Guide: [docs/mcp](../mcp/README.md)
 
-| Key | Type | Required | Allowed values | Description |
-|---|---|---|---|---|
-| `allow` | list of string |  |  |  |
-| `allow_production` | boolean |  |  |  |
-| `allow_runbooks` | boolean |  |  |  |
-| `allow_source_runbooks` | boolean |  |  |  |
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `allow` | list of string | no | `allow` lists the services agents may see, by name, with * and ? wildcards; empty means all of them. |
+| `allow_production` | boolean | no | `allow_production` lets agents connect production services — and even then only after the user confirms each connect in their MCP client. |
+| `allow_runbooks` | boolean | no | `allow_runbooks` lets agents list and run runbooks; a runbook marked confirm: true still asks the user first. |
+| `allow_source_runbooks` | boolean | no | `allow_source_runbooks` also lets agents list and run the runbooks of runbooks.sources, and even then each run asks the user first. |
 
 ## `ai`
 
-| Key | Type | Required | Allowed values | Description |
-|---|---|---|---|---|
-| `model` | string |  |  |  |
+This block configures `den doctor --explain`, the only place den calls a language model — and only when asked, after showing what it would send.
+
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `model` | string | no | `model` is the Claude model that explains the report (default claude-opus-5). |

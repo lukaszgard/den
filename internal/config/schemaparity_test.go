@@ -353,3 +353,163 @@ func TestCheckEnforcesTheSchemasEnumsAndRequiredKeys(t *testing.T) {
 		t.Errorf("the base config (the Help snippets) never uses these, so they are not tested; add a snippet that does:\n  %s", strings.Join(missing, "\n  "))
 	}
 }
+
+// Every key's description is the Go comment on its field, and it is what an
+// editor shows on hover and what the configuration reference prints. The
+// generator once read the comments under the wrong import path, matched none
+// and said nothing: the schema shipped with no description at all.
+func TestSchemaDescribesEveryKey(t *testing.T) {
+	sd := loadSchemaDoc(t)
+	var missing []string
+	collect := func(name string, def map[string]any) {
+		for key, p := range asObject(def["properties"]) {
+			if d, _ := asObject(p)["description"].(string); strings.TrimSpace(d) == "" {
+				missing = append(missing, name+"."+key)
+			}
+		}
+	}
+	collect("root", sd.root)
+	for name, def := range sd.Defs {
+		collect(name, def)
+	}
+	slices.Sort(missing)
+	if len(missing) > 0 {
+		t.Errorf("%d keys have no description; write a comment on the field and run make generate:\n  %s",
+			len(missing), strings.Join(missing, "\n  "))
+	}
+}
+
+// optionalSites lists the first occurrence of every key the base config sets
+// that the schema does not call required: the reference marks it "no".
+// Names under a map (environments) are entries, not keys, so they are walked
+// into but not listed.
+func (sd schemaDoc) optionalSites(n *yaml.Node, schema map[string]any, name, path string, seen map[string]bool, out *[]paritySite) {
+	if n == nil {
+		return
+	}
+	if defName, def := sd.resolve(schema); def != nil {
+		schema = def
+		if defName != "" {
+			name = defName
+		}
+	}
+	join := func(p, k string) string {
+		if p == "" {
+			return k
+		}
+		return p + "." + k
+	}
+	switch n.Kind {
+	case yaml.MappingNode:
+		props := asObject(schema["properties"])
+		required := map[string]bool{}
+		if req, ok := schema["required"].([]any); ok {
+			for _, r := range req {
+				required[r.(string)] = true
+			}
+		}
+		for i := 0; i+1 < len(n.Content); i += 2 {
+			key, val := n.Content[i].Value, n.Content[i+1]
+			sub := asObject(props[key])
+			if sub == nil {
+				sd.optionalSites(val, asObject(schema["additionalProperties"]), name, join(path, key), seen, out)
+				continue
+			}
+			s := paritySite{kind: "optional", def: name, key: key, path: join(path, key)}
+			if !required[key] && !seen[s.id()] {
+				seen[s.id()] = true
+				*out = append(*out, s)
+			}
+			sd.optionalSites(val, sub, name, join(path, key), seen, out)
+		}
+	case yaml.SequenceNode:
+		items := asObject(schema["items"])
+		for i, c := range n.Content {
+			sd.optionalSites(c, items, name, fmt.Sprintf("%s[%d]", path, i), seen, out)
+		}
+	}
+}
+
+// parityConditional are the keys the reference marks "no" that den still
+// demands in some setups, each with the setup. "*." matches the key in every
+// section that has it.
+var parityConditional = map[string]string{
+	"*.aws_region_code":               "a service needs it, in its own section or from its env",
+	"*.ec2_instance_id":               "the ssm transport needs it, in the service's section or from its env",
+	"ServiceSpec.env":                 "a section that leaves out aws_region_code or ec2_instance_id takes them from its env",
+	"root.environments":               "a service's env names one of them",
+	"ServiceSpec.rds":                 "type: rds requires its section",
+	"ServiceSpec.kafka":               "type: kafka requires its section",
+	"ServiceSpec.redis":               "type: redis requires its section",
+	"ServiceSpec.documentdb":          "type: documentdb requires its section",
+	"ServiceSpec.redshift":            "type: redshift requires its section",
+	"ServiceSpec.opensearch":          "type: opensearch requires its section",
+	"ServiceSpec.neptune":             "type: neptune requires its section",
+	"ServiceSpec.docker":              "type: docker requires its section",
+	"TransportSpec.host":              "type ssh requires it",
+	"TransportSpec.endpoint_id":       "type eice requires it",
+	"TransportSpec.resource":          "type kubectl requires it",
+	"RedshiftSpec.cluster_identifier": "set this or workgroup_name",
+	"RedshiftSpec.workgroup_name":     "set this or cluster_identifier",
+	"VPNSpec.gateway":                 "set this or config_file",
+	"VPNSpec.config_file":             "set this or gateway",
+	"root.vpn":                        "a tunnel's auto_connect.vpn names one of them",
+	"RunbooksConfig.agents":           "runbooks.agent may name one of them",
+	"AgentSpec.kind":                  "a command den cannot read the agent CLI from needs it",
+	"RetrySpec.max_attempts":          "until_success needs it or timeout",
+	"RetrySpec.timeout":               "until_success needs it or max_attempts",
+	"KeePassXCSecretSpec.key_file":    "no_password needs it",
+}
+
+// The reverse of TestCheckEnforcesTheSchemasEnumsAndRequiredKeys: a key the
+// reference marks "no" can be left out of its entry, unless it is one of
+// parityConditional. A key den always demands but the schema does not tag
+// would otherwise be marked "no" while den refuses the file without it.
+func TestSchemaOptionalKeysCanBeLeftOut(t *testing.T) {
+	sd := loadSchemaDoc(t)
+	base := paritySource(t)
+
+	var baseRoot yaml.Node
+	if err := yaml.Unmarshal(base, &baseRoot); err != nil {
+		t.Fatal(err)
+	}
+	var sites []paritySite
+	sd.optionalSites(baseRoot.Content[0], sd.root, "root", "", map[string]bool{}, &sites)
+	if len(sites) < 100 {
+		t.Fatalf("found only %d optional keys in the base config", len(sites))
+	}
+	for _, s := range sites {
+		t.Run(s.id(), func(t *testing.T) {
+			var root yaml.Node
+			if err := yaml.Unmarshal(base, &root); err != nil {
+				t.Fatal(err)
+			}
+			_, parent, keyIndex := at(&root, s.path)
+			if parent == nil {
+				t.Fatalf("no %s in the base config", s.path)
+			}
+			parent.Content = slices.Delete(parent.Content, keyIndex, keyIndex+2)
+			broken, err := yaml.Marshal(&root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, ps := Check(broken)
+			var errs []Problem
+			for _, p := range ps {
+				if p.Severity == SeverityError {
+					errs = append(errs, p)
+				}
+			}
+			// A conditional key that passes is no news: the base config
+			// may simply not be in the setup that needs it.
+			_, conditional := parityConditional[s.id()]
+			if !conditional {
+				_, conditional = parityConditional["*."+s.key]
+			}
+			if !conditional && len(errs) > 0 {
+				t.Errorf("the reference marks %s \"no\", but leaving out %s is refused: tag the field jsonschema:\"required\", or list it in parityConditional and say when in its comment:\n%v",
+					s.id(), s.path, errs)
+			}
+		})
+	}
+}

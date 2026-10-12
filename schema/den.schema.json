@@ -5,41 +5,51 @@
     "AIConfig": {
       "properties": {
         "model": {
-          "type": "string"
+          "type": "string",
+          "description": "Model is the Claude model that explains the report (default claude-opus-5)."
         }
       },
       "additionalProperties": false,
-      "type": "object"
+      "type": "object",
+      "description": "AIConfig configures `den doctor --explain`, the only place den calls a language model — and only when asked, after showing what it would send."
     },
     "AWSSecretsManagerSecretSpec": {
       "properties": {
         "name": {
-          "type": "string"
+          "type": "string",
+          "description": "shown in the Secrets list"
         },
         "description": {
-          "type": "string"
+          "type": "string",
+          "description": "shown as subtitle"
         },
         "secret_id": {
-          "type": "string"
+          "type": "string",
+          "description": "name or full ARN"
         },
         "aws_profile": {
-          "type": "string"
+          "type": "string",
+          "description": "default credential chain when empty"
         },
         "aws_region": {
-          "type": "string"
+          "type": "string",
+          "description": "the profile's region when empty"
         },
         "version_stage": {
-          "type": "string"
+          "type": "string",
+          "description": "AWSCURRENT (default), AWSPREVIOUS, ..."
         },
         "auto_reveal": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "show every value in clear when opened"
         },
         "view": {
           "type": "string",
           "enum": [
             "tree",
             "flat"
-          ]
+          ],
+          "description": "how this secret opens when its values are nested; secrets.view when empty"
         }
       },
       "additionalProperties": false,
@@ -47,51 +57,62 @@
       "required": [
         "name",
         "secret_id"
-      ]
+      ],
+      "description": "AWSSecretsManagerSecretSpec is one AWS Secrets Manager secret, read with the SDK as aws_profile."
     },
     "AWSSessionSpec": {
       "properties": {
         "session": {
-          "type": "string"
+          "type": "string",
+          "description": "must match an [sso-session X] section"
         },
         "name": {
-          "type": "string"
+          "type": "string",
+          "description": "display name (default: Session)"
         },
         "description": {
-          "type": "string"
+          "type": "string",
+          "description": "shown as subtitle"
         }
       },
       "additionalProperties": false,
       "type": "object",
       "required": [
         "session"
-      ]
+      ],
+      "description": "AWSSessionSpec curates one [sso-session ...] discovered in the AWS config."
     },
     "AWSSpec": {
       "properties": {
         "config_path": {
-          "type": "string"
+          "type": "string",
+          "description": "default: ~/.aws/config"
         },
         "credentials_path": {
-          "type": "string"
+          "type": "string",
+          "description": "default: ~/.aws/credentials"
         },
         "sessions": {
           "items": {
             "$ref": "#/$defs/AWSSessionSpec"
           },
-          "type": "array"
+          "type": "array",
+          "description": "Sessions curates which discovered SSO sessions den shows, and in what\norder. Empty means show every session found in the AWS config."
         }
       },
       "additionalProperties": false,
-      "type": "object"
+      "type": "object",
+      "description": "AWSSpec holds AWS-related configuration paths."
     },
     "AgentSpec": {
       "properties": {
         "name": {
-          "type": "string"
+          "type": "string",
+          "description": "Name is what the pop-up shows and what runbooks.agent and `den runbook\nnew --agent` refer to."
         },
         "command": {
-          "type": "string"
+          "type": "string",
+          "description": "Command is the command line, split on whitespace (no shell quoting):\n`claude --model opus`, `ollama launch claude --model glm-5:cloud`.\nden adds its own arguments after it."
         },
         "kind": {
           "type": "string",
@@ -104,7 +125,8 @@
             "droid",
             "pi",
             "kimi"
-          ]
+          ],
+          "description": "Kind says which agent CLI the command starts, so den passes the\narguments that CLI takes: claude (Claude Code), codex (Codex), opencode\n(OpenCode), copilot (Copilot CLI), qwen (Qwen Code), droid (Droid), pi\n(Pi) or kimi (Kimi Code). Empty infers it from a command starting with\none of them, or `ollama launch \u003ckind\u003e` (copilot-cli for copilot); any\nother wrapper needs it."
         }
       },
       "additionalProperties": false,
@@ -112,183 +134,238 @@
       "required": [
         "name",
         "command"
-      ]
+      ],
+      "description": "AgentSpec is one named way to start an agent that writes a runbook."
     },
     "DockerSpec": {
       "properties": {
         "compose_file": {
-          "type": "string"
+          "type": "string",
+          "description": "the Compose file, relative to where den runs or absolute"
         },
         "services": {
           "items": {
             "type": "string"
           },
-          "type": "array"
+          "type": "array",
+          "description": "the Compose services to start; every one when empty"
         },
         "env_file": {
-          "type": "string"
+          "type": "string",
+          "description": "passed to docker compose with --env-file"
         }
       },
       "additionalProperties": false,
       "type": "object",
       "required": [
         "compose_file"
-      ]
+      ],
+      "description": "DockerSpec holds docker-compose-specific config."
     },
     "DocumentDBSpec": {
       "properties": {
         "region": {
-          "type": "string"
+          "type": "string",
+          "description": "a label you choose, e.g. eu or us; shown to people and runbooks, den does not interpret it"
         },
         "environment": {
-          "type": "string"
+          "type": "string",
+          "description": "a label you choose, e.g. dev, staging or prod; prod and production count as production"
         },
         "production": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "an agent connects a production service only if mcp.allow_production is set, and then asks the user; implied by environment: prod"
         },
         "local_port": {
-          "type": "integer"
+          "type": "integer",
+          "description": "local end of the tunnel; each type has its own default (RDS 50432, Redshift 55439, Redis 16379, DocumentDB 27017, OpenSearch 59200, Neptune 58182)"
         },
         "reconnect": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "auto-reopen the SSM port-forward if it drops (e.g. SSM idle timeout); the IAM token is renewed while connected either way"
         },
         "ec2_instance_id": {
-          "type": "string"
+          "type": "string",
+          "description": "the bastion instance the SSM transport forwards through; that transport requires it, here or from the service's env"
         },
         "aws_profile": {
-          "type": "string"
+          "type": "string",
+          "description": "profile the SSM session runs as"
         },
         "credential_profile": {
-          "type": "string"
+          "type": "string",
+          "description": "profile credentials are minted as, and the identity the data store sees; aws_profile when unset"
         },
         "aws_region_code": {
-          "type": "string"
+          "type": "string",
+          "description": "AWS region of the bastion and of the credential calls; required, here or from the service's env"
         },
         "transport": {
-          "$ref": "#/$defs/TransportSpec"
+          "$ref": "#/$defs/TransportSpec",
+          "description": "how the network is reached; SSM when unset"
         },
         "documentdb_host": {
-          "type": "string"
+          "type": "string",
+          "description": "cluster endpoint"
         },
         "db_name": {
-          "type": "string"
+          "type": "string",
+          "description": "optional, placed in the URI path"
         },
         "ca_file": {
-          "type": "string"
+          "type": "string",
+          "description": "optional, defaults to ~/.config/den/global-bundle.pem"
         }
       },
       "additionalProperties": false,
-      "type": "object"
+      "type": "object",
+      "required": [
+        "documentdb_host"
+      ],
+      "description": "DocumentDBSpec holds Amazon DocumentDB-specific config."
     },
     "EnvSpec": {
       "properties": {
         "region": {
-          "type": "string"
+          "type": "string",
+          "description": "a label you choose, e.g. eu or us; shown to people and runbooks, den does not interpret it"
         },
         "environment": {
-          "type": "string"
+          "type": "string",
+          "description": "a label you choose, e.g. dev, staging or prod; prod and production count as production"
         },
         "production": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "an agent connects a production service only if mcp.allow_production is set, and then asks the user; implied by environment: prod"
         },
         "ec2_instance_id": {
-          "type": "string"
+          "type": "string",
+          "description": "the bastion instance the SSM transport forwards through"
         },
         "aws_profile": {
-          "type": "string"
+          "type": "string",
+          "description": "profile the SSM session runs as"
         },
         "credential_profile": {
-          "type": "string"
+          "type": "string",
+          "description": "profile the credential is minted as, and the identity the data store sees; aws_profile when unset"
         },
         "aws_region_code": {
-          "type": "string"
+          "type": "string",
+          "description": "AWS region of the bastion and of the credential calls, e.g. eu-central-1"
         },
         "transport": {
-          "$ref": "#/$defs/TransportSpec"
+          "$ref": "#/$defs/TransportSpec",
+          "description": "how the network is reached; SSM through ec2_instance_id when unset"
         }
       },
       "additionalProperties": false,
-      "type": "object"
+      "type": "object",
+      "description": "EnvSpec holds the shared AWS/bastion fields for a named environment group."
     },
     "KafkaSpec": {
       "properties": {
         "region": {
-          "type": "string"
+          "type": "string",
+          "description": "a label you choose, e.g. eu or us; shown to people and runbooks, den does not interpret it"
         },
         "environment": {
-          "type": "string"
+          "type": "string",
+          "description": "a label you choose, e.g. dev, staging or prod; prod and production count as production"
         },
         "production": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "an agent connects a production service only if mcp.allow_production is set, and then asks the user; implied by environment: prod"
         },
         "local_port": {
-          "type": "integer"
+          "type": "integer",
+          "description": "local end of the tunnel; each type has its own default (RDS 50432, Redshift 55439, Redis 16379, DocumentDB 27017, OpenSearch 59200, Neptune 58182)"
         },
         "reconnect": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "auto-reopen the SSM port-forward if it drops (e.g. SSM idle timeout); the IAM token is renewed while connected either way"
         },
         "ec2_instance_id": {
-          "type": "string"
+          "type": "string",
+          "description": "the bastion instance the SSM transport forwards through; that transport requires it, here or from the service's env"
         },
         "aws_profile": {
-          "type": "string"
+          "type": "string",
+          "description": "profile the SSM session runs as"
         },
         "credential_profile": {
-          "type": "string"
+          "type": "string",
+          "description": "profile credentials are minted as, and the identity the data store sees; aws_profile when unset"
         },
         "aws_region_code": {
-          "type": "string"
+          "type": "string",
+          "description": "AWS region of the bastion and of the credential calls; required, here or from the service's env"
         },
         "transport": {
-          "$ref": "#/$defs/TransportSpec"
+          "$ref": "#/$defs/TransportSpec",
+          "description": "how the network is reached; SSM when unset"
         },
         "kafka_host": {
-          "type": "string"
+          "type": "string",
+          "description": "the broker to forward to (connecting reports that Kafka is planned)"
         }
       },
       "additionalProperties": false,
-      "type": "object"
+      "type": "object",
+      "description": "KafkaSpec holds Kafka-specific config."
     },
     "KeePassXCSecretSpec": {
       "properties": {
         "name": {
-          "type": "string"
+          "type": "string",
+          "description": "shown in the Secrets list"
         },
         "description": {
-          "type": "string"
+          "type": "string",
+          "description": "shown as subtitle"
         },
         "database": {
-          "type": "string"
+          "type": "string",
+          "description": ".kdbx, ~ is expanded"
         },
         "entry": {
-          "type": "string"
+          "type": "string",
+          "description": "group/entry path, e.g. CI/Jenkins; unset = pick from a list"
         },
         "group": {
-          "type": "string"
+          "type": "string",
+          "description": "with no entry: list only entries under this group"
         },
         "key_file": {
-          "type": "string"
+          "type": "string",
+          "description": "~ is expanded; required with no_password"
         },
         "no_password": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "key file only; never prompts"
         },
         "attributes": {
           "items": {
             "type": "string"
           },
-          "type": "array"
+          "type": "array",
+          "description": "default UserName, Password, URL, Notes"
         },
         "totp": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "add the current TOTP code"
         },
         "remember_password": {
-          "type": "string"
+          "type": "string",
+          "description": "Go duration; unset = ask every time"
         },
         "cli_path": {
-          "type": "string"
+          "type": "string",
+          "description": "default: PATH, then the macOS app"
         },
         "auto_reveal": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "show every value in clear when opened"
         }
       },
       "additionalProperties": false,
@@ -296,7 +373,8 @@
       "required": [
         "name",
         "database"
-      ]
+      ],
+      "description": "KeePassXCSecretSpec is one entry of a KeePass database, read with keepassxc-cli."
     },
     "LogsConfig": {
       "properties": {
@@ -308,14 +386,17 @@
             "info",
             "warn",
             "error"
-          ]
+          ],
+          "description": "the least severe level written; info when empty"
         },
         "file_location": {
-          "type": "string"
+          "type": "string",
+          "description": "e.g. ./dist/logs/den.log"
         }
       },
       "additionalProperties": false,
-      "type": "object"
+      "type": "object",
+      "description": "LogsConfig controls file-based logging and log level filtering."
     },
     "MCPConfig": {
       "properties": {
@@ -323,368 +404,490 @@
           "items": {
             "type": "string"
           },
-          "type": "array"
+          "type": "array",
+          "description": "Allow lists the services agents may see, by name, with * and ?\nwildcards; empty means all of them."
         },
         "allow_production": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "AllowProduction lets agents connect production services — and even then\nonly after the user confirms each connect in their MCP client."
         },
         "allow_runbooks": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "AllowRunbooks lets agents list and run runbooks; a runbook marked\nconfirm: true still asks the user first."
         },
         "allow_source_runbooks": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "AllowSourceRunbooks also lets agents list and run the runbooks of\nrunbooks.sources, and even then each run asks the user first."
         }
       },
       "additionalProperties": false,
-      "type": "object"
+      "type": "object",
+      "description": "MCPConfig limits what an AI agent may do through `den mcp`."
     },
     "NeptuneSpec": {
       "properties": {
         "region": {
-          "type": "string"
+          "type": "string",
+          "description": "a label you choose, e.g. eu or us; shown to people and runbooks, den does not interpret it"
         },
         "environment": {
-          "type": "string"
+          "type": "string",
+          "description": "a label you choose, e.g. dev, staging or prod; prod and production count as production"
         },
         "production": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "an agent connects a production service only if mcp.allow_production is set, and then asks the user; implied by environment: prod"
         },
         "local_port": {
-          "type": "integer"
+          "type": "integer",
+          "description": "local end of the tunnel; each type has its own default (RDS 50432, Redshift 55439, Redis 16379, DocumentDB 27017, OpenSearch 59200, Neptune 58182)"
         },
         "reconnect": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "auto-reopen the SSM port-forward if it drops (e.g. SSM idle timeout); the IAM token is renewed while connected either way"
         },
         "ec2_instance_id": {
-          "type": "string"
+          "type": "string",
+          "description": "the bastion instance the SSM transport forwards through; that transport requires it, here or from the service's env"
         },
         "aws_profile": {
-          "type": "string"
+          "type": "string",
+          "description": "profile the SSM session runs as"
         },
         "credential_profile": {
-          "type": "string"
+          "type": "string",
+          "description": "profile credentials are minted as, and the identity the data store sees; aws_profile when unset"
         },
         "aws_region_code": {
-          "type": "string"
+          "type": "string",
+          "description": "AWS region of the bastion and of the credential calls; required, here or from the service's env"
         },
         "transport": {
-          "$ref": "#/$defs/TransportSpec"
+          "$ref": "#/$defs/TransportSpec",
+          "description": "how the network is reached; SSM when unset"
         },
         "neptune_host": {
-          "type": "string"
+          "type": "string",
+          "description": "cluster, reader or instance endpoint"
         },
         "port": {
-          "type": "integer"
+          "type": "integer",
+          "description": "cluster port (default 8182)"
         }
       },
       "additionalProperties": false,
-      "type": "object"
+      "type": "object",
+      "required": [
+        "neptune_host"
+      ],
+      "description": "NeptuneSpec holds Amazon Neptune config."
     },
     "OpenSearchSpec": {
       "properties": {
         "region": {
-          "type": "string"
+          "type": "string",
+          "description": "a label you choose, e.g. eu or us; shown to people and runbooks, den does not interpret it"
         },
         "environment": {
-          "type": "string"
+          "type": "string",
+          "description": "a label you choose, e.g. dev, staging or prod; prod and production count as production"
         },
         "production": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "an agent connects a production service only if mcp.allow_production is set, and then asks the user; implied by environment: prod"
         },
         "local_port": {
-          "type": "integer"
+          "type": "integer",
+          "description": "local end of the tunnel; each type has its own default (RDS 50432, Redshift 55439, Redis 16379, DocumentDB 27017, OpenSearch 59200, Neptune 58182)"
         },
         "reconnect": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "auto-reopen the SSM port-forward if it drops (e.g. SSM idle timeout); the IAM token is renewed while connected either way"
         },
         "ec2_instance_id": {
-          "type": "string"
+          "type": "string",
+          "description": "the bastion instance the SSM transport forwards through; that transport requires it, here or from the service's env"
         },
         "aws_profile": {
-          "type": "string"
+          "type": "string",
+          "description": "profile the SSM session runs as"
         },
         "credential_profile": {
-          "type": "string"
+          "type": "string",
+          "description": "profile credentials are minted as, and the identity the data store sees; aws_profile when unset"
         },
         "aws_region_code": {
-          "type": "string"
+          "type": "string",
+          "description": "AWS region of the bastion and of the credential calls; required, here or from the service's env"
         },
         "transport": {
-          "$ref": "#/$defs/TransportSpec"
+          "$ref": "#/$defs/TransportSpec",
+          "description": "how the network is reached; SSM when unset"
         },
         "opensearch_host": {
-          "type": "string"
+          "type": "string",
+          "description": "domain or collection endpoint"
         },
         "serverless": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "collection: requests are signed for aoss, not es"
         }
       },
       "additionalProperties": false,
-      "type": "object"
+      "type": "object",
+      "required": [
+        "opensearch_host"
+      ],
+      "description": "OpenSearchSpec holds Amazon OpenSearch Service config: a VPC domain, or an OpenSearch Serverless collection reached through its VPC endpoint."
     },
     "ParamSpec": {
       "properties": {
         "name": {
-          "type": "string"
+          "type": "string",
+          "description": "the parameter's name; DEN_PARAM_ plus this, in capitals"
         },
         "description": {
-          "type": "string"
+          "type": "string",
+          "description": "shown beside the prompt"
         },
         "default": {
-          "type": "string"
+          "type": "string",
+          "description": "pre-filled value"
         },
         "options": {
           "items": {
             "type": "string"
           },
-          "type": "array"
+          "type": "array",
+          "description": "non-empty renders a select"
         },
         "required": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "the prompt does not accept an empty value"
         },
         "secret": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "masked input, redacted from logs"
         }
       },
       "additionalProperties": false,
-      "type": "object"
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "description": "ParamSpec is one value prompted for before a runbook runs."
     },
     "RDSSpec": {
       "properties": {
         "region": {
-          "type": "string"
+          "type": "string",
+          "description": "a label you choose, e.g. eu or us; shown to people and runbooks, den does not interpret it"
         },
         "environment": {
-          "type": "string"
+          "type": "string",
+          "description": "a label you choose, e.g. dev, staging or prod; prod and production count as production"
         },
         "production": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "an agent connects a production service only if mcp.allow_production is set, and then asks the user; implied by environment: prod"
         },
         "local_port": {
-          "type": "integer"
+          "type": "integer",
+          "description": "local end of the tunnel; each type has its own default (RDS 50432, Redshift 55439, Redis 16379, DocumentDB 27017, OpenSearch 59200, Neptune 58182)"
         },
         "reconnect": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "auto-reopen the SSM port-forward if it drops (e.g. SSM idle timeout); the IAM token is renewed while connected either way"
         },
         "ec2_instance_id": {
-          "type": "string"
+          "type": "string",
+          "description": "the bastion instance the SSM transport forwards through; that transport requires it, here or from the service's env"
         },
         "aws_profile": {
-          "type": "string"
+          "type": "string",
+          "description": "profile the SSM session runs as"
         },
         "credential_profile": {
-          "type": "string"
+          "type": "string",
+          "description": "profile credentials are minted as, and the identity the data store sees; aws_profile when unset"
         },
         "aws_region_code": {
-          "type": "string"
+          "type": "string",
+          "description": "AWS region of the bastion and of the credential calls; required, here or from the service's env"
         },
         "transport": {
-          "$ref": "#/$defs/TransportSpec"
+          "$ref": "#/$defs/TransportSpec",
+          "description": "how the network is reached; SSM when unset"
         },
         "engine": {
           "type": "string",
           "enum": [
             "postgres",
             "mysql"
-          ]
+          ],
+          "description": "the database engine; postgres when empty"
         },
         "update_pgpass": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "postgres only"
         },
         "rds_host": {
-          "type": "string"
+          "type": "string",
+          "description": "endpoint to forward to: instance, cluster or RDS Proxy"
         },
         "db_name": {
-          "type": "string"
+          "type": "string",
+          "description": "optional; the client's own default (PostgreSQL: the user name) when empty"
         },
         "db_user": {
-          "type": "string"
+          "type": "string",
+          "description": "the database user the IAM token is minted for"
         }
       },
       "additionalProperties": false,
-      "type": "object"
+      "type": "object",
+      "required": [
+        "rds_host",
+        "db_user"
+      ],
+      "description": "RDSSpec holds RDS-specific config."
     },
     "RedisSpec": {
       "properties": {
         "region": {
-          "type": "string"
+          "type": "string",
+          "description": "a label you choose, e.g. eu or us; shown to people and runbooks, den does not interpret it"
         },
         "environment": {
-          "type": "string"
+          "type": "string",
+          "description": "a label you choose, e.g. dev, staging or prod; prod and production count as production"
         },
         "production": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "an agent connects a production service only if mcp.allow_production is set, and then asks the user; implied by environment: prod"
         },
         "local_port": {
-          "type": "integer"
+          "type": "integer",
+          "description": "local end of the tunnel; each type has its own default (RDS 50432, Redshift 55439, Redis 16379, DocumentDB 27017, OpenSearch 59200, Neptune 58182)"
         },
         "reconnect": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "auto-reopen the SSM port-forward if it drops (e.g. SSM idle timeout); the IAM token is renewed while connected either way"
         },
         "ec2_instance_id": {
-          "type": "string"
+          "type": "string",
+          "description": "the bastion instance the SSM transport forwards through; that transport requires it, here or from the service's env"
         },
         "aws_profile": {
-          "type": "string"
+          "type": "string",
+          "description": "profile the SSM session runs as"
         },
         "credential_profile": {
-          "type": "string"
+          "type": "string",
+          "description": "profile credentials are minted as, and the identity the data store sees; aws_profile when unset"
         },
         "aws_region_code": {
-          "type": "string"
+          "type": "string",
+          "description": "AWS region of the bastion and of the credential calls; required, here or from the service's env"
         },
         "transport": {
-          "$ref": "#/$defs/TransportSpec"
+          "$ref": "#/$defs/TransportSpec",
+          "description": "how the network is reached; SSM when unset"
         },
         "cache_name": {
-          "type": "string"
+          "type": "string",
+          "description": "ElastiCache / MemoryDB IAM auth"
         },
         "user_id": {
-          "type": "string"
+          "type": "string",
+          "description": "ElastiCache / MemoryDB user ID"
         },
         "serverless": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "true for ElastiCache Serverless"
         },
         "memorydb": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "true for MemoryDB (tokens are signed for memorydb, not elasticache)"
         },
         "redis_host": {
-          "type": "string"
+          "type": "string",
+          "description": "endpoint to forward to"
         }
       },
       "additionalProperties": false,
-      "type": "object"
+      "type": "object",
+      "description": "RedisSpec holds Redis-specific config."
     },
     "RedshiftSpec": {
       "properties": {
         "region": {
-          "type": "string"
+          "type": "string",
+          "description": "a label you choose, e.g. eu or us; shown to people and runbooks, den does not interpret it"
         },
         "environment": {
-          "type": "string"
+          "type": "string",
+          "description": "a label you choose, e.g. dev, staging or prod; prod and production count as production"
         },
         "production": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "an agent connects a production service only if mcp.allow_production is set, and then asks the user; implied by environment: prod"
         },
         "local_port": {
-          "type": "integer"
+          "type": "integer",
+          "description": "local end of the tunnel; each type has its own default (RDS 50432, Redshift 55439, Redis 16379, DocumentDB 27017, OpenSearch 59200, Neptune 58182)"
         },
         "reconnect": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "auto-reopen the SSM port-forward if it drops (e.g. SSM idle timeout); the IAM token is renewed while connected either way"
         },
         "ec2_instance_id": {
-          "type": "string"
+          "type": "string",
+          "description": "the bastion instance the SSM transport forwards through; that transport requires it, here or from the service's env"
         },
         "aws_profile": {
-          "type": "string"
+          "type": "string",
+          "description": "profile the SSM session runs as"
         },
         "credential_profile": {
-          "type": "string"
+          "type": "string",
+          "description": "profile credentials are minted as, and the identity the data store sees; aws_profile when unset"
         },
         "aws_region_code": {
-          "type": "string"
+          "type": "string",
+          "description": "AWS region of the bastion and of the credential calls; required, here or from the service's env"
         },
         "transport": {
-          "$ref": "#/$defs/TransportSpec"
+          "$ref": "#/$defs/TransportSpec",
+          "description": "how the network is reached; SSM when unset"
         },
         "update_pgpass": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "keep ~/.pgpass in sync with the current credential"
         },
         "redshift_host": {
-          "type": "string"
+          "type": "string",
+          "description": "cluster or workgroup endpoint"
         },
         "cluster_identifier": {
-          "type": "string"
+          "type": "string",
+          "description": "provisioned: the cluster; set this or workgroup_name"
         },
         "workgroup_name": {
-          "type": "string"
+          "type": "string",
+          "description": "Serverless: the workgroup; set this or cluster_identifier"
         },
         "db_name": {
-          "type": "string"
+          "type": "string",
+          "description": "default \"dev\""
         },
         "db_user": {
-          "type": "string"
+          "type": "string",
+          "description": "DBUser is provisioned-only: set, den calls GetClusterCredentials for that\nuser; unset, GetClusterCredentialsWithIAM maps the caller's IAM identity."
         },
         "credential_ttl": {
-          "type": "string"
+          "type": "string",
+          "description": "Go duration, 15m–1h (default 15m)"
         }
       },
       "additionalProperties": false,
-      "type": "object"
+      "type": "object",
+      "required": [
+        "redshift_host"
+      ],
+      "description": "RedshiftSpec holds Amazon Redshift config."
     },
     "RetrySpec": {
       "properties": {
         "until_success": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "run again until the exit code is 0; needs max_attempts or timeout"
         },
         "interval": {
-          "type": "string"
+          "type": "string",
+          "description": "Go duration between attempts"
         },
         "max_attempts": {
-          "type": "integer"
+          "type": "integer",
+          "description": "0 = unlimited"
         },
         "timeout": {
-          "type": "string"
+          "type": "string",
+          "description": "overall ceiling across attempts"
         }
       },
       "additionalProperties": false,
       "type": "object",
       "required": [
         "interval"
-      ]
+      ],
+      "description": "RetrySpec re-runs a runbook until it exits 0."
     },
     "RunbookSettings": {
       "properties": {
         "history": {
-          "type": "integer"
+          "type": "integer",
+          "description": "History is how many finished runs are kept on disk; 0 keeps only the\nlast run, in memory. Default 20."
         },
         "about": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "About shows the About tab: the folder's README.md, the environment den\nsets and the parameters. Default true."
         },
         "shell": {
-          "type": "string"
+          "type": "string",
+          "description": "Shell is the command t opens in the runbook's folder, e.g.\n\"bash --rcfile .venv/bin/activate\". Default $SHELL."
         },
         "editor": {
-          "type": "string"
+          "type": "string",
+          "description": "Editor is the command e opens the runbook's script with, and o a run's\nlog. Default $VISUAL, then $EDITOR, then vi."
         },
         "agent": {
-          "type": "string"
+          "type": "string",
+          "description": "Agent is the agent E changes the runbook with: a command line such as\n`claude --model opus`, the name of a runbooks.agents entry, a kind such\nas claude or opencode, or auto. Default runbooks.agent."
         }
       },
       "additionalProperties": false,
-      "type": "object"
+      "type": "object",
+      "description": "RunbookSettings are how den presents a runbook rather than what it runs."
     },
     "RunbookSource": {
       "properties": {
         "name": {
-          "type": "string"
+          "type": "string",
+          "description": "Name prefixes the names of its runbooks: lower case letters, digits\nand dashes."
         },
         "url": {
-          "type": "string"
+          "type": "string",
+          "description": "URL is the repository: https://host/owner/repo,\ngit@host:owner/repo.git, host/owner/repo, or owner/repo on GitHub.\nCredentials come from git (a credential helper or an SSH key), never\nfrom the URL."
         },
         "ref": {
-          "type": "string"
+          "type": "string",
+          "description": "Ref is the tag, branch or commit to check out; empty is the\nrepository's default branch. A tag or a commit stays put; a branch\nmoves on `den runbook source update`."
         },
         "path": {
-          "type": "string"
+          "type": "string",
+          "description": "Path is the folder of the repository holding the runbook folders;\nempty is its root."
         },
         "include": {
           "items": {
             "type": "string"
           },
-          "type": "array"
+          "type": "array",
+          "description": "Include lists the runbook folders to show, with * wildcards; empty\nshows every one. `den runbook install` and `uninstall` edit it."
         },
         "exclude": {
           "items": {
             "type": "string"
           },
-          "type": "array"
+          "type": "array",
+          "description": "Exclude hides runbook folders Include would show."
         },
         "env_map": {
           "additionalProperties": {
             "type": "string"
           },
-          "type": "object"
+          "type": "object",
+          "description": "EnvMap maps the env names the source's runbooks use to entries of\nenvironments. A runbook whose env is not mapped is not shown: its\nauthor's \"prod\" is not necessarily yours."
         }
       },
       "additionalProperties": false,
@@ -692,60 +895,76 @@
       "required": [
         "name",
         "url"
-      ]
+      ],
+      "description": "RunbookSource is a git repository of runbook folders."
     },
     "RunbookSpec": {
       "properties": {
         "name": {
-          "type": "string"
+          "type": "string",
+          "description": "what the Runbooks list shows and sequences refer to"
         },
         "description": {
-          "type": "string"
+          "type": "string",
+          "description": "shown as subtitle"
         },
         "command": {
-          "type": "string"
+          "type": "string",
+          "description": "run with sh -c"
         },
         "cwd": {
-          "type": "string"
+          "type": "string",
+          "description": "working directory; relative to den.yaml's directory"
         },
         "env": {
-          "type": "string"
+          "type": "string",
+          "description": "key into Config.Environments"
         },
         "env_vars": {
           "additionalProperties": {
             "type": "string"
           },
-          "type": "object"
+          "type": "object",
+          "description": "extra environment variables for the run"
         },
         "params": {
           "items": {
             "$ref": "#/$defs/ParamSpec"
           },
-          "type": "array"
+          "type": "array",
+          "description": "values asked for before the run"
         },
         "confirm": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "ask before every run, also when an agent starts it"
         },
         "timeout": {
-          "type": "string"
+          "type": "string",
+          "description": "Go duration, e.g. \"5m\""
         },
         "retry": {
-          "$ref": "#/$defs/RetrySpec"
+          "$ref": "#/$defs/RetrySpec",
+          "description": "run again until it exits 0"
         },
         "history": {
-          "type": "integer"
+          "type": "integer",
+          "description": "History is how many finished runs are kept on disk; 0 keeps only the\nlast run, in memory. Default 20."
         },
         "about": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "About shows the About tab: the folder's README.md, the environment den\nsets and the parameters. Default true."
         },
         "shell": {
-          "type": "string"
+          "type": "string",
+          "description": "Shell is the command t opens in the runbook's folder, e.g.\n\"bash --rcfile .venv/bin/activate\". Default $SHELL."
         },
         "editor": {
-          "type": "string"
+          "type": "string",
+          "description": "Editor is the command e opens the runbook's script with, and o a run's\nlog. Default $VISUAL, then $EDITOR, then vi."
         },
         "agent": {
-          "type": "string"
+          "type": "string",
+          "description": "Agent is the agent E changes the runbook with: a command line such as\n`claude --model opus`, the name of a runbooks.agents entry, a kind such\nas claude or opencode, or auto. Default runbooks.agent."
         }
       },
       "additionalProperties": false,
@@ -753,7 +972,8 @@
       "required": [
         "name",
         "command"
-      ]
+      ],
+      "description": "RunbookSpec describes one runbook."
     },
     "RunbooksConfig": {
       "properties": {
@@ -761,80 +981,98 @@
           "items": {
             "type": "string"
           },
-          "type": "array"
+          "type": "array",
+          "description": "Dirs are scanned for runbooks: every folder in them holding a\nrunbook.yaml is one, and so is an executable carrying a \"# den:name\"\nheader. Relative paths are read against den.yaml's directory."
         },
         "rescan": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Rescan picks up runbook folders added, changed or removed while den\nruns. On unless set to false."
         },
         "template": {
-          "type": "string"
+          "type": "string",
+          "description": "Template is a folder copied for a new runbook by `den runbook new` and\nthe Runbooks pane's n; empty uses the built-in one."
         },
         "agent": {
-          "type": "string"
+          "type": "string",
+          "description": "Agent is the agent that writes a runbook from a description (`den\nrunbook new --agent`, the pane's n): auto (the first agent CLI\ninstalled, in the order agents' kind lists them), a kind such as claude\nor opencode, or the name of an agents entry. Default auto, or the first\nentry of agents when there are any."
         },
         "agents": {
           "items": {
             "$ref": "#/$defs/AgentSpec"
           },
-          "type": "array"
+          "type": "array",
+          "description": "Agents are command lines that write a runbook, for a model other than\nthe CLI's default or a wrapper such as `ollama launch opencode`. The\nRunbooks pane's n offers them when there are two or more."
         },
         "defaults": {
-          "$ref": "#/$defs/RunbookSettings"
+          "$ref": "#/$defs/RunbookSettings",
+          "description": "Defaults apply to every runbook; a runbook.yaml or an items entry\noverrides them one key at a time."
         },
         "items": {
           "items": {
             "$ref": "#/$defs/RunbookSpec"
           },
-          "type": "array"
+          "type": "array",
+          "description": "Items are runbooks declared inline, for the curated team-shared set."
         },
         "sequences": {
           "items": {
             "$ref": "#/$defs/SequenceSpec"
           },
-          "type": "array"
+          "type": "array",
+          "description": "runbooks run in order, stopping at the first failure"
         },
         "sources": {
           "items": {
             "$ref": "#/$defs/RunbookSource"
           },
-          "type": "array"
+          "type": "array",
+          "description": "Sources are git repositories of runbook folders that den checks out\nand lists beside your own, each runbook under its source's name:\nplatform-ops/rds-status. Nothing updates on its own: `den runbook\nsource update` moves a source to the newest commit of its ref."
         },
         "allow_sources": {
           "items": {
             "type": "string"
           },
-          "type": "array"
+          "type": "array",
+          "description": "AllowSources limits the repositories a source may come from, as\nhost/owner/repo patterns with * wildcards: \"ghe.acme.com/ops/*\".\nEmpty allows any."
         }
       },
       "additionalProperties": false,
-      "type": "object"
+      "type": "object",
+      "description": "RunbooksConfig holds user-defined operational scripts."
     },
     "SOPSSecretSpec": {
       "properties": {
         "name": {
-          "type": "string"
+          "type": "string",
+          "description": "shown in the Secrets list"
         },
         "description": {
-          "type": "string"
+          "type": "string",
+          "description": "shown as subtitle"
         },
         "file": {
-          "type": "string"
+          "type": "string",
+          "description": "~ is expanded"
         },
         "aws_profile": {
-          "type": "string"
+          "type": "string",
+          "description": "exported as AWS_PROFILE for KMS keys"
         },
         "aws_region": {
-          "type": "string"
+          "type": "string",
+          "description": "exported as AWS_REGION"
         },
         "auto_reveal": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "show every value in clear when the file opens"
         },
         "view": {
           "type": "string",
           "enum": [
             "tree",
             "flat"
-          ]
+          ],
+          "description": "how this secret opens when its values are nested; secrets.view when empty"
         }
       },
       "additionalProperties": false,
@@ -842,7 +1080,8 @@
       "required": [
         "name",
         "file"
-      ]
+      ],
+      "description": "SOPSSecretSpec is one SOPS-encrypted file."
     },
     "SecretsConfig": {
       "properties": {
@@ -850,53 +1089,63 @@
           "items": {
             "$ref": "#/$defs/SOPSSecretSpec"
           },
-          "type": "array"
+          "type": "array",
+          "description": "SOPS-encrypted files"
         },
         "aws_secretsmanager": {
           "items": {
             "$ref": "#/$defs/AWSSecretsManagerSecretSpec"
           },
-          "type": "array"
+          "type": "array",
+          "description": "AWS Secrets Manager secrets"
         },
         "keepassxc": {
           "items": {
             "$ref": "#/$defs/KeePassXCSecretSpec"
           },
-          "type": "array"
+          "type": "array",
+          "description": "entries of KeePass databases"
         },
         "vault": {
           "items": {
             "$ref": "#/$defs/VaultSecretSpec"
           },
-          "type": "array"
+          "type": "array",
+          "description": "HashiCorp Vault KV secrets"
         },
         "view": {
           "type": "string",
           "enum": [
             "tree",
             "flat"
-          ]
+          ],
+          "description": "View is how secrets with nested values open, unless one sets its own."
         }
       },
       "additionalProperties": false,
-      "type": "object"
+      "type": "object",
+      "description": "SecretsConfig lists the secret sources shown in the Secrets pane, grouped by provider."
     },
     "SequenceSpec": {
       "properties": {
         "name": {
-          "type": "string"
+          "type": "string",
+          "description": "shown in the Runbooks list"
         },
         "description": {
-          "type": "string"
+          "type": "string",
+          "description": "shown as subtitle"
         },
         "steps": {
           "items": {
             "type": "string"
           },
-          "type": "array"
+          "type": "array",
+          "description": "runbook names"
         },
         "confirm": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "ask before running the sequence"
         }
       },
       "additionalProperties": false,
@@ -904,12 +1153,14 @@
       "required": [
         "name",
         "steps"
-      ]
+      ],
+      "description": "SequenceSpec runs named runbooks in order, stopping at the first failure."
     },
     "ServiceSpec": {
       "properties": {
         "name": {
-          "type": "string"
+          "type": "string",
+          "description": "shown in the Connect list"
         },
         "type": {
           "type": "string",
@@ -922,34 +1173,44 @@
             "neptune",
             "kafka",
             "docker"
-          ]
+          ],
+          "description": "which section below holds its settings; that section is required"
         },
         "env": {
-          "type": "string"
+          "type": "string",
+          "description": "an entry of environments: its keys fill what the section leaves out"
         },
         "rds": {
-          "$ref": "#/$defs/RDSSpec"
+          "$ref": "#/$defs/RDSSpec",
+          "description": "type: rds — RDS or Aurora"
         },
         "kafka": {
-          "$ref": "#/$defs/KafkaSpec"
+          "$ref": "#/$defs/KafkaSpec",
+          "description": "type: kafka — Kafka (planned, not implemented)"
         },
         "redis": {
-          "$ref": "#/$defs/RedisSpec"
+          "$ref": "#/$defs/RedisSpec",
+          "description": "type: redis — ElastiCache or MemoryDB"
         },
         "documentdb": {
-          "$ref": "#/$defs/DocumentDBSpec"
+          "$ref": "#/$defs/DocumentDBSpec",
+          "description": "type: documentdb — DocumentDB"
         },
         "redshift": {
-          "$ref": "#/$defs/RedshiftSpec"
+          "$ref": "#/$defs/RedshiftSpec",
+          "description": "type: redshift — Redshift"
         },
         "opensearch": {
-          "$ref": "#/$defs/OpenSearchSpec"
+          "$ref": "#/$defs/OpenSearchSpec",
+          "description": "type: opensearch — OpenSearch"
         },
         "neptune": {
-          "$ref": "#/$defs/NeptuneSpec"
+          "$ref": "#/$defs/NeptuneSpec",
+          "description": "type: neptune — Neptune"
         },
         "docker": {
-          "$ref": "#/$defs/DockerSpec"
+          "$ref": "#/$defs/DockerSpec",
+          "description": "type: docker — Docker Compose"
         }
       },
       "additionalProperties": false,
@@ -957,7 +1218,8 @@
       "required": [
         "name",
         "type"
-      ]
+      ],
+      "description": "ServiceSpec describes one service entry in the config file."
     },
     "TransportSpec": {
       "properties": {
@@ -968,73 +1230,91 @@
             "ssh",
             "eice",
             "kubectl"
-          ]
+          ],
+          "description": "how the network is reached; a service without a transport block uses ssm"
         },
         "host": {
-          "type": "string"
+          "type": "string",
+          "description": "Required by ssh: the destination (user@host) and extra ssh arguments such as\n[-i, ~/.ssh/key, -J, jump.example.com]. Key or agent auth only: den\ncannot answer a password prompt."
         },
         "args": {
           "items": {
             "type": "string"
           },
-          "type": "array"
+          "type": "array",
+          "description": "ssh: extra arguments, e.g. [-i, ~/.ssh/key]"
         },
         "endpoint_id": {
-          "type": "string"
+          "type": "string",
+          "description": "Required by eice: the EC2 Instance Connect Endpoint ID. The service host is\nresolved to an IP first, since the endpoint only tunnels to IPs."
         },
         "resource": {
-          "type": "string"
+          "type": "string",
+          "description": "Required by kubectl: the resource to forward to (svc/x, deploy/x, pod/x), which\nmust itself serve the service's port — typically a proxy in front of\nthe database — plus an optional context and namespace."
         },
         "context": {
-          "type": "string"
+          "type": "string",
+          "description": "kubectl: the kubeconfig context; the current one when empty"
         },
         "namespace": {
-          "type": "string"
+          "type": "string",
+          "description": "kubectl: the namespace; the context's when empty"
         }
       },
       "additionalProperties": false,
       "type": "object",
       "required": [
         "type"
-      ]
+      ],
+      "description": "TransportSpec says how den reaches the network a service lives in."
     },
     "TunnelAutoConnect": {
       "properties": {
         "vpn": {
-          "type": "string"
+          "type": "string",
+          "description": "name of an entry in the vpn: section"
         },
         "enabled": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Enabled switches the behaviour on (the default) or off, keeping the link\nso den can still warn about a manual connect without the VPN."
         }
       },
       "additionalProperties": false,
       "type": "object",
       "required": [
         "vpn"
-      ]
+      ],
+      "description": "TunnelAutoConnect names the VPN a tunnel runs over."
     },
     "TunnelSpec": {
       "properties": {
         "name": {
-          "type": "string"
+          "type": "string",
+          "description": "shown in the Tunnel list"
         },
         "description": {
-          "type": "string"
+          "type": "string",
+          "description": "shown as subtitle"
         },
         "command": {
-          "type": "string"
+          "type": "string",
+          "description": "full shell command, e.g. \"ssh -D 5555 -L ... user@host\""
         },
         "reconnect": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "restart the tunnel after it drops, with backoff"
         },
         "health_check": {
-          "type": "string"
+          "type": "string",
+          "description": "host:port dialled through the command's -D SOCKS proxy to confirm the far side is reachable"
         },
         "monitor": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "re-run the connection checks every 15 s while connected; two misses count as a drop"
         },
         "auto_connect": {
-          "$ref": "#/$defs/TunnelAutoConnect"
+          "$ref": "#/$defs/TunnelAutoConnect",
+          "description": "AutoConnect ties the tunnel to the VPN it runs over: den connects it once\nthat VPN is connected and stops it when the VPN goes down."
         }
       },
       "additionalProperties": false,
@@ -1042,106 +1322,134 @@
       "required": [
         "name",
         "command"
-      ]
+      ],
+      "description": "TunnelSpec describes one SSH tunnel entry in the config file."
     },
     "UpdatesConfig": {
       "properties": {
         "github_api": {
-          "type": "string"
+          "type": "string",
+          "description": "releases/latest API URL of a fork or GitHub Enterprise server, e.g. https://api.github.com/repos/you/den/releases/latest; a fork on api.github.com reads its own release feed, and GITHUB_TOKEN, when set, makes den use the API"
         },
         "s3_bucket": {
-          "type": "string"
+          "type": "string",
+          "description": "an S3 mirror of the releases; wins over github_api"
         },
         "s3_prefix": {
-          "type": "string"
+          "type": "string",
+          "description": "e.g. \"den/releases/\" — no leading slash"
         },
         "aws_profile": {
-          "type": "string"
+          "type": "string",
+          "description": "uses default AWS profile if omitted"
         },
         "aws_region": {
-          "type": "string"
+          "type": "string",
+          "description": "e.g. \"eu-west-1\""
         }
       },
       "additionalProperties": false,
-      "type": "object"
+      "type": "object",
+      "description": "UpdatesConfig controls where den checks for and downloads new releases."
     },
     "VPNSpec": {
       "properties": {
         "name": {
-          "type": "string"
+          "type": "string",
+          "description": "shown in the VPN list"
         },
         "gateway": {
-          "type": "string"
+          "type": "string",
+          "description": "gateway host[:port]; required unless config_file is set"
         },
         "description": {
-          "type": "string"
+          "type": "string",
+          "description": "shown as subtitle"
         },
         "config_file": {
-          "type": "string"
+          "type": "string",
+          "description": "path to openfortivpn INI config file (-c flag); required unless gateway is set"
         },
         "extra_args": {
           "items": {
             "type": "string"
           },
-          "type": "array"
+          "type": "array",
+          "description": "more openfortivpn arguments"
         },
         "health_check": {
-          "type": "string"
+          "type": "string",
+          "description": "host:port reachable ONLY via the VPN; probed to confirm the data path is alive"
         },
         "reconnect": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Reconnect re-establishes a tunnel that dropped after being fully connected.\nDeliberately unlike tunnels: openfortivpn logs in through SAML, which opens a\nbrowser tab, so retries are capped (see reconnectDelays) and a login that\ntimes out is never retried — repeated half-finished logins burn the account's\nFortiGate session slots until the gateway 403s every new login."
         }
       },
       "additionalProperties": false,
       "type": "object",
       "required": [
         "name"
-      ]
+      ],
+      "description": "VPNSpec describes one VPN entry in the config file."
     },
     "VaultSecretSpec": {
       "properties": {
         "name": {
-          "type": "string"
+          "type": "string",
+          "description": "shown in the Secrets list"
         },
         "description": {
-          "type": "string"
+          "type": "string",
+          "description": "shown as subtitle"
         },
         "address": {
-          "type": "string"
+          "type": "string",
+          "description": "VAULT_ADDR; your environment's when empty"
         },
         "namespace": {
-          "type": "string"
+          "type": "string",
+          "description": "VAULT_NAMESPACE (Enterprise / HCP)"
         },
         "ca_cert": {
-          "type": "string"
+          "type": "string",
+          "description": "VAULT_CACERT, ~ is expanded"
         },
         "mount": {
-          "type": "string"
+          "type": "string",
+          "description": "KV mount, default \"secret\""
         },
         "path": {
-          "type": "string"
+          "type": "string",
+          "description": "secret path; a trailing \"/\" lists a folder"
         },
         "field": {
-          "type": "string"
+          "type": "string",
+          "description": "one key only"
         },
         "version": {
-          "type": "integer"
+          "type": "integer",
+          "description": "KV v2 version; latest when 0"
         },
         "login": {
-          "type": "string"
+          "type": "string",
+          "description": "shell command run by L, e.g. vault login -method=oidc"
         },
         "cli_path": {
-          "type": "string"
+          "type": "string",
+          "description": "default: vault on PATH"
         },
         "auto_reveal": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "show every value in clear when opened"
         },
         "view": {
           "type": "string",
           "enum": [
             "tree",
             "flat"
-          ]
+          ],
+          "description": "how this secret opens when its values are nested; secrets.view when empty"
         }
       },
       "additionalProperties": false,
@@ -1149,18 +1457,22 @@
       "required": [
         "name",
         "path"
-      ]
+      ],
+      "description": "VaultSecretSpec is one HashiCorp Vault KV secret, or a folder of them when Path ends in \"/\", read with the vault CLI and the user's own token."
     }
   },
   "properties": {
     "version": {
-      "type": "string"
+      "type": "string",
+      "description": "Config format version, \"1\""
     },
     "title": {
-      "type": "string"
+      "type": "string",
+      "description": "The dashboard's header line; \"den — Developer Environment Navigator\" when unset"
     },
     "aws": {
-      "$ref": "#/$defs/AWSSpec"
+      "$ref": "#/$defs/AWSSpec",
+      "description": "Where the AWS CLI files are and which SSO sessions to show"
     },
     "menu_order": {
       "items": {
@@ -1179,7 +1491,8 @@
           "updates"
         ]
       },
-      "type": "array"
+      "type": "array",
+      "description": "panels to show, in this order; every panel when empty"
     },
     "disabled_panes": {
       "items": {
@@ -1198,49 +1511,60 @@
           "updates"
         ]
       },
-      "type": "array"
+      "type": "array",
+      "description": "panels to hide"
     },
     "environments": {
       "additionalProperties": {
         "$ref": "#/$defs/EnvSpec"
       },
-      "type": "object"
+      "type": "object",
+      "description": "Named groups of shared bastion and profile settings; a service picks one with env:"
     },
     "services": {
       "items": {
         "$ref": "#/$defs/ServiceSpec"
       },
-      "type": "array"
+      "type": "array",
+      "description": "The data stores and stacks the Connect panel lists"
     },
     "tunnels": {
       "items": {
         "$ref": "#/$defs/TunnelSpec"
       },
-      "type": "array"
+      "type": "array",
+      "description": "SSH and SOCKS tunnels"
     },
     "vpn": {
       "items": {
         "$ref": "#/$defs/VPNSpec"
       },
-      "type": "array"
+      "type": "array",
+      "description": "Openfortivpn connections"
     },
     "runbooks": {
-      "$ref": "#/$defs/RunbooksConfig"
+      "$ref": "#/$defs/RunbooksConfig",
+      "description": "Your scripts, run with den's connection context"
     },
     "secrets": {
-      "$ref": "#/$defs/SecretsConfig"
+      "$ref": "#/$defs/SecretsConfig",
+      "description": "The Secrets panel's sources"
     },
     "logs": {
-      "$ref": "#/$defs/LogsConfig"
+      "$ref": "#/$defs/LogsConfig",
+      "description": "The log file and level of den itself"
     },
     "updates": {
-      "$ref": "#/$defs/UpdatesConfig"
+      "$ref": "#/$defs/UpdatesConfig",
+      "description": "Where den looks for new releases"
     },
     "mcp": {
-      "$ref": "#/$defs/MCPConfig"
+      "$ref": "#/$defs/MCPConfig",
+      "description": "What AI agents may do through den mcp"
     },
     "ai": {
-      "$ref": "#/$defs/AIConfig"
+      "$ref": "#/$defs/AIConfig",
+      "description": "The model behind den doctor --explain"
     }
   },
   "additionalProperties": false,
