@@ -247,7 +247,7 @@ one for your account, and [the JSON Schema](../schema/README.md) gives your edit
 completion and inline errors. Each feature's page has the keys in context, with
 examples; this page is the complete list.
 
-` + "A key marked **required** must be set in the entry itself. The others are optional, and many can instead come from a named environment (`environments`).\n\n")
+` + "**Required** says whether den refuses the file when the key is missing from its entry. A key marked **no** is optional, or comes from somewhere else, such as the named environment (`environments`) a service picks with `env`, or is needed only in some setups, which its description names.\n\n")
 
 	b.WriteString("## Top-level keys\n\n")
 	if err := table(&b, root, "", anchor, paths); err != nil {
@@ -315,7 +315,7 @@ func table(b *bytes.Buffer, s *schema, path string, anchor, paths map[string]str
 	}
 	b.WriteString("| Key | Type | Required | Allowed values | Description |\n|---|---|---|---|---|\n")
 	for _, p := range s.Properties {
-		req := ""
+		req := "no"
 		if required[p.Name] {
 			req = "yes"
 		}

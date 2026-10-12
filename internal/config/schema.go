@@ -27,17 +27,17 @@ const (
 type TransportSpec struct {
 	Type string `yaml:"type" jsonschema:"required,enum=ssm,enum=ssh,enum=eice,enum=kubectl"` // ssm (default) | ssh | eice | kubectl
 
-	// ssh: the destination (user@host) and extra ssh arguments such as
+	// Required by ssh: the destination (user@host) and extra ssh arguments such as
 	// [-i, ~/.ssh/key, -J, jump.example.com]. Key or agent auth only: den
 	// cannot answer a password prompt.
 	Host string   `yaml:"host,omitempty"` // ssh: user@host
 	Args []string `yaml:"args,omitempty"` // ssh: extra arguments, e.g. [-i, ~/.ssh/key]
 
-	// eice: the EC2 Instance Connect Endpoint ID. The service host is
+	// Required by eice: the EC2 Instance Connect Endpoint ID. The service host is
 	// resolved to an IP first, since the endpoint only tunnels to IPs.
 	EndpointID string `yaml:"endpoint_id,omitempty"` // eice: the EC2 Instance Connect Endpoint ID
 
-	// kubectl: the resource to forward to (svc/x, deploy/x, pod/x), which
+	// Required by kubectl: the resource to forward to (svc/x, deploy/x, pod/x), which
 	// must itself serve the service's port — typically a proxy in front of
 	// the database — plus an optional context and namespace.
 	Resource  string `yaml:"resource,omitempty"`  // kubectl: svc/x, deploy/x or pod/x
@@ -185,7 +185,7 @@ type KeePassXCSecretSpec struct {
 	Database         string   `yaml:"database" jsonschema:"required"` // .kdbx, ~ is expanded
 	Entry            string   `yaml:"entry,omitempty"`                // group/entry path, e.g. CI/Jenkins; unset = pick from a list
 	Group            string   `yaml:"group,omitempty"`                // with no entry: list only entries under this group
-	KeyFile          string   `yaml:"key_file,omitempty"`             // ~ is expanded
+	KeyFile          string   `yaml:"key_file,omitempty"`             // ~ is expanded; required with no_password
 	NoPassword       bool     `yaml:"no_password,omitempty"`          // key file only; never prompts
 	Attributes       []string `yaml:"attributes,omitempty"`           // default UserName, Password, URL, Notes
 	TOTP             bool     `yaml:"totp,omitempty"`                 // add the current TOTP code
@@ -407,7 +407,7 @@ type RunbookSpec struct {
 // ParamSpec is one value prompted for before a runbook runs. It reaches the
 // script as DEN_PARAM_<UPPERCASED_NAME>.
 type ParamSpec struct {
-	Name        string   `yaml:"name" json:"name"`                                   // the parameter's name; DEN_PARAM_ plus this, in capitals
+	Name        string   `yaml:"name" json:"name" jsonschema:"required"`             // the parameter's name; DEN_PARAM_ plus this, in capitals
 	Description string   `yaml:"description,omitempty" json:"description,omitempty"` // shown beside the prompt
 	Default     string   `yaml:"default,omitempty" json:"default,omitempty"`         // pre-filled value
 	Options     []string `yaml:"options,omitempty" json:"options,omitempty"`         // non-empty renders a select
@@ -436,7 +436,7 @@ type SequenceSpec struct {
 // ServiceSpec describes one service entry in the config file.
 type ServiceSpec struct {
 	Name       string          `yaml:"name" jsonschema:"required"`                                                                                                       // shown in the Connect list
-	Type       ServiceType     `yaml:"type" jsonschema:"required,enum=rds,enum=redis,enum=documentdb,enum=redshift,enum=opensearch,enum=neptune,enum=kafka,enum=docker"` // which section below holds its settings
+	Type       ServiceType     `yaml:"type" jsonschema:"required,enum=rds,enum=redis,enum=documentdb,enum=redshift,enum=opensearch,enum=neptune,enum=kafka,enum=docker"` // which section below holds its settings; that section is required
 	Env        string          `yaml:"env,omitempty"`                                                                                                                    // an entry of environments: its keys fill what the section leaves out
 	RDS        *RDSSpec        `yaml:"rds,omitempty"`                                                                                                                    // type: rds — RDS or Aurora
 	Kafka      *KafkaSpec      `yaml:"kafka,omitempty"`                                                                                                                  // type: kafka — Kafka (planned, not implemented)
@@ -474,10 +474,10 @@ type SSMTarget struct {
 
 	// Where and as whom (usually inherited from the named environment)
 
-	EC2InstanceID     string         `yaml:"ec2_instance_id,omitempty"`    // the bastion instance the SSM transport forwards through
+	EC2InstanceID     string         `yaml:"ec2_instance_id,omitempty"`    // the bastion instance the SSM transport forwards through; that transport requires it, here or from the service's env
 	AWSProfile        string         `yaml:"aws_profile,omitempty"`        // profile the SSM session runs as
 	CredentialProfile string         `yaml:"credential_profile,omitempty"` // profile credentials are minted as, and the identity the data store sees; aws_profile when unset
-	AWSRegionCode     string         `yaml:"aws_region_code,omitempty"`    // AWS region of the bastion and of the credential calls
+	AWSRegionCode     string         `yaml:"aws_region_code,omitempty"`    // AWS region of the bastion and of the credential calls; required, here or from the service's env
 	Transport         *TransportSpec `yaml:"transport,omitempty"`          // how the network is reached; SSM when unset
 }
 
@@ -528,9 +528,9 @@ type RDSSpec struct {
 	Engine       string `yaml:"engine,omitempty" jsonschema:"enum=postgres,enum=mysql"` // postgres (default) | mysql
 	UpdatePgpass bool   `yaml:"update_pgpass,omitempty"`                                // postgres only
 
-	RDSHost string `yaml:"rds_host,omitempty"` // endpoint to forward to: instance, cluster or RDS Proxy
-	DBName  string `yaml:"db_name,omitempty"`  // optional; the client's own default (PostgreSQL: the user name) when empty
-	DBUser  string `yaml:"db_user,omitempty"`  // the database user the IAM token is minted for
+	RDSHost string `yaml:"rds_host,omitempty" jsonschema:"required"` // endpoint to forward to: instance, cluster or RDS Proxy
+	DBName  string `yaml:"db_name,omitempty"`                        // optional; the client's own default (PostgreSQL: the user name) when empty
+	DBUser  string `yaml:"db_user,omitempty" jsonschema:"required"`  // the database user the IAM token is minted for
 }
 
 // KafkaSpec holds Kafka-specific config.
@@ -563,9 +563,9 @@ type RedisSpec struct {
 type DocumentDBSpec struct {
 	SSMTarget `yaml:",inline"`
 
-	DocumentDBHost string `yaml:"documentdb_host,omitempty"` // cluster endpoint
-	DBName         string `yaml:"db_name,omitempty"`         // optional, placed in the URI path
-	CAFile         string `yaml:"ca_file,omitempty"`         // optional, defaults to ~/.config/den/global-bundle.pem
+	DocumentDBHost string `yaml:"documentdb_host,omitempty" jsonschema:"required"` // cluster endpoint
+	DBName         string `yaml:"db_name,omitempty"`                               // optional, placed in the URI path
+	CAFile         string `yaml:"ca_file,omitempty"`                               // optional, defaults to ~/.config/den/global-bundle.pem
 }
 
 // RedshiftSpec holds Amazon Redshift config. Exactly one of ClusterIdentifier
@@ -575,10 +575,10 @@ type RedshiftSpec struct {
 	SSMTarget    `yaml:",inline"`
 	UpdatePgpass bool `yaml:"update_pgpass,omitempty"` // keep ~/.pgpass in sync with the current credential
 
-	RedshiftHost      string `yaml:"redshift_host,omitempty"`      // cluster or workgroup endpoint
-	ClusterIdentifier string `yaml:"cluster_identifier,omitempty"` // provisioned
-	WorkgroupName     string `yaml:"workgroup_name,omitempty"`     // Serverless
-	DBName            string `yaml:"db_name,omitempty"`            // default "dev"
+	RedshiftHost      string `yaml:"redshift_host,omitempty" jsonschema:"required"` // cluster or workgroup endpoint
+	ClusterIdentifier string `yaml:"cluster_identifier,omitempty"`                  // provisioned: the cluster; set this or workgroup_name
+	WorkgroupName     string `yaml:"workgroup_name,omitempty"`                      // Serverless: the workgroup; set this or cluster_identifier
+	DBName            string `yaml:"db_name,omitempty"`                             // default "dev"
 	// DBUser is provisioned-only: set, den calls GetClusterCredentials for that
 	// user; unset, GetClusterCredentialsWithIAM maps the caller's IAM identity.
 	DBUser        string `yaml:"db_user,omitempty"`
@@ -590,8 +590,8 @@ type RedshiftSpec struct {
 type OpenSearchSpec struct {
 	SSMTarget `yaml:",inline"`
 
-	OpenSearchHost string `yaml:"opensearch_host,omitempty"` // domain or collection endpoint
-	Serverless     bool   `yaml:"serverless,omitempty"`      // collection: requests are signed for aoss, not es
+	OpenSearchHost string `yaml:"opensearch_host,omitempty" jsonschema:"required"` // domain or collection endpoint
+	Serverless     bool   `yaml:"serverless,omitempty"`                            // collection: requests are signed for aoss, not es
 }
 
 // NeptuneSpec holds Amazon Neptune config. The cluster must have IAM database
@@ -599,8 +599,8 @@ type OpenSearchSpec struct {
 type NeptuneSpec struct {
 	SSMTarget `yaml:",inline"`
 
-	NeptuneHost string `yaml:"neptune_host,omitempty"` // cluster, reader or instance endpoint
-	Port        int    `yaml:"port,omitempty"`         // cluster port (default 8182)
+	NeptuneHost string `yaml:"neptune_host,omitempty" jsonschema:"required"` // cluster, reader or instance endpoint
+	Port        int    `yaml:"port,omitempty"`                               // cluster port (default 8182)
 }
 
 // DockerSpec holds docker-compose-specific config.
@@ -617,7 +617,7 @@ type VPNSpec struct {
 	Name        string   `yaml:"name" jsonschema:"required"` // shown in the VPN list
 	Gateway     string   `yaml:"gateway,omitempty"`          // gateway host[:port]; required unless config_file is set
 	Description string   `yaml:"description,omitempty"`      // shown as subtitle
-	ConfigFile  string   `yaml:"config_file,omitempty"`      // path to openfortivpn INI config file (-c flag)
+	ConfigFile  string   `yaml:"config_file,omitempty"`      // path to openfortivpn INI config file (-c flag); required unless gateway is set
 	ExtraArgs   []string `yaml:"extra_args,omitempty"`       // more openfortivpn arguments
 	HealthCheck string   `yaml:"health_check,omitempty"`     // host:port reachable ONLY via the VPN; probed to confirm the data path is alive
 	// Reconnect re-establishes a tunnel that dropped after being fully connected.

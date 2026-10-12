@@ -186,7 +186,7 @@
         },
         "ec2_instance_id": {
           "type": "string",
-          "description": "the bastion instance the SSM transport forwards through"
+          "description": "the bastion instance the SSM transport forwards through; that transport requires it, here or from the service's env"
         },
         "aws_profile": {
           "type": "string",
@@ -198,7 +198,7 @@
         },
         "aws_region_code": {
           "type": "string",
-          "description": "AWS region of the bastion and of the credential calls"
+          "description": "AWS region of the bastion and of the credential calls; required, here or from the service's env"
         },
         "transport": {
           "$ref": "#/$defs/TransportSpec",
@@ -219,6 +219,9 @@
       },
       "additionalProperties": false,
       "type": "object",
+      "required": [
+        "documentdb_host"
+      ],
       "description": "DocumentDBSpec holds Amazon DocumentDB-specific config."
     },
     "EnvSpec": {
@@ -284,7 +287,7 @@
         },
         "ec2_instance_id": {
           "type": "string",
-          "description": "the bastion instance the SSM transport forwards through"
+          "description": "the bastion instance the SSM transport forwards through; that transport requires it, here or from the service's env"
         },
         "aws_profile": {
           "type": "string",
@@ -296,7 +299,7 @@
         },
         "aws_region_code": {
           "type": "string",
-          "description": "AWS region of the bastion and of the credential calls"
+          "description": "AWS region of the bastion and of the credential calls; required, here or from the service's env"
         },
         "transport": {
           "$ref": "#/$defs/TransportSpec",
@@ -335,7 +338,7 @@
         },
         "key_file": {
           "type": "string",
-          "description": "~ is expanded"
+          "description": "~ is expanded; required with no_password"
         },
         "no_password": {
           "type": "boolean",
@@ -445,7 +448,7 @@
         },
         "ec2_instance_id": {
           "type": "string",
-          "description": "the bastion instance the SSM transport forwards through"
+          "description": "the bastion instance the SSM transport forwards through; that transport requires it, here or from the service's env"
         },
         "aws_profile": {
           "type": "string",
@@ -457,7 +460,7 @@
         },
         "aws_region_code": {
           "type": "string",
-          "description": "AWS region of the bastion and of the credential calls"
+          "description": "AWS region of the bastion and of the credential calls; required, here or from the service's env"
         },
         "transport": {
           "$ref": "#/$defs/TransportSpec",
@@ -474,6 +477,9 @@
       },
       "additionalProperties": false,
       "type": "object",
+      "required": [
+        "neptune_host"
+      ],
       "description": "NeptuneSpec holds Amazon Neptune config."
     },
     "OpenSearchSpec": {
@@ -500,7 +506,7 @@
         },
         "ec2_instance_id": {
           "type": "string",
-          "description": "the bastion instance the SSM transport forwards through"
+          "description": "the bastion instance the SSM transport forwards through; that transport requires it, here or from the service's env"
         },
         "aws_profile": {
           "type": "string",
@@ -512,7 +518,7 @@
         },
         "aws_region_code": {
           "type": "string",
-          "description": "AWS region of the bastion and of the credential calls"
+          "description": "AWS region of the bastion and of the credential calls; required, here or from the service's env"
         },
         "transport": {
           "$ref": "#/$defs/TransportSpec",
@@ -529,6 +535,9 @@
       },
       "additionalProperties": false,
       "type": "object",
+      "required": [
+        "opensearch_host"
+      ],
       "description": "OpenSearchSpec holds Amazon OpenSearch Service config: a VPC domain, or an OpenSearch Serverless collection reached through its VPC endpoint."
     },
     "ParamSpec": {
@@ -563,6 +572,9 @@
       },
       "additionalProperties": false,
       "type": "object",
+      "required": [
+        "name"
+      ],
       "description": "ParamSpec is one value prompted for before a runbook runs."
     },
     "RDSSpec": {
@@ -589,7 +601,7 @@
         },
         "ec2_instance_id": {
           "type": "string",
-          "description": "the bastion instance the SSM transport forwards through"
+          "description": "the bastion instance the SSM transport forwards through; that transport requires it, here or from the service's env"
         },
         "aws_profile": {
           "type": "string",
@@ -601,7 +613,7 @@
         },
         "aws_region_code": {
           "type": "string",
-          "description": "AWS region of the bastion and of the credential calls"
+          "description": "AWS region of the bastion and of the credential calls; required, here or from the service's env"
         },
         "transport": {
           "$ref": "#/$defs/TransportSpec",
@@ -634,6 +646,10 @@
       },
       "additionalProperties": false,
       "type": "object",
+      "required": [
+        "rds_host",
+        "db_user"
+      ],
       "description": "RDSSpec holds RDS-specific config."
     },
     "RedisSpec": {
@@ -660,7 +676,7 @@
         },
         "ec2_instance_id": {
           "type": "string",
-          "description": "the bastion instance the SSM transport forwards through"
+          "description": "the bastion instance the SSM transport forwards through; that transport requires it, here or from the service's env"
         },
         "aws_profile": {
           "type": "string",
@@ -672,7 +688,7 @@
         },
         "aws_region_code": {
           "type": "string",
-          "description": "AWS region of the bastion and of the credential calls"
+          "description": "AWS region of the bastion and of the credential calls; required, here or from the service's env"
         },
         "transport": {
           "$ref": "#/$defs/TransportSpec",
@@ -727,7 +743,7 @@
         },
         "ec2_instance_id": {
           "type": "string",
-          "description": "the bastion instance the SSM transport forwards through"
+          "description": "the bastion instance the SSM transport forwards through; that transport requires it, here or from the service's env"
         },
         "aws_profile": {
           "type": "string",
@@ -739,7 +755,7 @@
         },
         "aws_region_code": {
           "type": "string",
-          "description": "AWS region of the bastion and of the credential calls"
+          "description": "AWS region of the bastion and of the credential calls; required, here or from the service's env"
         },
         "transport": {
           "$ref": "#/$defs/TransportSpec",
@@ -755,11 +771,11 @@
         },
         "cluster_identifier": {
           "type": "string",
-          "description": "provisioned"
+          "description": "provisioned: the cluster; set this or workgroup_name"
         },
         "workgroup_name": {
           "type": "string",
-          "description": "Serverless"
+          "description": "Serverless: the workgroup; set this or cluster_identifier"
         },
         "db_name": {
           "type": "string",
@@ -776,6 +792,9 @@
       },
       "additionalProperties": false,
       "type": "object",
+      "required": [
+        "redshift_host"
+      ],
       "description": "RedshiftSpec holds Amazon Redshift config."
     },
     "RetrySpec": {
@@ -1155,7 +1174,7 @@
             "kafka",
             "docker"
           ],
-          "description": "which section below holds its settings"
+          "description": "which section below holds its settings; that section is required"
         },
         "env": {
           "type": "string",
@@ -1216,7 +1235,7 @@
         },
         "host": {
           "type": "string",
-          "description": "ssh: the destination (user@host) and extra ssh arguments such as\n[-i, ~/.ssh/key, -J, jump.example.com]. Key or agent auth only: den\ncannot answer a password prompt."
+          "description": "Required by ssh: the destination (user@host) and extra ssh arguments such as\n[-i, ~/.ssh/key, -J, jump.example.com]. Key or agent auth only: den\ncannot answer a password prompt."
         },
         "args": {
           "items": {
@@ -1227,11 +1246,11 @@
         },
         "endpoint_id": {
           "type": "string",
-          "description": "eice: the EC2 Instance Connect Endpoint ID. The service host is\nresolved to an IP first, since the endpoint only tunnels to IPs."
+          "description": "Required by eice: the EC2 Instance Connect Endpoint ID. The service host is\nresolved to an IP first, since the endpoint only tunnels to IPs."
         },
         "resource": {
           "type": "string",
-          "description": "kubectl: the resource to forward to (svc/x, deploy/x, pod/x), which\nmust itself serve the service's port — typically a proxy in front of\nthe database — plus an optional context and namespace."
+          "description": "Required by kubectl: the resource to forward to (svc/x, deploy/x, pod/x), which\nmust itself serve the service's port — typically a proxy in front of\nthe database — plus an optional context and namespace."
         },
         "context": {
           "type": "string",
@@ -1349,7 +1368,7 @@
         },
         "config_file": {
           "type": "string",
-          "description": "path to openfortivpn INI config file (-c flag)"
+          "description": "path to openfortivpn INI config file (-c flag); required unless gateway is set"
         },
         "extra_args": {
           "items": {
