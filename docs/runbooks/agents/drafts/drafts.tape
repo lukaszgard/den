@@ -3,27 +3,30 @@ Output docs/runbooks/agents/drafts/drafts.mp4
 
 Source docs/tape-settings.tape
 
+# The state folder holds the drafts; it must outlive den between the two runs.
 Env XDG_STATE_HOME "/tmp/den-drafts-demo/state"
 
-# Drafts: what is typed for an agent is kept. esc asks to keep it, the draft is a
-# row of the list, n offers it again, D deletes it. Needs an agent CLI installed
-# (claude here) so n asks what the agent should write; the request is never sent,
-# so it need not be logged in. No AWS. It runs on a copy of this folder's den.yaml
-# and one demo runbook in /tmp/den-drafts-demo. Run from the repository root.
+# Drafts: what is typed for an agent survives quitting den. esc asks to keep it,
+# the draft is a file in den's state folder, and after a restart n offers it
+# again, filled in where it was left. Needs an agent CLI installed (claude here)
+# so n asks what the agent should write; the request is never sent, so it need
+# not be logged in. No AWS. It runs on a copy of this folder's den.yaml and one
+# demo runbook in /tmp/den-drafts-demo. Run from the repository root.
 
-# The build, the copy and the launch are hidden; the recording opens on the
-# Runbooks panel.
+# The build, the copy and the first launch are hidden; den is built into the
+# demo folder and put first on PATH, so the visible restart is a plain den,
+# which finds ./den.yaml itself. The recording opens on the Runbooks panel.
 Hide
-Type "rm -rf /tmp/den-drafts-demo && mkdir -p /tmp/den-drafts-demo/runbooks && cp docs/runbooks/agents/drafts/den.yaml /tmp/den-drafts-demo/ && cp -R docs/runbooks/demo/env-report /tmp/den-drafts-demo/runbooks/ && rm -rf /tmp/den-drafts-demo/runbooks/*/logs && go build -o ./den ./cmd/den && clear"
+Type "rm -rf /tmp/den-drafts-demo && mkdir -p /tmp/den-drafts-demo/runbooks && cp docs/runbooks/agents/drafts/den.yaml /tmp/den-drafts-demo/ && cp -R docs/runbooks/demo/env-report /tmp/den-drafts-demo/runbooks/ && rm -rf /tmp/den-drafts-demo/runbooks/*/logs && go build -o /tmp/den-drafts-demo/den ./cmd/den && cd /tmp/den-drafts-demo && export PATH=$PWD:$PATH && clear"
 Enter
-Type "./den -c /tmp/den-drafts-demo/den.yaml"
+Type "den"
 Enter
 Wait+Screen@60s /Runbooks/
 Show
 Sleep 2s
 
 # ── A request, half written ───────────────────────────────────────────────────
-# Notice: esc does not drop what was typed; it asks to keep it.
+# Notice: a name and a request for the agent, not finished yet.
 Type "l"
 Sleep 3.5s   # Look: the panel has focus
 Sleep 1s     # Act: n starts a new runbook
@@ -33,49 +36,57 @@ Type "Rotate app password"
 Sleep 1.5s   # Type: the name
 Enter
 Sleep 700ms  # Transit: the request
-Type@40ms "rotate the app user's password in Secrets Manager, then print"
+Type@40ms "rotate the app user's password in Secrets Manager"
 Sleep 1s     # Act: esc, before it is finished
+
+# ── Keep it ───────────────────────────────────────────────────────────────────
+# Notice: esc does not drop what was typed; it asks to keep it.
 Escape
-Sleep 2.5s   # Read: Keep as a draft? y keep, n discard
+Sleep 4s     # Read: Keep as a draft? y keep, n discard
 Type "y"
-Sleep 3s     # Read: saved as draft, and the draft is the first row
+Sleep 4.5s   # Read: saved as draft, and the draft is the first row
 
-# ── Away and back ─────────────────────────────────────────────────────────────
-# Notice: the draft waits while something else has the screen.
-Tab
-Sleep 700ms  # Transit: the menu
-Down
-Sleep 2.5s   # Arrive: the Help panel
-Up
-Sleep 700ms  # Transit: back to Runbooks
-Tab
-Sleep 1s     # Back: the list, the draft still on top
+# ── Quit: the draft is a file ─────────────────────────────────────────────────
+# Notice: den is gone, and den paths says where the drafts are kept.
+Sleep 1s     # Act: q quits den
+Type "q"
+Wait@10s
+Sleep 700ms  # Transit: the shell
+Type@40ms "den paths | grep runbook-drafts"
+Sleep 1s     # Act
+Enter
+Wait@10s
+Sleep 4s     # Read: the drafts folder, exists, may hold secrets
 
-# ── Go on with it ─────────────────────────────────────────────────────────────
-# Notice: n offers the draft beside a new runbook, with its age.
+# ── Start den again ───────────────────────────────────────────────────────────
+# Notice: the draft is still the first row.
+Type@40ms "den"
+Sleep 1s     # Act
+Enter
+Wait+Screen@20s /Rotate app password/
+Sleep 4s     # Read: the draft row after the restart
+
+# ── Pick it up ────────────────────────────────────────────────────────────────
+# Notice: n offers the draft beside a new runbook, with its age, and opens it
+# where it was left.
+Type "l"
+Sleep 700ms  # Transit: the panel
+Sleep 1s     # Act: n
 Type "n"
-Sleep 3.5s   # Read: New runbook, then the draft
+Sleep 4s     # Read: New runbook, then the draft and its age
 Down
 Sleep 1s     # Act: the draft
 Enter
 Sleep 3.5s   # Look: the form, filled in where it was left
-Type@40ms " the new version id"
-Sleep 1.5s   # Type: the rest of the request
-Escape
-Sleep 1s     # Act: keep it again
-Type "y"
-Sleep 2.5s   # Read: one draft, its request longer
-
-# ── Done with it ──────────────────────────────────────────────────────────────
-# Notice: D on a draft asks, then deletes only the draft.
-Type "g"
-Sleep 1s     # Act: the cursor on the draft, the first row
-Type "D"
-Sleep 3s     # Read: Delete the draft "Rotate app password"? y/n
-Type "y"
-Sleep 2.5s   # Read: draft deleted; the runbook list as it was
+Type@40ms ", then print the new version id"
+Sleep 4s     # Read: the whole request
 
 # ── End ───────────────────────────────────────────────────────────────────────
+# The form is still open, so q alone would be typed into it: esc first, and n
+# answers the Keep as a draft? question.
 Hide
+Escape
+Sleep 500ms
+Type "n"
 Type "q"
 Sleep 500ms

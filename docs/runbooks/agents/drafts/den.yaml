@@ -1,8 +1,9 @@
 # den.yaml of drafts.tape: only what this demo shows. Placeholder environments, no
 # services, no updates. The tape copies it to /tmp/den-drafts-demo, next to a copy of
-# one demo runbook, so nothing in the repository changes:
+# one demo runbook and a den built there, and runs den inside that folder, where it
+# finds this file as ./den.yaml; nothing in the repository changes:
 #
-#   den -c /tmp/den-drafts-demo/den.yaml
+#   cd /tmp/den-drafts-demo && den
 version: "1"
 
 aws:
