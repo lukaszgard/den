@@ -9,12 +9,14 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/lukaszgard/den/internal/config"
 	"github.com/lukaszgard/den/internal/doctor"
 	"github.com/lukaszgard/den/internal/prereq"
+	"github.com/lukaszgard/den/internal/runbook"
 	"github.com/lukaszgard/den/internal/service"
 	"github.com/lukaszgard/den/internal/service/kafka"
 )
@@ -561,6 +563,178 @@ func TestRunbookNewWithAnAgent(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "other")); err == nil {
 		t.Fatal("a missing agent left a folder behind")
+	}
+}
+
+// OpenCode gets den's MCP server and instructions through a config file that
+// OPENCODE_CONFIG names, and the request through --prompt: its positional
+// argument is a project path.
+func TestRunbookNewWithOpenCode(t *testing.T) {
+	cfgPath := tempConfig(t)
+	data, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = []byte(strings.Replace(string(data), "runbooks:\n", "runbooks:\n  dirs: [runbooks]\n", 1))
+	if err := os.WriteFile(cfgPath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// The setting files go in den's state folder, here a temp one.
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	bin := t.TempDir()
+	logs := t.TempDir()
+	record, config := filepath.Join(logs, "opencode.log"), filepath.Join(logs, "config")
+	fake := "#!/bin/sh\n" +
+		"for a in \"$@\"; do printf '%s\\n' \"$a\" >> " + record + "; done\n" +
+		"printf '%s' \"$OPENCODE_CONFIG\" > " + config + "\n"
+	if err := os.WriteFile(filepath.Join(bin, "opencode"), []byte(fake), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin)
+
+	out, err := runDen(t, "runbook", "new", "RDS status", "check my RDS instances, in Rust", "--agent", "opencode", "-c", cfgPath)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if got := strings.Split(strings.TrimSpace(readText(t, record)), "\n"); !slices.Equal(got, []string{"--prompt", "check my RDS instances, in Rust"}) {
+		t.Errorf("opencode's args = %q, want only --prompt and the request", got)
+	}
+	var cfg struct {
+		MCP          map[string]struct{ Command []string }
+		Instructions []string
+	}
+	if err := json.Unmarshal([]byte(readText(t, readText(t, config))), &cfg); err != nil {
+		t.Fatalf("the config OPENCODE_CONFIG named: %v", err)
+	}
+	if cmd := cfg.MCP["den"].Command; len(cmd) != 4 || !slices.Equal(cmd[1:], []string{"mcp", "-c", cfgPath}) {
+		t.Errorf("den's MCP server = %q, want den mcp -c %s", cmd, cfgPath)
+	}
+	if len(cfg.Instructions) != 1 || !strings.Contains(readText(t, cfg.Instructions[0]), "Writing a den runbook") {
+		t.Errorf("instructions = %q, want a file with den's runbook guide", cfg.Instructions)
+	}
+}
+
+// Pi takes no MCP server: its instructions, in a file it appends to its
+// system prompt, send it to den runbook validate, and the request is its
+// last argument. Kimi Code takes no first prompt, which den says.
+func TestRunbookNewWithAnAgentWithoutMCP(t *testing.T) {
+	cfgPath := tempConfig(t)
+	data, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = []byte(strings.Replace(string(data), "runbooks:\n", "runbooks:\n  dirs: [runbooks]\n", 1))
+	if err := os.WriteFile(cfgPath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	bin, logs := t.TempDir(), t.TempDir()
+	for _, name := range []string{"pi", "kimi"} {
+		fake := "#!/bin/sh\nfor a in \"$@\"; do printf '%s\\n' \"$a\" >> " + filepath.Join(logs, name) + "; done\n"
+		if err := os.WriteFile(filepath.Join(bin, name), []byte(fake), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", bin)
+
+	out, err := runDen(t, "runbook", "new", "RDS status", "check my RDS instances, in Rust", "--agent", "pi", "-c", cfgPath)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	args := strings.Split(strings.TrimSpace(readText(t, filepath.Join(logs, "pi"))), "\n")
+	if len(args) != 3 || args[0] != "--append-system-prompt" || args[2] != "check my RDS instances, in Rust" {
+		t.Fatalf("pi's args = %q, want --append-system-prompt <file> and the request last", args)
+	}
+	if text := readText(t, args[1]); !strings.Contains(text, "runbook validate -c "+cfgPath+" ") || !strings.Contains(text, "Writing a den runbook") {
+		t.Errorf("pi's instructions do not name den runbook validate:\n%.400s", text)
+	}
+	if !strings.Contains(out, "it checks its work with den runbook validate") || strings.Contains(out, "MCP tools") {
+		t.Errorf("den should say how pi checks its work:\n%s", out)
+	}
+
+	out, err = runDen(t, "runbook", "new", "Kimi one", "write it", "--agent", "kimi", "-c", cfgPath)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if !strings.Contains(out, "Kimi Code takes no first prompt: type go in it to start") {
+		t.Errorf("den should say to type go:\n%s", out)
+	}
+	if args := strings.Split(strings.TrimSpace(readText(t, filepath.Join(logs, "kimi"))), "\n"); len(args) != 2 || args[0] != "--agent-file" {
+		t.Errorf("kimi's args = %q, want only --agent-file <file>", args)
+	}
+}
+
+func readText(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
+}
+
+// den runbook validate is validate_runbook for an agent's shell: a folder in
+// runbooks.dirs is reported ready or broken through the exit status too, and
+// one anywhere else is refused.
+func TestRunbookValidate(t *testing.T) {
+	cfgPath := tempConfig(t)
+	root := filepath.Join(filepath.Dir(cfgPath), "runbooks")
+	data, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = []byte(strings.Replace(string(data), "runbooks:\n", "runbooks:\n  dirs: [runbooks]\n", 1))
+	if err := os.WriteFile(cfgPath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := runDen(t, "runbook", "new", "Good one", "-c", cfgPath); err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	good := filepath.Join(root, "good-one")
+
+	out, err := runDen(t, "runbook", "validate", good, "-c", cfgPath)
+	if err != nil || !strings.Contains(out, "Good one is ready (bash)") || !strings.Contains(out, "den run 'Good one'") {
+		t.Fatalf("a good folder = %v\n%s", err, out)
+	}
+	out, err = runDen(t, "runbook", "validate", good, "--json", "-c", cfgPath)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	var v runbook.Validation
+	if err := json.Unmarshal([]byte(out), &v); err != nil {
+		t.Fatalf("not JSON: %v\n%s", err, out)
+	}
+	if !v.OK || v.Name != "Good one" || v.Kind != "bash" || v.Errors == nil {
+		t.Errorf("--json = %+v, want the validate_runbook fields", v)
+	}
+	// A name that is no path here is a folder of the first runbooks dir.
+	if out, err := runDen(t, "runbook", "validate", "good-one", "-c", cfgPath); err != nil || !strings.Contains(out, "is ready") {
+		t.Errorf("by name = %v\n%s", err, out)
+	}
+
+	broken := filepath.Join(root, "broken")
+	if err := os.MkdirAll(broken, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(broken, "runbook.yaml"), []byte("name: [\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, err = runDen(t, "runbook", "validate", broken, "-c", cfgPath)
+	var exit exitCodeError
+	if !errors.As(err, &exit) || exit.code != 1 {
+		t.Fatalf("a broken folder = %v, want exit status 1\n%s", err, out)
+	}
+	if !strings.Contains(out, "does not load yet") || !strings.Contains(out, "✗ runbook.yaml") {
+		t.Errorf("the broken folder's error is not listed:\n%s", out)
+	}
+
+	if _, err := runDen(t, "runbook", "validate", t.TempDir(), "-c", cfgPath); err == nil || !strings.Contains(err.Error(), "not a folder directly in a runbooks directory") {
+		t.Errorf("a folder outside runbooks.dirs = %v, want it refused", err)
+	}
+
+	t.Chdir(good)
+	if out, err := runDen(t, "runbook", "validate", "-c", cfgPath); err != nil || !strings.Contains(out, "Good one is ready") {
+		t.Errorf("no argument, in the folder = %v\n%s", err, out)
 	}
 }
 

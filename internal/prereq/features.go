@@ -48,8 +48,14 @@ var Features = map[string]Feature{
 
 	"runbook-sources": {About: "runbooks from git repositories (runbooks.sources)", Tools: []string{"git"}},
 
-	"claude": {About: "writing runbooks with Claude Code", Tools: []string{"claude"}},
-	"codex":  {About: "writing runbooks with Codex", Tools: []string{"codex"}},
+	"claude":   {About: "writing runbooks with Claude Code", Tools: []string{"claude"}},
+	"codex":    {About: "writing runbooks with Codex", Tools: []string{"codex"}},
+	"opencode": {About: "writing runbooks with OpenCode", Tools: []string{"opencode"}},
+	"copilot":  {About: "writing runbooks with Copilot CLI", Tools: []string{"copilot"}},
+	"qwen":     {About: "writing runbooks with Qwen Code", Tools: []string{"qwen"}},
+	"droid":    {About: "writing runbooks with Droid", Tools: []string{"droid"}},
+	"pi":       {About: "writing runbooks with Pi", Tools: []string{"pi"}},
+	"kimi":     {About: "writing runbooks with Kimi Code", Tools: []string{"kimi"}},
 }
 
 var transports = []string{config.TransportSSM, config.TransportSSH, config.TransportEICE, config.TransportKubectl}

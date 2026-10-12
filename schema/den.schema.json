@@ -97,7 +97,13 @@
           "type": "string",
           "enum": [
             "claude",
-            "codex"
+            "codex",
+            "opencode",
+            "copilot",
+            "qwen",
+            "droid",
+            "pi",
+            "kimi"
           ]
         }
       },

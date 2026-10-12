@@ -52,13 +52,13 @@ runbooks:
 
   rescan: true                          # pick up folders added, changed or removed while den runs
   template: ~/.config/den/runbook-template   # what a new runbook folder is copied from
-  agent: auto                           # who writes a runbook from a description: auto, claude, codex or an agents name
+  agent: auto                           # who writes a runbook from a description: auto, a kind (claude, opencode, …) or an agents name
   agents:                               # command lines that write one; n offers them when there are two or more
     - name: Claude Opus                 # unique; not "auto"; no space at either end
       command: claude --model opus      # split on whitespace, no quotes; den adds its arguments after yours
     - name: Ollama GLM
       command: ollama launch claude --model glm-5:cloud   # den adds "--" before its own arguments
-      # kind: claude                    # claude or codex; read from the command, needed only for other wrappers
+      # kind: claude                    # claude, codex, opencode, copilot, qwen, droid, pi or kimi; read from the command, needed only for other wrappers
 
   # Settings every runbook inherits; a runbook.yaml or an item overrides them.
   defaults:
@@ -94,7 +94,7 @@ runbooks:
 | `dirs`               | no       | none     | Directories holding runbook folders (and loose header scripts, below)                    |
 | `rescan`             | no       | `true`   | Read `dirs` again every 5 s while the Runbooks panel or a runbook is on screen, and when an editor tab closes |
 | `template`           | no       | built-in | A folder copied for every new runbook (`n` in the panel, `den runbook new`)               |
-| `agent`              | no       | `auto`   | The agent CLI that [writes a runbook from a description](#write-one-with-an-agent): `claude`, `codex`, `auto` (the first installed, Claude Code first; with `agents`, the first entry) or an `agents` name |
+| `agent`              | no       | `auto`   | The agent CLI that [writes a runbook from a description](#write-one-with-an-agent): `auto` (the first installed, in the order of the kinds; with `agents`, the first entry), a kind such as `claude` or `opencode`, or an `agents` name |
 | `agents`             | no       | none     | Command lines that write one, each with `name`, `command` and `kind`; see [Choosing the agent and model](#write-one-with-an-agent) |
 | `defaults`           | no       | below    | The settings below, for every runbook                                                    |
 | `items`              | no       | none     | Runbooks declared in den.yaml; same keys as a `runbook.yaml`                             |
@@ -154,7 +154,7 @@ agent: claude --model opus       # what E changes this runbook with
 | `about`       | no       | Show the About tab (default `true`)                                        |
 | `shell`       | no       | What `t` opens in the folder, e.g. `bash --rcfile .venv/bin/activate` (default `$SHELL`) |
 | `editor`      | no       | What `e` opens the script with, and `o` a run's log, e.g. `code --wait` (default `$VISUAL`, `$EDITOR`, `vi`) |
-| `agent`       | no       | The agent `E` [changes the runbook with](#change-one-with-an-agent): a command line such as `claude --model opus`, or `claude`, `codex`, `auto` or the name of a `runbooks.agents` entry (default `runbooks.agent`) |
+| `agent`       | no       | The agent `E` [changes the runbook with](#change-one-with-an-agent): a command line such as `claude --model opus`, or a kind such as `claude` or `opencode`, `auto` or the name of a `runbooks.agents` entry (default `runbooks.agent`) |
 
 `history`, `about`, `shell`, `editor` and `agent` can be set in `runbooks.defaults` for every
 runbook and overridden by one. `rescan` and `template` are set once, under `runbooks:`:
@@ -359,6 +359,8 @@ each after a `── attempt N ──` line.
 - For `t` and `e`: a shell and an editor (`$SHELL`, `$VISUAL`/`$EDITOR`); on Windows the
   terminals use ConPTY (Windows 10 1809+), not yet tried
 - Nerd Font for the panel's icons, as elsewhere in den
+- For an agent to write runbooks: one of the [agent CLIs den starts](#write-one-with-an-agent),
+  installed and logged in; `den doctor --for opencode` (or another kind) says how to install it
 
 ## Usage
 
@@ -436,12 +438,13 @@ open in its folder are stopped first.
 
 ### Write one with an agent
 
-Describe what the runbook should do and let Claude Code or Codex write it. den gives
-the agent its runbook guide — the folder and `runbook.yaml` format, what den sets in a
-run, the rules, notes for bash, Python, Go, Rust and Node — and your environments with
-their AWS profile and region, through its MCP server. The agent checks its work with
-den's `validate_runbook` before it hands over. The session is yours: it asks before it
-writes a file or runs a command, as it always does.
+Describe what the runbook should do and let an agent CLI write it: Claude Code, Codex,
+OpenCode, Copilot CLI, Qwen Code, Droid, Pi or Kimi Code. den gives the agent its runbook
+guide — the folder and `runbook.yaml` format, what den sets in a run, the rules, notes for
+bash, Python, Go, Rust and Node — and your environments with their AWS profile and region.
+The agent checks its work before it hands over: with den's `validate_runbook` MCP tool
+when it takes den's MCP server, else with `den runbook validate` from its shell. The
+session is yours: it asks before it writes a file or runs a command, as it always does.
 
 Each way has its own recording, with a config and notes of its own:
 [`den runbook new --agent`](agents/cli/README.md),
@@ -464,17 +467,56 @@ RDS status is ready (rust)
   or open it in den: Runbooks, then enter
 ```
 
-`--agent` takes `claude`, `codex`, `auto` or the name of an entry in `runbooks.agents`
-(an unknown name's error lists the configured ones); without it, the description alone
-uses `runbooks.agent`. den starts the agent in the new folder with everything on its command
-line, and leaves your agent's own configuration alone:
+`--agent` takes `auto`, a kind from the table below or the name of an entry in
+`runbooks.agents` (an unknown name's error lists the configured ones); without it, the
+description alone uses `runbooks.agent`. den starts the agent in the new folder and leaves
+your agent's own configuration alone. den's MCP server is den's own binary, `den mcp -c
+<your den.yaml>`; the guide comes with the task (write the runbook in this folder, check
+it, say how to run it):
 
-- Claude Code: `--mcp-config` (den's binary as the `den` MCP server, `den mcp -c <your
-  den.yaml>`), `--append-system-prompt` (the guide), and `--allowedTools` for den's two
-  read-only tools only;
-- Codex: `-c mcp_servers.den.command/args` and `-c developer_instructions`.
+| Kind | Agent CLI | den's MCP server | The guide and the task | The request |
+|---|---|---|---|---|
+| `claude` | Claude Code | `--mcp-config`, and `--allowedTools` for den's two read-only tools | `--append-system-prompt` | the first argument |
+| `codex` | Codex | `-c mcp_servers.den.command` and `.args` | `-c developer_instructions` | the last argument |
+| `opencode` | OpenCode | a config den writes and names in `OPENCODE_CONFIG`, which OpenCode merges with yours | a file that config's `instructions` lists | `--prompt` |
+| `copilot` | Copilot CLI | `--additional-mcp-config`, and `--allow-tool` for den's two read-only tools | an `AGENTS.md` in a folder den puts first in `COPILOT_CUSTOM_INSTRUCTIONS_DIRS` | `-i` |
+| `qwen` | Qwen Code | none: `den runbook validate` | `--append-system-prompt` | `-i` |
+| `droid` | Droid | none: `den runbook validate` | `--append-system-prompt-file` | the last argument |
+| `pi` | Pi | none: `den runbook validate` | `--append-system-prompt`, with a file's path | the last argument |
+| `kimi` | Kimi Code | none: `den runbook validate` | `--agent-file`: an agent that keeps Kimi's own prompt and reads the guide from a file | in the instructions: type `go` |
+
+The files den writes for OpenCode, Copilot CLI, Droid, Pi and Kimi Code go in `agents/`
+under den's state directory (`den paths` shows it), in a folder of their own for each start:
+starting the same agent on the same runbook with the same request reuses it, and den
+removes the folders it has not used for 30 days. They hold the guide, the task and paths,
+never a credential, and only you can read them.
+
+**Agents without den's MCP server.** Qwen Code, Droid, Pi and Kimi Code cannot be given an
+MCP server for one session without changing your own configuration, so den does not try.
+Their instructions say: wherever the guide says `validate_runbook`, run `den runbook
+validate -c <your den.yaml> <the folder>` in your shell, and the other den tools are not
+there. That command loads the folder as den will and reports what `validate_runbook`
+would, the same fields with `--json`; it exits 1 while the folder does not load. den says
+which way an agent checks its work when it starts it:
+
+```
+starting pi in it, with den's runbook guide; it checks its work with den runbook validate…
+```
+
+Kimi Code takes no first prompt in its TUI: den puts the request in its instructions and
+says `Kimi Code takes no first prompt: type go in it to start`. Type `go` (or anything
+short) there and it begins.
 
 den exits with the agent's exit code, after saying whether the folder loads.
+
+**Limits:**
+
+- OpenCode: den's config takes the place of an `OPENCODE_CONFIG` of your own for that
+  session. Your global and project configs still load, and so does what `ollama launch
+  opencode` passes.
+- Kimi Code waits for you to type `go`, as above.
+- Qwen Code, Droid, Pi and Kimi Code run `den runbook validate` with their shell tool, so
+  they ask before running it when that tool asks before a command.
 
 **Choosing the agent and model:** `runbooks.agents` lists command lines, each with a
 `name` and a `command`:
@@ -489,23 +531,34 @@ runbooks:
       command: codex --model gpt-5.4
     - name: Ollama GLM
       command: ollama launch claude --model glm-5:cloud
+    - name: OpenCode Sonnet
+      command: opencode --model anthropic/claude-sonnet-4-5
+    - name: Copilot
+      command: ollama launch copilot-cli      # kind copilot
+    - name: Pi
+      command: pi
 ```
 
-- `name`: required and unique, without a space at either end. `auto` is reserved;
-  `claude` and `codex` are allowed and replace the built-in agent of that name.
+- `name`: required and unique, without a space at either end. `auto` is reserved; a
+  kind's name (`claude`, `opencode`, …) is allowed and replaces the built-in agent of that
+  name.
 - `command`: required. It is split on whitespace, with no shell quoting (the same on
-  Windows). The first word is the program: `claude` and `codex` are found the way
-  `den doctor` finds them, anything else on `PATH`. Your words come first, den's
-  arguments (the request, `--mcp-config`, and so on) after them.
-- `kind`: `claude` or `codex`, which decides the arguments den adds. Left out, it is read
-  from the program (`claude`, `codex`, also with a path or `.exe`) or from
-  `ollama launch claude|codex`. A wrapper den cannot read it from needs `kind`, or the
-  file does not load.
+  Windows). The first word is the program: a kind's program (`claude`, `opencode`, …) is
+  found the way `den doctor` finds it, anything else on `PATH`. Your words come first,
+  den's arguments (the request, `--mcp-config`, and so on) after them.
+- `kind`: one of the kinds in the table above — `claude`, `codex`, `opencode`, `copilot`,
+  `qwen`, `droid`, `pi` or `kimi` — which decides the arguments den adds. Left out, it is
+  read from the program (`opencode`, also with a path or `.exe`) or from
+  `ollama launch <kind>`, where `ollama launch copilot-cli` is `copilot` too. A wrapper den
+  cannot read it from needs `kind`, or the file does not load.
 - `ollama launch <integration> [--model M]` runs the tool through Ollama; everything
   after a standalone `--` goes to that tool, so den puts `--` before its own arguments.
-- `runbooks.agent` names the default: `auto`, `claude`, `codex` or an entry. Without it
-  the first entry is the default. When it says `claude` or `codex` and no entry has that
-  name, the built-in agent is offered too, and is the default.
+  Ollama's integrations of the other kinds of tool (`chatgpt`, `hermes`, `cline`, …) are
+  not agents den can start.
+- `runbooks.agent` names the default: `auto`, a kind or an entry. Without it the first
+  entry is the default. When it names a kind and no entry has that name, the built-in
+  agent is offered too, and is the default. `auto` without entries starts the first kind
+  installed, in the table's order: claude, codex, opencode, copilot, qwen, droid, pi, kimi.
 - Entries whose program is not installed are left out of the pop-up.
 
 **From the Runbooks panel:** `n` asks for the name and, when an agent is installed,
@@ -550,15 +603,16 @@ runbook names the entry.
 The answer box works as `n`'s does (it grows, scrolls, `ctrl+j` starts a new line); `enter`
 starts the agent in a terminal tab of the view, in the runbook's folder, `esc` drops the
 question, and an empty answer starts the agent without a request, to tell it yourself. The
-agent gets den's runbook guide and `validate_runbook`, as when it writes a runbook, and is
-told the runbook exists: change what the request needs, keep the rest. A tab whose agent
+agent gets den's runbook guide and `validate_runbook` (or `den runbook validate`, for an
+agent without den's MCP server), as when it writes a runbook, and is told the runbook
+exists: change what the request needs, keep the rest. A tab whose agent
 quit restarts the same agent, still changing the runbook, with `enter`. When the agent quits,
 den reads the folder again.
 
 `E` refuses what an agent should not rewrite, and says why: a sequence (open one of its
 steps), a runbook declared in `den.yaml` (move it into a folder by hand), a one-script runbook
 (`m` moves it into a folder first), and an `agent` den cannot start (its program is missing,
-or it is no `runbooks.agents` name and not claude or codex). A runbook from a source offers
+or it is no `runbooks.agents` name and starts none of the kinds). A runbook from a source offers
 the copy `e` offers: edit the copy. A runbook from a source ignores its own `agent`, like its
 `shell` and `editor`: the agent that changes it is yours to choose.
 
@@ -726,6 +780,7 @@ den run "Rotate app DB password" \
 den run "Prod maintenance window" --yes         # sequences share the namespace
 den runbook new "Snapshot" [--dir ./ops/runbooks]
 den runbook new "RDS status" "check my RDS instances, in Rust" --agent claude
+den runbook validate ./ops/runbooks/rds-status [--json]   # what validate_runbook reports; exits 1 while it does not load
 den runbook migrate "Check bastion health"      # a header script into its own folder
 den runbook migrate --all --yes                 # every one, without asking
 den runbook delete "Snapshot" [--yes]           # for good, with its runs and state (alias rm)

@@ -15,7 +15,7 @@ A runbook is one of your own scripts or commands (shell, Python, Go, anything) t
 - Chain runbooks into sequences that stop at the first failure.
 - Look back at past runs: one log file per run, kept in the runbook's folder, with the run's status and parameters.
 - Open a runbook like a service: its log, its history, what den hands it, and terminals that open in its folder with the same environment.
-- Create a runbook from a template, or have Claude Code or Codex write it from a description (`den runbook new NAME "…"`).
+- Create a runbook from a template, or have an agent CLI write it from a description (`den runbook new NAME "…"`): Claude Code, Codex, OpenCode, Copilot CLI, Qwen Code, Droid, Pi or Kimi Code.
 - Change a runbook with an agent: `E` asks what to change and starts the runbook's own `agent` (`claude --model opus`, say) in a tab of its folder.
 - Delete a runbook or sequence for good with `D` (`den runbook delete NAME`): its folder or den.yaml entry, its runs and its state folder, after a question that lists all of it.
 - Keys: press `h` in the Runbooks panel or a runbook's view.
@@ -24,7 +24,7 @@ A runbook is one of your own scripts or commands (shell, Python, Go, anything) t
 
 - Whatever your scripts call (`aws`, `python3`, `flyway`, …) on your PATH.
 - No extra IAM permission: den adds nothing of its own to what your scripts do.
-- For an agent to write runbooks: Claude Code or Codex installed (`den doctor --for claude` or `--for codex`).
+- For an agent to write runbooks: one of the agent CLIs installed and logged in; `den doctor --for <kind>` (`--for opencode`, say) shows how to install it.
 
 ## Configure
 
@@ -33,14 +33,15 @@ A `runbooks:` section. Folders are found in `dirs`; `items` are runbooks written
 - `dirs`: folders holding runbook folders (each with a `runbook.yaml`); relative paths are read from `den.yaml`'s folder.
 - `rescan` (default `true`): notice runbook folders added, changed or removed while den runs.
 - `template`: a folder copied for every new runbook.
-- `agent` (default `auto`): `claude`, `codex`, `auto` for the first one installed (with `agents`, the first entry), or the `name` of an entry in `agents`.
+- `agent` (default `auto`): a kind (`claude`, `codex`, `opencode`, `copilot`, `qwen`, `droid`, `pi` or `kimi`), `auto` for the first one installed in that order (with `agents`, the first entry), or the `name` of an entry in `agents`.
 - `agents[]`: the command lines that write a runbook; `name` (unique, not `auto`, no spaces at either end) and `command` (required), `kind`.
 - `command` is split on whitespace, with no quotes; its first word is the program, and den adds its own arguments after yours.
-- `kind` (`claude` or `codex`) is read from the program (`claude`, `codex`, with a path or `.exe`) or from `ollama launch claude|codex`; set it for any other wrapper.
+- `kind` (one of the kinds above) is read from the program (`opencode`, with a path or `.exe`) or from `ollama launch <kind>`, where `ollama launch copilot-cli` is `copilot`; set it for any other wrapper.
+- Claude Code, Codex, OpenCode and Copilot CLI get den's MCP server for the session; Qwen Code, Droid, Pi and Kimi Code do not, and check their work with `den runbook validate` from their shell.
 - For `ollama launch …` den adds `--` before its arguments, so they reach the launched tool.
 - With `agents`, the first entry is the default unless `agent` names another; with two or more, `n` offers a choice.
 - `defaults`: `history` (runs kept, default 20), `about` (the About tab, default `true`), `shell`, `editor` and `agent`, for every runbook.
-- `agent` (in a `runbook.yaml`, an item or `defaults`): what `E` changes the runbook with; a command line such as `claude --model opus`, or `claude`, `codex`, `auto` or the name of an `agents` entry. Default: the top-level `agent`.
+- `agent` (in a `runbook.yaml`, an item or `defaults`): what `E` changes the runbook with; a command line such as `claude --model opus`, or a kind, `auto` or the name of an `agents` entry. Default: the top-level `agent`.
 - `items[]`: `name` and `command` (required), `description`, `env`, `cwd`, `env_vars`, `confirm`, `timeout`, `params`, `retry`, and the `defaults` keys.
 - `params[]`: `name`, `description`, `default`, `options`, `required`, `secret`; a parameter reaches the script as `DEN_PARAM_<NAME>`.
 - `retry`: `until_success`, `interval`, `max_attempts`, `timeout`; one of the last two is required.
@@ -66,6 +67,29 @@ runbooks:
   agents:
     - name: Ollama GLM
       command: ollama launch claude --model glm-5:cloud
+```
+
+OpenCode with a chosen model, and Copilot CLI; both get den's MCP server for the session:
+
+```yaml
+runbooks:
+  agent: OpenCode Sonnet
+  agents:
+    - name: OpenCode Sonnet
+      command: opencode --model anthropic/claude-sonnet-4-5
+    - name: Copilot CLI
+      command: copilot
+```
+
+Qwen Code and Pi through Ollama; they check their work with `den runbook validate`:
+
+```yaml
+runbooks:
+  agents:
+    - name: Ollama Qwen
+      command: ollama launch qwen
+    - name: Ollama Pi
+      command: ollama launch pi
 ```
 
 A wrapper den cannot read the agent from needs `kind`:
@@ -187,18 +211,19 @@ den runbook new "Rotate app password"
 den run "Rotate app password"
 ```
 
-Have Claude Code or Codex write it for you, from a description:
+Have an agent CLI write it for you, from a description:
 
 - In the panel: answer *Ask an agent to write it (optional)* after `n`. The box grows with what you type and scrolls once the pane is full; `ctrl+j` or `alt+enter` starts a new line, and `↑` or `shift+tab` goes back to the name to change it. With two or more agents an *Agent* row sits under it: `tab` (or `↓` from the last row) moves to it, `←` and `→` choose, `enter` creates. The agent works in a terminal tab of the new runbook, and den reads the folder again when it quits.
 - From a shell: `den runbook new "RDS status" "show the status of my RDS clusters in prod" --agent claude`.
-- `--agent` takes `auto`, `claude`, `codex` or the name of an entry in `agents`.
+- `--agent` takes `auto`, a kind such as `claude` or `opencode`, or the name of an entry in `agents`.
+- Kimi Code takes no first prompt: den puts the request in its instructions, and you type `go` in its tab to start it.
 - From Claude Code with den registered: `/mcp__den__new_runbook` followed by what it should do.
 
 Change a runbook you already have:
 
 1. Select it (or open its view) and press `E`: *What should change in NAME?*; the pop-up names the agent, `claude opus` for `agent: claude --model opus`.
 2. Describe the change; `ctrl+j` starts a new line, `enter` starts the agent, `esc` drops the question. Empty starts the agent without a request.
-3. The agent works in a terminal tab of the runbook's view, in its folder, and checks its work with den's `validate_runbook`; den reads the folder again when it quits.
+3. The agent works in a terminal tab of the runbook's view, in its folder, and checks its work with den's `validate_runbook`, or `den runbook validate` for an agent without den's MCP server; den reads the folder again when it quits.
 
 Or start from what you already have:
 
@@ -212,8 +237,10 @@ When a runbook has had its day, select it and press `D`, in the list or its view
 
 - No branching, conditions, parallel steps, scheduling or remote execution: put that logic in the script.
 - `den run` outside the dashboard has no tunnels, so it exports no `DEN_PORT_*`; a script that needs one should check for it.
+- Qwen Code, Droid, Pi and Kimi Code have no den MCP tools: they run `den runbook validate` with their shell tool, which may ask before it runs. Kimi Code waits for you to type `go`.
+- OpenCode reads den's config through `OPENCODE_CONFIG`, in place of one you set yourself for that session; your global and project configs still load.
 - `E` works on a runbook with a folder of its own: it refuses a sequence, a runbook written in `den.yaml` and a one-script runbook (`m` moves it into a folder first). A runbook from a source offers the copy `e` offers, and ignores its own `agent`.
-- An `agent` that is no `agents` name and does not start `claude` or `codex` (`./my-agent.sh`) gets a warning in the panel, and `E` refuses it: put the wrapper in `agents` with `kind`, and name it.
+- An `agent` that is no `agents` name and starts none of the kinds (`./my-agent.sh`) gets a warning in the panel, and `E` refuses it: put the wrapper in `agents` with `kind`, and name it.
 - A `runbook.yaml` is read strictly: an unknown key skips the runbook with a warning in the panel.
 - Only runs started from the dashboard write to the Logs panel; `den run` and `den mcp` runs do not.
 - A script's colours are shown, and kept in its log; other escape sequences (cursor moves, window titles) are dropped, so a progress bar that redraws shows its last line. A tool that prints plain text without a terminal needs its own colour flag. `o` opens a copy of the log without the colour codes.

@@ -333,7 +333,7 @@ func (f *newForm) fit() {
 func (f *newForm) where() string {
 	note := ""
 	if len(f.agents) == 0 {
-		note = "\nWith Claude Code or Codex installed, an agent can write it."
+		note = "\nWith an agent CLI such as Claude Code, Codex or OpenCode installed, an agent can write it."
 	}
 	dir := f.reg.NewRunbookDir(f.name.Value())
 	switch {
@@ -390,7 +390,7 @@ func (f *newForm) view(requestRows []string, more string) string {
 
 	if f.editing != "" {
 		request := append([]string{"What should change in " + f.editing + "?",
-			description(f.agents[0].Label() + " changes it in a terminal tab, in its folder; empty starts it without a request")},
+			description(f.agents[0].Label() + " changes it in a terminal tab, in its folder" + startsWithGo(f.agents[0]) + "; empty starts it without a request")},
 			requestRows...)
 		if more != "" {
 			request = append(request, dim.Render(more))
@@ -410,7 +410,7 @@ func (f *newForm) view(requestRows []string, more string) string {
 	if len(f.agents) > 0 {
 		request := append([]string{"Ask an agent to write it (optional)",
 			description("describe the runbook: " + f.agents[f.choice].Name +
-				" writes it in a terminal tab; empty opens run.sh in your editor")},
+				" writes it in a terminal tab" + startsWithGo(f.agents[f.choice]) + "; empty opens run.sh in your editor")},
 			requestRows...)
 		if more != "" {
 			request = append(request, dim.Render(more))
@@ -441,6 +441,15 @@ func (f *newForm) view(requestRows []string, more string) string {
 func (f *newForm) frame(parts ...string) string {
 	return lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(colorAccent).
 		Padding(1, 2).Render(strings.Join(parts, "\n\n"))
+}
+
+// startsWithGo is what a description adds for an agent that takes no first
+// prompt: it reads the request with its instructions and waits for the user.
+func startsWithGo(a agent.Agent) string {
+	if a.Note("request") == "" {
+		return ""
+	}
+	return " (type go there to start)"
 }
 
 // agentRow is the row that picks the agent: its name between ‹ ›, and where it

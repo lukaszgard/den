@@ -339,7 +339,7 @@ func runbookCmd() *cobra.Command {
 		Use:   "runbook",
 		Short: "Your scripts, run with den's AWS profile, region and tunnels: manage runbook folders",
 	}
-	cmd.AddCommand(runbookNewCmd(), runbookMigrateCmd(), runbookDeleteCmd(), runbookSourceCmd(), runbookBrowseCmd(),
+	cmd.AddCommand(runbookNewCmd(), runbookValidateCmd(), runbookMigrateCmd(), runbookDeleteCmd(), runbookSourceCmd(), runbookBrowseCmd(),
 		runbookSelectCmd(true), runbookSelectCmd(false), runbookForkCmd())
 	return cmd
 }
@@ -473,9 +473,11 @@ func runbookNewCmd() *cobra.Command {
 		Long: "Create a folder for a new runbook in the first of runbooks.dirs, or in --dir,\n" +
 			"from runbooks.template when den.yaml sets one, else from den's own template:\n" +
 			"a runbook.yaml naming every key it may set, a run.sh and a README.md.\n\n" +
-			"With --agent (or a description of what it should do), den then starts Claude Code or\n" +
-			"Codex in the folder, with den's MCP server and its runbook guide, to write it. The\n" +
-			"session is yours: the agent asks before it writes or runs anything.\n\n" +
+			"With --agent (or a description of what it should do), den then starts an agent CLI\n" +
+			"(Claude Code, Codex, OpenCode, Copilot CLI, Qwen Code, Droid, Pi or Kimi Code) in the\n" +
+			"folder to write it, with den's runbook guide and, for the agents that take one, den's\n" +
+			"MCP server; the others check their work with den runbook validate. The session is\n" +
+			"yours: the agent asks before it writes or runs anything.\n\n" +
 			"  den runbook new \"RDS status\" \"check my RDS instances in eu-staging, in Rust\" --agent claude",
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -535,7 +537,8 @@ func runbookNewCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&dir, "dir", "", "directory to create the folder in (default: the first of runbooks.dirs)")
-	cmd.Flags().StringVar(&agentName, "agent", "", "have an agent write it: claude, codex, auto or a runbooks.agents name (default: runbooks.agent, else auto)")
+	cmd.Flags().StringVar(&agentName, "agent", "", "have an agent write it: auto, a kind ("+strings.Join(config.AgentKinds, ", ")+
+		") or a runbooks.agents name (default: runbooks.agent, else auto)")
 	return cmd
 }
 
@@ -552,19 +555,42 @@ func runAgent(cmd *cobra.Command, reg *runbook.Registry, ag agent.Agent, cfgPath
 			cfgPath = abs
 		}
 	}
-	ac := agent.Command(ag, agent.Options{
+	ac, err := agent.Command(ag, agent.Options{
 		Den: den, Config: cfgPath, Dir: folder, Guide: reg.Guide(folder), Request: request,
 	})
+	if err != nil {
+		return err
+	}
 	out := cmd.OutOrStdout()
-	fmt.Fprintf(out, "starting %s in it, with den's MCP tools and runbook guide…\n\n", ag.Name)
+	if ag.MCP() {
+		fmt.Fprintf(out, "starting %s in it, with den's MCP tools and runbook guide…\n", ag.Name)
+	} else {
+		fmt.Fprintf(out, "starting %s in it, with den's runbook guide; it checks its work with den runbook validate…\n", ag.Name)
+	}
+	if note := ag.Note(request); note != "" {
+		fmt.Fprintln(out, note)
+	}
+	fmt.Fprintln(out)
 
 	c := exec.Command(ac.Path, ac.Args...)
 	c.Dir, c.Stdin, c.Stdout, c.Stderr = ac.Dir, os.Stdin, out, cmd.ErrOrStderr()
+	if len(ac.Env) > 0 {
+		c.Env = append(os.Environ(), ac.Env...)
+	}
 	runErr := c.Run()
 
 	reg.Rescan()
-	v := reg.ValidateFolder(folder)
 	fmt.Fprintln(out)
+	printValidation(out, folder, reg.ValidateFolder(folder))
+	if ee, ok := errors.AsType[*exec.ExitError](runErr); ok {
+		return exitCodeError{code: ee.ExitCode()}
+	}
+	return runErr
+}
+
+// printValidation says what den makes of a runbook folder: ready and how to
+// run it, or every error that keeps it from loading, then the warnings.
+func printValidation(out io.Writer, folder string, v runbook.Validation) {
 	switch {
 	case v.OK:
 		fmt.Fprintf(out, "%s is ready (%s)\n  run    den run %s\n  or open it in den: Runbooks, then enter\n", v.Name, v.Kind, shellArg(v.Name))
@@ -577,10 +603,57 @@ func runAgent(cmd *cobra.Command, reg *runbook.Registry, ag agent.Agent, cfgPath
 	for _, w := range v.Warnings {
 		fmt.Fprintf(out, "  ! %s\n", w)
 	}
-	if ee, ok := errors.AsType[*exec.ExitError](runErr); ok {
-		return exitCodeError{code: ee.ExitCode()}
+}
+
+func runbookValidateCmd() *cobra.Command {
+	var asJSON bool
+	cmd := &cobra.Command{
+		Use:   "validate [folder]",
+		Short: "Check a runbook folder the way den loads it",
+		Long: "Check a runbook folder the way den loads it, and report what den's validate_runbook\n" +
+			"MCP tool would: whether it is ready, every error that keeps it from loading, and\n" +
+			"warnings. It is for agents without den's MCP server, which run it from their shell.\n\n" +
+			"The folder (default: the current directory) must be directly in one of\n" +
+			"runbooks.dirs; a name that is no path here is taken in the first of them. The exit\n" +
+			"status is 1 when the folder does not load.",
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			reg, err := buildRegistry()
+			if err != nil {
+				return err
+			}
+			folder := "."
+			if len(args) == 1 {
+				folder = args[0]
+			}
+			// A path here is the one meant; ResolveFolder would take a
+			// relative one in the first runbooks directory instead.
+			if _, err := os.Stat(folder); err == nil {
+				if abs, err := filepath.Abs(folder); err == nil {
+					folder = abs
+				}
+			}
+			dir, err := reg.ResolveFolder(folder)
+			if err != nil {
+				return err
+			}
+			v := reg.ValidateFolder(dir)
+			out := cmd.OutOrStdout()
+			if asJSON {
+				if err := writeJSON(out, v); err != nil {
+					return err
+				}
+			} else {
+				printValidation(out, dir, v)
+			}
+			if !v.OK {
+				return exitCodeError{code: 1}
+			}
+			return nil
+		},
 	}
-	return runErr
+	cmd.Flags().BoolVar(&asJSON, "json", false, "print JSON")
+	return cmd
 }
 
 // shellArg quotes s for a shell command line when it needs it.

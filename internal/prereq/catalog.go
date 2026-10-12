@@ -494,16 +494,101 @@ var Catalog = []Tool{
 		},
 		Docs: "https://github.com/openai/codex",
 	},
+	{
+		ID:          "opencode",
+		Purpose:     "writing a runbook from a description (den runbook new --agent opencode)",
+		VersionArgs: []string{"--version"},
+		VersionRe:   anyVersion,
+		Install: map[string][]Recipe{
+			KeyMacOS:   {brew("brew install anomalyco/tap/opencode"), opencodeInstaller},
+			KeyDebian:  {opencodeInstaller},
+			KeyFedora:  {opencodeInstaller},
+			KeyWindows: {scoop("scoop install opencode"), manual("npm install -g opencode-ai")},
+		},
+		Docs: "https://opencode.ai/docs/",
+	},
+	{
+		ID:          "copilot",
+		Purpose:     "writing a runbook from a description (den runbook new --agent copilot)",
+		VersionArgs: []string{"--version"},
+		VersionRe:   anyVersion,
+		Install: map[string][]Recipe{
+			KeyMacOS:   {brew("brew install --cask copilot-cli"), copilotInstaller},
+			KeyDebian:  {copilotInstaller},
+			KeyFedora:  {copilotInstaller},
+			KeyWindows: {winget("winget install GitHub.Copilot"), manual("npm install -g @github/copilot")},
+		},
+		Docs: "https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli",
+	},
+	{
+		ID:          "qwen",
+		Purpose:     "writing a runbook from a description (den runbook new --agent qwen)",
+		VersionArgs: []string{"--version"},
+		VersionRe:   anyVersion,
+		Install: map[string][]Recipe{
+			KeyMacOS:   {qwenInstaller},
+			KeyDebian:  {qwenInstaller},
+			KeyFedora:  {qwenInstaller},
+			KeyWindows: {manual("irm https://qwen-code-assets.oss-cn-hangzhou.aliyuncs.com/installation/install-qwen-standalone.ps1 | iex")},
+		},
+		Docs: "https://qwenlm.github.io/qwen-code-docs/en/users/overview/",
+	},
+	{
+		ID:          "droid",
+		Purpose:     "writing a runbook from a description (den runbook new --agent droid)",
+		VersionArgs: []string{"--version"},
+		VersionRe:   anyVersion,
+		Install: map[string][]Recipe{
+			KeyMacOS:   {brew("brew install --cask droid"), droidInstaller},
+			KeyDebian:  {droidInstaller},
+			KeyFedora:  {droidInstaller},
+			KeyWindows: {manual("irm https://app.factory.ai/cli/windows | iex")},
+		},
+		Docs: "https://docs.factory.com/cli/getting-started/quickstart",
+	},
+	{
+		ID:          "pi",
+		Purpose:     "writing a runbook from a description (den runbook new --agent pi)",
+		VersionArgs: []string{"--version"},
+		VersionRe:   anyVersion,
+		Install: map[string][]Recipe{
+			KeyMacOS:   {piInstaller, piNPM},
+			KeyDebian:  {piInstaller, piNPM},
+			KeyFedora:  {piInstaller, piNPM},
+			KeyWindows: {piNPM},
+		},
+		Docs: "https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent",
+	},
+	{
+		ID:          "kimi",
+		Purpose:     "writing a runbook from a description (den runbook new --agent kimi)",
+		VersionArgs: []string{"--version"},
+		VersionRe:   anyVersion,
+		Install: map[string][]Recipe{
+			KeyMacOS:   {kimiInstaller},
+			KeyDebian:  {kimiInstaller},
+			KeyFedora:  {kimiInstaller},
+			KeyWindows: {manual("irm https://code.kimi.com/kimi-code/install.ps1 | iex")},
+		},
+		Docs: "https://www.kimi.com/code/docs/en/kimi-code-cli/reference/kimi-command.html",
+	},
 }
 
 // NerdFont is the catalog ID of the font check, which is not a program.
 const NerdFont = "nerd-font"
 
-// The agent CLIs: claude.ai and chatgpt.com host their official installers,
-// which is what their docs lead with.
+// The agent CLIs: their vendors host their official installers, which is
+// what their docs lead with.
 var (
-	claudeInstaller = manual("curl -fsSL https://claude.ai/install.sh | bash")
-	codexInstaller  = manual("curl -fsSL https://chatgpt.com/codex/install.sh | sh")
+	claudeInstaller   = manual("curl -fsSL https://claude.ai/install.sh | bash")
+	codexInstaller    = manual("curl -fsSL https://chatgpt.com/codex/install.sh | sh")
+	opencodeInstaller = manual("curl -fsSL https://opencode.ai/install | bash")
+	copilotInstaller  = manual("curl -fsSL https://gh.io/copilot-install | bash")
+	qwenInstaller     = manual("curl -fsSL https://qwen-code-assets.oss-cn-hangzhou.aliyuncs.com/installation/install-qwen-standalone.sh | bash")
+	droidInstaller    = manual("curl -fsSL https://app.factory.ai/cli | sh")
+	piInstaller       = manual("curl -fsSL https://pi.dev/install.sh | sh")
+	piNPM             = manual("npm install -g --ignore-scripts @earendil-works/pi-coding-agent")
+	kimiInstaller     = manual("curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash")
 )
 
 // awsV1Removal takes out an AWS CLI v1 that the v2 installer leaves in place.

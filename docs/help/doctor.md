@@ -46,7 +46,7 @@ den doctor --json
 den doctor --explain
 ```
 
-Feature names for `--for`: `rds`, `mysql`, `redis`, `documentdb`, `redshift`, `opensearch`, `neptune`, `docker`, `ssm`, `ssh`, `eice`, `kubectl`, `sops`, `vault`, `keepassxc`, `aws_secretsmanager`, `tunnel`, `vpn`, `aws`, `tui`, `runbook-sources`, `claude`, `codex`, or `all`.
+Feature names for `--for`: `rds`, `mysql`, `redis`, `documentdb`, `redshift`, `opensearch`, `neptune`, `docker`, `ssm`, `ssh`, `eice`, `kubectl`, `sops`, `vault`, `keepassxc`, `aws_secretsmanager`, `tunnel`, `vpn`, `aws`, `tui`, `runbook-sources`, the agent CLIs `claude`, `codex`, `opencode`, `copilot`, `qwen`, `droid`, `pi` and `kimi`, or `all`.
 
 ## Limitations
 

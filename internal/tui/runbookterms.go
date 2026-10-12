@@ -270,12 +270,13 @@ func (m *AppModel) sourceEditClosed(term liveTerminal) tea.Cmd {
 }
 
 // openAgentTerminal starts an agent in a terminal tab of the runbook's view,
-// in its folder, to write it from request: den's MCP server and runbook guide
-// go with it (see internal/agent). agentName is the runbooks.agents entry to
-// start, or claude or codex; "" is runbooks.agent's choice. tabID restarts an
-// exited agent tab. edit changes a runbook that exists instead of writing a
-// new one, and then "" is the runbook's own agent setting before
-// runbooks.agent's; the setting may be a command line, which Pick reads.
+// in its folder, to write it from request: den's runbook guide, and its MCP
+// server for an agent that takes one, go with it (see internal/agent).
+// agentName is the runbooks.agents entry to start, or a kind such as claude;
+// "" is runbooks.agent's choice. tabID restarts an exited agent tab. edit
+// changes a runbook that exists instead of writing a new one, and then "" is
+// the runbook's own agent setting before runbooks.agent's; the setting may be
+// a command line, which Pick reads.
 func (m *AppModel) openAgentTerminal(name, request, agentName string, tabID int, edit bool) []tea.Cmd {
 	r, ok := m.runbookReg.Lookup(name)
 	if !ok {
@@ -302,9 +303,13 @@ func (m *AppModel) openAgentTerminal(name, request, agentName string, tabID int,
 		cfgPath = abs
 	}
 	home := r.Runbook().Home()
-	cmd := agent.Command(ag, agent.Options{
+	cmd, err := agent.Command(ag, agent.Options{
 		Den: den, Config: cfgPath, Dir: home, Guide: m.runbookReg.Guide(home), Request: request, Edit: edit,
 	})
+	if err != nil {
+		text := err.Error()
+		return []tea.Cmd{func() tea.Msg { return warnFlash(text) }}
+	}
 	cols, rows := m.runbookView.TerminalSize()
 	start := m.startProgram
 	return []tea.Cmd{func() tea.Msg {

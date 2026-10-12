@@ -14,7 +14,7 @@ Every den command, and what it is for
 - `den config --check [FILE] [--json] [--strict]`: every problem in `den.yaml` with its line and a hint on how to fix it; exit 1 on an error, and with `--strict` on a warning.
 - `den connect NAME`: the dashboard with the service `den.yaml` calls NAME already connecting; `den list` shows the names.
 - `den run NAME`: run a runbook or sequence, exiting with the script's own code; `--param key=value` answers a parameter, and `--list` lists them all.
-- `den runbook new NAME ["what it should do"] [--agent NAME]`: create a runbook folder, and have Claude Code or Codex write it if you like. `den runbook migrate NAME` moves a header script into a folder, and `den runbook delete NAME` deletes a runbook or sequence for good, with its runs and state folder.
+- `den runbook new NAME ["what it should do"] [--agent NAME]`: create a runbook folder, and have an agent CLI (Claude Code, Codex, OpenCode, Copilot CLI, Qwen Code, Droid, Pi or Kimi Code) write it if you like. `den runbook validate [FOLDER] [--json]` checks a runbook folder the way den loads it, and exits 1 while it does not load. `den runbook migrate NAME` moves a header script into a folder, and `den runbook delete NAME` deletes a runbook or sequence for good, with its runs and state folder.
 - `den runbook source add|list|update|sync|remove`: manage git repositories of runbooks; `den runbook browse|install|uninstall|fork` work on one source's runbooks.
 - `den create-env [-f FILE]`: start a Docker Compose file, `docker-compose.yml` by default.
 - `den init --profile P [-o FILE]`: write a starter `den.yaml` from what that AWS profile can see.

@@ -19,11 +19,11 @@ again and the runbook is in the list.
 | `menu_order` | `[runbooks, help]`: the panel this demo uses |
 | `runbooks.dirs` | `runbooks`, next to this file (git-ignored) |
 | `runbooks.template` | `../template`, with a `.claude/settings.json` that pre-allows the writes **for this recording** |
-| `runbooks.agent` | Which agent `n` starts: `claude`, `codex`, `auto` or a `runbooks.agents` name |
+| `runbooks.agent` | Which agent `n` starts: a kind such as `claude`, `codex` or `opencode`, `auto` or a `runbooks.agents` name |
 
 ## Prerequisites
 
-Claude Code (or Codex), logged in. No AWS.
+Claude Code (or another agent CLI den can start), logged in. No AWS.
 
 ## Usage
 

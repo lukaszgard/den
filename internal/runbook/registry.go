@@ -541,8 +541,8 @@ func (r *Registry) ExecOptionsFor(rb Runbook, params map[string]string) ExecOpti
 	}
 }
 
-// Agent is the agent runbooks.agent names: claude, codex, the name of a
-// runbooks.agents entry, or "" for auto.
+// Agent is the agent runbooks.agent names: a kind such as claude, the name
+// of a runbooks.agents entry, or "" for auto.
 func (r *Registry) Agent() string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

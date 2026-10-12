@@ -45,8 +45,9 @@ a checkout with `go install ./cmd/den`.
 Commands: `den` (TUI), `den list|config|run --list [--json]`, `den doctor [--for F,…]
 [--os OS] [--deep] [--json] [--explain]` (alias `den check-install`),
 `den init --profile P`, `den paths [--json]`, `den schema`, `den mcp`,
-`den run NAME`, `den runbook new|migrate|delete NAME`, `den runbook source add|list|update|sync|remove`,
-`den runbook browse|install|uninstall|fork`, `den vpn install-helper|status`, `den connect NAME`.
+`den run NAME`, `den runbook new|migrate|delete NAME`, `den runbook validate [FOLDER]`,
+`den runbook source add|list|update|sync|remove`, `den runbook browse|install|uninstall|fork`,
+`den vpn install-helper|status`, `den connect NAME`.
 Config is discovered as `-c` (must exist) → `./den.yaml` → `platform.ConfigDir()/den.yaml`
 (`~/.config/den`, or `$XDG_CONFIG_HOME/den`, `%APPDATA%\den` on Windows) → `~/.config/den/den.yaml`.
 A person's own files (den.yaml, `vpn/*.conf`, runbooks) belong in `ConfigDir`; docs/files/README.md.
@@ -75,7 +76,8 @@ internal/
                     params, redaction, run history on disk, scaffolding
   update/           release check, download, checksum verification, install
   doctor/           den doctor checks; discover/ den init; mcpserver/ den mcp; ai/ --explain
-  agent/            starts Claude Code or Codex to write a runbook (den runbook new --agent)
+  agent/            starts an agent CLI (Claude Code, Codex, OpenCode, Copilot, Qwen, Droid, Pi,
+                    Kimi) to write a runbook (den runbook new --agent)
   tui/              root model (app.go), panes.go (pane adapters), actions.go (service keys)
     screens/        one Bubble Tea model per pane; components/ shared widgets
   tools/schemagen/  generates schema/den.schema.json; tools/configdoc/ docs/config/README.md

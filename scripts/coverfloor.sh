@@ -10,6 +10,7 @@ profile=${1:?usage: coverfloor.sh coverage.out}
 
 # package=floor%, space separated
 FLOORS="\
+github.com/lukaszgard/den/internal/agent=89 \
 github.com/lukaszgard/den/internal/config=87 \
 github.com/lukaszgard/den/internal/doctor=83 \
 github.com/lukaszgard/den/internal/platform=73 \

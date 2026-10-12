@@ -508,6 +508,15 @@ func validateRunbooks(cfg *Config) []error {
 	return append(errs, validateRunbookSources(cfg.Runbooks, cfg.Environments)...)
 }
 
+// AgentKinds are the agent CLIs den can start to write a runbook, in the order
+// runbooks.agent: auto tries them. A kind is also its program's name and its
+// `ollama launch` integration's. The names live here, not in internal/agent,
+// because validation needs them and agent imports prereq, which imports config.
+var AgentKinds = []string{"claude", "codex", "opencode", "copilot", "qwen", "droid", "pi", "kimi"}
+
+// ollamaAgentAliases are the other names `ollama launch` takes for a kind.
+var ollamaAgentAliases = map[string]string{"copilot-cli": "copilot"}
+
 // validateRunbookAgents checks runbooks.agents and which of them (or of the
 // built-in names) runbooks.agent picks.
 func validateRunbookAgents(rc *RunbooksConfig) []error {
@@ -533,30 +542,25 @@ func validateRunbookAgents(rc *RunbooksConfig) []error {
 		switch {
 		case strings.TrimSpace(a.Command) == "":
 			errs = append(errs, fmt.Errorf("runbooks.agents[%d] %q: command is required", i, a.Name))
-		case a.Kind != "" && a.Kind != "claude" && a.Kind != "codex":
-			errs = append(errs, fmt.Errorf("runbooks.agents[%d] %q: kind %q is not claude or codex", i, a.Name, a.Kind))
+		case a.Kind != "" && !slices.Contains(AgentKinds, a.Kind):
+			errs = append(errs, fmt.Errorf("runbooks.agents[%d] %q: kind %q is not one of %s", i, a.Name, a.Kind, strings.Join(AgentKinds, ", ")))
 		case a.Kind == "" && AgentKind(a.Command) == "":
-			errs = append(errs, fmt.Errorf("runbooks.agents[%d] %q: cannot tell whether %q starts claude or codex, set kind", i, a.Name, a.Command))
+			errs = append(errs, fmt.Errorf("runbooks.agents[%d] %q: cannot tell which agent CLI %q starts, set kind (one of %s)", i, a.Name, a.Command, strings.Join(AgentKinds, ", ")))
 		}
 	}
-	switch rc.Agent {
-	case "", "auto", "claude", "codex":
-	default:
-		if !names[rc.Agent] {
-			errs = append(errs, fmt.Errorf("runbooks.agent: %q is not an agent den can start (auto, claude, codex or the name of a runbooks.agents entry)", rc.Agent))
-		}
+	if rc.Agent != "" && rc.Agent != "auto" && !slices.Contains(AgentKinds, rc.Agent) && !names[rc.Agent] {
+		errs = append(errs, fmt.Errorf("runbooks.agent: %q is not an agent den can start (auto, %s or the name of a runbooks.agents entry)", rc.Agent, strings.Join(AgentKinds, ", ")))
 	}
 	return errs
 }
 
 // CheckRunbookAgent checks a runbook's agent setting: a name den knows (auto,
-// claude, codex or a runbooks.agents entry), or a command line it can tell
-// starts claude or codex, since that decides the arguments den adds. It is
+// an agent kind or a runbooks.agents entry), or a command line it can tell
+// starts one of the kinds, since that decides the arguments den adds. It is
 // apart from ValidateRunbook, which knows no agents: a runbook.yaml with a
 // bad agent still runs, only E cannot start it.
 func CheckRunbookAgent(where, value string, agents []AgentSpec) error {
-	switch value {
-	case "", "auto", "claude", "codex":
+	if value == "" || value == "auto" || slices.Contains(AgentKinds, value) {
 		return nil
 	}
 	for _, a := range agents {
@@ -567,13 +571,13 @@ func CheckRunbookAgent(where, value string, agents []AgentSpec) error {
 	if AgentKind(value) != "" {
 		return nil
 	}
-	return fmt.Errorf("%s: agent %q is no runbooks.agents name and does not start claude or codex: "+
-		"add it to runbooks.agents with kind, and name it", where, value)
+	return fmt.Errorf("%s: agent %q is no runbooks.agents name and starts none of %s: "+
+		"add it to runbooks.agents with kind, and name it", where, value, strings.Join(AgentKinds, ", "))
 }
 
-// AgentKind infers which agent CLI a command line starts: "claude", "codex",
-// or "" when it cannot tell. It reads the base name of the first word, so
-// /usr/local/bin/claude and claude.exe count, and `ollama launch claude|codex`.
+// AgentKind infers which of AgentKinds a command line starts, or "" when it
+// cannot tell. It reads the base name of the first word, so
+// /usr/local/bin/claude and claude.exe count, and `ollama launch <kind>`.
 // It lives here, not in internal/agent, because validation needs it and agent
 // imports prereq, which imports config.
 func AgentKind(command string) string {
@@ -581,12 +585,17 @@ func AgentKind(command string) string {
 	if len(words) == 0 {
 		return ""
 	}
-	switch program(words[0]) {
-	case "claude", "codex":
-		return program(words[0])
-	case "ollama":
-		if len(words) >= 3 && words[1] == "launch" && (words[2] == "claude" || words[2] == "codex") {
-			return words[2]
+	prog := program(words[0])
+	switch {
+	case slices.Contains(AgentKinds, prog):
+		return prog
+	case prog == "ollama" && len(words) >= 3 && words[1] == "launch":
+		kind := words[2]
+		if alias, ok := ollamaAgentAliases[kind]; ok {
+			kind = alias
+		}
+		if slices.Contains(AgentKinds, kind) {
+			return kind
 		}
 	}
 	return ""

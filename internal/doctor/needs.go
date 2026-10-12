@@ -76,7 +76,7 @@ func collectNeeds(in Input) needs {
 	// An agent named in runbooks.agent is one den starts; auto picks whichever
 	// is installed, so it needs none in particular.
 	if cfg.Runbooks != nil {
-		if a := cfg.Runbooks.Agent; a == "claude" || a == "codex" {
+		if a := cfg.Runbooks.Agent; slices.Contains(config.AgentKinds, a) {
 			n.tools[a] = append(n.tools[a], "runbooks.agent")
 		}
 		if len(cfg.Runbooks.Sources) > 0 {

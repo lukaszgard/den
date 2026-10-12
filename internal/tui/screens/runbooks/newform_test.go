@@ -261,6 +261,23 @@ func TestTheAgentRowIsDrawnOnlyToPickFromSeveral(t *testing.T) {
 	}
 }
 
+// An agent that takes no first prompt reads the request with its
+// instructions and waits in its tab: both forms say what to type there.
+func TestTheFormsSayToTypeGoForAnAgentWithoutAFirstPrompt(t *testing.T) {
+	f := newFormWith(t, 100, 30, "Kimi")
+	f.agents[0].Kind = agent.Kimi
+	f.press("enter")
+	f.typeText("Report")
+	f.press("enter")
+	if view := ansi.Strip(f.View()); !strings.Contains(squeeze(view), squeeze("Kimi writes it in a terminal tab (type go there to start); empty opens run.sh")) {
+		t.Errorf("the new-runbook form does not say to type go:\n%s", view)
+	}
+	edit, _ := newEditForm(f.reg, agent.Agent{Name: "kimi", Kind: agent.Kimi}, "Greet", 100, 30, true)
+	if view := ansi.Strip(edit.View()); !strings.Contains(squeeze(view), squeeze("kimi changes it in a terminal tab, in its folder (type go there to start)")) {
+		t.Errorf("the edit form does not say to type go:\n%s", view)
+	}
+}
+
 // tab, or ↓ from the request's last row, reaches the row; ←/→ pick, around the
 // list; ↑ and shift+tab go back; enter creates with the pick.
 func TestTheAgentRowPicksWithTheArrows(t *testing.T) {

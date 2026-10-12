@@ -142,13 +142,13 @@ runbooks:                           # user-defined scripts, run with den's conte
     - ../runbooks/demo              # docs/runbooks/demo: the same scripts in Python, Go, Rust and bash
   # rescan: true                    # pick up folders added/changed/removed while den runs
   # template: ~/.config/den/runbook-template   # folder copied for a new runbook
-  # agent: auto                     # writes a runbook from a description: auto, claude, codex or a name below
+  # agent: auto                     # writes a runbook from a description: auto, a kind (see kind) or a name below
   agents:                         # command lines that write one; n offers them when there are two or more
     - name: Claude Opus
       command: claude --model opus
     - name: Ollama qwen3
       command: ollama launch codex --model qwen3-coder:30b
-      # kind: claude              # claude or codex; only for a wrapper den cannot read it from
+      # kind: claude              # claude, codex, opencode, copilot, qwen, droid, pi or kimi; only for a wrapper den cannot read it from
   defaults:                         # every runbook inherits these; a runbook.yaml overrides them
     history: 20                     # finished runs kept, in the runbook's logs/ (0: only the last, in memory)
     # about: true                   # the About tab of a runbook's view

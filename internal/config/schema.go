@@ -278,12 +278,13 @@ type RunbooksConfig struct {
 	// the Runbooks pane's n; empty uses the built-in one.
 	Template string `yaml:"template,omitempty"`
 	// Agent is the agent that writes a runbook from a description (`den
-	// runbook new --agent`, the pane's n): auto (the first of claude and
-	// codex on PATH), claude, codex, or the name of an agents entry. Default
-	// auto, or the first entry of agents when there are any.
+	// runbook new --agent`, the pane's n): auto (the first agent CLI
+	// installed, in the order agents' kind lists them), a kind such as claude
+	// or opencode, or the name of an agents entry. Default auto, or the first
+	// entry of agents when there are any.
 	Agent string `yaml:"agent,omitempty"`
 	// Agents are command lines that write a runbook, for a model other than
-	// the CLI's default or a wrapper such as `ollama launch claude`. The
+	// the CLI's default or a wrapper such as `ollama launch opencode`. The
 	// Runbooks pane's n offers them when there are two or more.
 	Agents []AgentSpec `yaml:"agents,omitempty"`
 	// Defaults apply to every runbook; a runbook.yaml or an items entry
@@ -312,10 +313,13 @@ type AgentSpec struct {
 	// `claude --model opus`, `ollama launch claude --model glm-5:cloud`.
 	// den adds its own arguments after it.
 	Command string `yaml:"command" jsonschema:"required"`
-	// Kind says which CLI the command starts, so den passes the arguments
-	// that CLI takes. Empty infers it from a command starting with claude or
-	// codex, or `ollama launch claude|codex`; any other wrapper needs it.
-	Kind string `yaml:"kind,omitempty" jsonschema:"enum=claude,enum=codex"`
+	// Kind says which agent CLI the command starts, so den passes the
+	// arguments that CLI takes: claude (Claude Code), codex (Codex), opencode
+	// (OpenCode), copilot (Copilot CLI), qwen (Qwen Code), droid (Droid), pi
+	// (Pi) or kimi (Kimi Code). Empty infers it from a command starting with
+	// one of them, or `ollama launch <kind>` (copilot-cli for copilot); any
+	// other wrapper needs it.
+	Kind string `yaml:"kind,omitempty" jsonschema:"enum=claude,enum=codex,enum=opencode,enum=copilot,enum=qwen,enum=droid,enum=pi,enum=kimi"`
 }
 
 // RunbookSource is a git repository of runbook folders. Its runbooks run
@@ -370,8 +374,8 @@ type RunbookSettings struct {
 	// log. Default $VISUAL, then $EDITOR, then vi.
 	Editor string `yaml:"editor,omitempty"`
 	// Agent is the agent E changes the runbook with: a command line such as
-	// `claude --model opus`, or the name of a runbooks.agents entry, claude,
-	// codex or auto. Default runbooks.agent.
+	// `claude --model opus`, the name of a runbooks.agents entry, a kind such
+	// as claude or opencode, or auto. Default runbooks.agent.
 	Agent string `yaml:"agent,omitempty"`
 }
 
