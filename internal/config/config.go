@@ -512,7 +512,7 @@ func validateRunbooks(cfg *Config) []error {
 // runbooks.agent: auto tries them. A kind is also its program's name and its
 // `ollama launch` integration's. The names live here, not in internal/agent,
 // because validation needs them and agent imports prereq, which imports config.
-var AgentKinds = []string{"claude", "codex", "opencode", "copilot"}
+var AgentKinds = []string{"claude", "codex", "opencode", "copilot", "qwen", "droid", "pi", "kimi"}
 
 // ollamaAgentAliases are the other names `ollama launch` takes for a kind.
 var ollamaAgentAliases = map[string]string{"copilot-cli": "copilot"}

@@ -99,7 +99,11 @@
             "claude",
             "codex",
             "opencode",
-            "copilot"
+            "copilot",
+            "qwen",
+            "droid",
+            "pi",
+            "kimi"
           ]
         }
       },

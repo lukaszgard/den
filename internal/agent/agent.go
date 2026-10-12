@@ -1,8 +1,10 @@
 // Package agent starts an agent CLI — Claude Code, Codex and others — on a runbook's
-// folder, to write the runbook from what the user asked for. den's MCP server
-// and its runbook guide are handed over on the command line, so the agent
-// knows how a runbook looks and can check its work with validate_runbook,
-// and the user's own agent configuration is left as it is.
+// folder, to write the runbook from what the user asked for. den's runbook
+// guide, and its MCP server to those that take one for a session, are handed
+// over on the command line or in files den writes for that start, so the
+// agent knows how a runbook looks and can check its work (with
+// validate_runbook, or `den runbook validate` from its shell), and the user's
+// own agent configuration is left as it is.
 package agent
 
 import (
@@ -13,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -29,6 +32,10 @@ const (
 	Codex    = "codex"
 	OpenCode = "opencode"
 	Copilot  = "copilot"
+	Qwen     = "qwen"
+	Droid    = "droid"
+	Pi       = "pi"
+	Kimi     = "kimi"
 	// Auto is the first of Kinds that is installed.
 	Auto = "auto"
 )
@@ -138,6 +145,74 @@ var kinds = map[string]kindSpec{
 		}
 		return args, []string{"COPILOT_CUSTOM_INSTRUCTIONS_DIRS=" + dirs}, nil
 	}},
+
+	// The agents below take no MCP server for one session without changing
+	// the user's config: they check their work with den runbook validate.
+	Qwen: {title: "Qwen Code", prompt: true, args: func(s session) (args, env []string, err error) {
+		args = append(args, "--append-system-prompt", s.instructions)
+		if s.o.Request != "" {
+			args = append(args, "-i", s.o.Request)
+		}
+		return args, nil, nil
+	}},
+	Droid: {title: "Droid", prompt: true, args: func(s session) (args, env []string, err error) {
+		path, err := s.files("droid/instructions.md", s.instructions)
+		if err != nil {
+			return nil, nil, err
+		}
+		args = append(args, "--append-system-prompt-file", path)
+		if s.o.Request != "" {
+			args = append(args, s.o.Request)
+		}
+		return args, nil, nil
+	}},
+	// Pi's --append-system-prompt takes text or a file's path: the path keeps
+	// the guide off its command line.
+	Pi: {title: "Pi", prompt: true, args: func(s session) (args, env []string, err error) {
+		path, err := s.files("pi/instructions.md", s.instructions)
+		if err != nil {
+			return nil, nil, err
+		}
+		args = append(args, "--append-system-prompt", path)
+		if s.o.Request != "" {
+			args = append(args, s.o.Request)
+		}
+		return args, nil, nil
+	}},
+	// Kimi Code takes no first prompt for its TUI, and adds to its system
+	// prompt only through an agent file, whose body it renders as a template:
+	// the guide, with its ${…} examples, stays in a file of its own that the
+	// agent is told to read.
+	Kimi: {title: "Kimi Code", args: func(s session) (args, env []string, err error) {
+		instructions, err := s.files("kimi/instructions.md", s.instructions)
+		if err != nil {
+			return nil, nil, err
+		}
+		path, err := s.files("kimi/den-runbook.md", "---\n"+
+			"name: den-runbook\n"+
+			"description: Writes or changes the den runbook in the working directory.\n"+
+			"---\n"+
+			"${base_prompt}\n\n"+
+			"Before anything else, read "+instructions+" with your file tools: it holds den's runbook guide and your task. Follow it.\n")
+		if err != nil {
+			return nil, nil, err
+		}
+		return append(args, "--agent-file", path), nil, nil
+	}},
+}
+
+// MCP says whether the agent takes den's MCP server; one that does not checks
+// its work with `den runbook validate`.
+func (a Agent) MCP() bool { return kinds[a.Kind].mcp }
+
+// Note is what the user must do to start an agent that takes no first
+// prompt, which reads request with its instructions; "" for any other.
+func (a Agent) Note(request string) string {
+	spec, ok := kinds[a.Kind]
+	if !ok || spec.prompt || request == "" {
+		return ""
+	}
+	return spec.title + " takes no first prompt: type go in it to start"
 }
 
 // kindTitles are the agents' titles in the order Auto tries them.
@@ -406,31 +481,74 @@ type Options struct {
 	// Edit says the runbook in Dir exists and is to be changed, not written.
 	Edit bool
 	// Files is the directory den keeps the files some agents read their
-	// settings from (OpenCode's config, Copilot's AGENTS.md); empty is
-	// platform.StateDir()/agents. Tests point it at a temp dir.
+	// settings from (OpenCode's config, Copilot's AGENTS.md, Kimi's agent
+	// file); empty is platform.StateDir()/agents. Tests point it at a temp dir.
 	Files string
 }
 
-// Instructions are what the agent is told on top of its own instructions.
+// Instructions are what an agent with den's MCP server is told on top of its
+// own instructions.
 func (o Options) Instructions() string {
+	return o.task("call den's validate_runbook with this folder until it reports ok")
+}
+
+// task is the guide and the task, checked the way check says.
+func (o Options) task(check string) string {
 	if o.Edit {
 		return strings.TrimSpace(o.Guide) + "\n\n## Your task\n\n" +
 			"You are changing the den runbook in " + o.Dir + ", your working directory, as the user asks. " +
 			"Read its runbook.yaml, script and README.md first, keep what works, and change only what the request needs. " +
-			"When you are done, call den's validate_runbook with this folder until it reports ok, " +
+			"When you are done, " + check + ", " +
 			"then tell the user what changed and how to run it."
 	}
 	return strings.TrimSpace(o.Guide) + "\n\n## Your task\n\n" +
 		"You are writing the den runbook in " + o.Dir + ", your working directory. den created it with a " +
 		"runbook.yaml, run.sh and README.md to start from: change or replace them as the request needs " +
-		"(remove run.sh when the runbook is not a shell script). When it is written, call den's " +
-		"validate_runbook with this folder until it reports ok, then tell the user how to run it."
+		"(remove run.sh when the runbook is not a shell script). When it is written, " + check +
+		", then tell the user how to run it."
+}
+
+// validateCommand is the shell command that checks the runbook in o.Dir, for
+// an agent without den's MCP tools.
+func (o Options) validateCommand() string {
+	cmd := quote(o.Den) + " runbook validate"
+	if o.Config != "" {
+		cmd += " -c " + quote(o.Config)
+	}
+	return cmd + " " + quote(o.Dir)
+}
+
+// quote is a word of a shell command line an agent runs, quoted when it needs
+// it: in POSIX single quotes, or on Windows in double quotes, which cmd and
+// PowerShell both read and a Windows path cannot contain.
+func quote(s string) string { return quoteFor(runtime.GOOS, s) }
+
+func quoteFor(goos, s string) string {
+	if s != "" && !strings.ContainsAny(s, " \t'\"$`\\|&;<>()*?[]#~!{}%") {
+		return s
+	}
+	if goos == "windows" {
+		return `"` + s + `"`
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // instructions are what an agent of spec is told: Instructions, for one that
-// takes den's MCP server.
+// takes den's MCP server; for one that does not, the same with
+// `den runbook validate` in validate_runbook's place, which the guide names.
+// An agent that takes no first prompt reads the request here.
 func instructions(o Options, spec kindSpec) string {
-	return o.Instructions()
+	text := o.Instructions()
+	if !spec.mcp {
+		text = o.task("run `"+o.validateCommand()+"` in your shell until it reports the runbook ready") +
+			"\n\nYou have no den MCP tools in this session: wherever the guide says validate_runbook, " +
+			"run that command; run_runbook and den's other tools are not there."
+	}
+	if !spec.prompt && o.Request != "" {
+		text += "\n\n## The request\n\n" + o.Request +
+			"\n\nThe user starts the session with a short message such as \"go\": begin on this request then."
+	}
+	return text
 }
 
 // Command is the agent's command line: interactive, in the runbook's folder.

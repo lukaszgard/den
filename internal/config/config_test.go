@@ -734,11 +734,11 @@ func TestRunbookAgents(t *testing.T) {
 		{"empty command", `
   agents: [{name: Opus, command: "  "}]`, `runbooks.agents[0] "Opus": command is required`},
 		{"kind not inferable", `
-  agents: [{name: Opus, command: ./run-it.sh}]`, `cannot tell which agent CLI "./run-it.sh" starts, set kind (one of claude, codex, opencode, copilot)`},
+  agents: [{name: Opus, command: ./run-it.sh}]`, `cannot tell which agent CLI "./run-it.sh" starts, set kind (one of claude, codex, opencode, copilot, qwen, droid, pi, kimi)`},
 		{"ollama launch of something else", `
   agents: [{name: Opus, command: ollama launch chatgpt}]`, `set kind`},
 		{"unknown kind", `
-  agents: [{name: Opus, command: claude, kind: gemini}]`, `kind "gemini" is not one of claude, codex, opencode, copilot`},
+  agents: [{name: Opus, command: claude, kind: gemini}]`, `kind "gemini" is not one of claude, codex, opencode, copilot, qwen, droid, pi, kimi`},
 		{"opencode and copilot, inferred and given", `
   agent: copilot
   agents:
@@ -746,6 +746,14 @@ func TestRunbookAgents(t *testing.T) {
     - {name: Local, command: ollama launch opencode --model qwen3}
     - {name: GH, command: ollama launch copilot-cli}
     - {name: Wrapped, command: ./ai-opencode.sh, kind: opencode}`, ""},
+		{"the agents without den's MCP server", `
+  agent: kimi
+  agents:
+    - {name: Qwen, command: qwen --model qwen3-coder}
+    - {name: Droid, command: droid}
+    - {name: Pi local, command: ollama launch pi}
+    - {name: Kimi, command: /opt/bin/kimi}
+    - {name: Wrapped, command: ./ai.sh, kind: droid}`, ""},
 		{"unknown agent", `
   agent: Nope
   agents: [{name: Opus, command: claude}]`, `runbooks.agent: "Nope" is not an agent den can start`},
@@ -759,7 +767,7 @@ func TestRunbookAgents(t *testing.T) {
   defaults: {agent: codex}
   items: [{name: a, command: x, agent: Opus}]`, ""},
 		{"a runbook's agent den cannot start", `
-  items: [{name: a, command: x, agent: ./my-agent.sh}]`, `runbook "a": agent "./my-agent.sh" is no runbooks.agents name and starts none of claude, codex, opencode, copilot`},
+  items: [{name: a, command: x, agent: ./my-agent.sh}]`, `runbook "a": agent "./my-agent.sh" is no runbooks.agents name and starts none of claude, codex, opencode, copilot, qwen, droid, pi, kimi:`},
 		{"a runbook's agent: another kind's command line", `
   items: [{name: a, command: x, agent: copilot --model gpt-5.4}]`, ""},
 		{"the defaults' agent den cannot start", `
@@ -797,6 +805,14 @@ func TestAgentKind(t *testing.T) {
 		"ollama launch copilot-cli":                "copilot",
 		"ollama launch copilot":                    "copilot",
 		"ollama launch chatgpt":                    "",
+		"qwen -m qwen3-coder":                      "qwen",
+		"droid":                                    "droid",
+		"pi --model x":                             "pi",
+		"kimi":                                     "kimi",
+		"ollama launch qwen":                       "qwen",
+		"ollama launch pi":                         "pi",
+		"ollama launch kimi":                       "kimi",
+		"ollama launch droid":                      "droid",
 		"hermes":                                   "",
 		"ollama launch":                            "",
 		"ollama run claude":                        "",

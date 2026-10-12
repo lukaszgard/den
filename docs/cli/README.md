@@ -77,7 +77,7 @@ Check what den needs and say how to install what is missing
 
 Check what den needs outside itself and say how to fix what is missing: the config, the AWS CLI and Session Manager plugin, the AWS profiles den.yaml names, SSO logins, local ports, and the client tools the services and secrets use: where each is installed, its version, and the install, upgrade or PATH command for this OS and package manager. den prints these commands; it never runs them. Exits 1 when a check fails.
 
-`--for` checks only what the named features need, with or without a config: `den doctor --for sops` before writing den.yaml, or in an onboarding script. Features: aws, aws_secretsmanager, claude, codex, copilot, docker, documentdb, eice, keepassxc, kubectl, mysql, neptune, opencode, opensearch, rds, redis, redshift, runbook-sources, sops, ssh, ssm, tui, tunnel, vault, vpn, all. Tunnelled services (rds, redis, …) assume the ssm transport unless ssh, eice or kubectl is named too.
+`--for` checks only what the named features need, with or without a config: `den doctor --for sops` before writing den.yaml, or in an onboarding script. Features: aws, aws_secretsmanager, claude, codex, copilot, docker, documentdb, droid, eice, keepassxc, kimi, kubectl, mysql, neptune, opencode, opensearch, pi, qwen, rds, redis, redshift, runbook-sources, sops, ssh, ssm, tui, tunnel, vault, vpn, all. Tunnelled services (rds, redis, …) assume the ssm transport unless ssh, eice or kubectl is named too.
 
 `--os` shows the install steps for another platform (macos, debian, fedora, windows, optionally /amd64 or /arm64) without checking this machine, for the features named by `--for` or, without it, for everything den.yaml uses.
 
@@ -318,7 +318,7 @@ Create a runbook folder, and have an agent write it if you like
 
 Create a folder for a new runbook in the first of runbooks.dirs, or in `--dir`, from runbooks.template when den.yaml sets one, else from den's own template: a runbook.yaml naming every key it may set, a run.sh and a README.md.
 
-With `--agent` (or a description of what it should do), den then starts Claude Code or Codex in the folder, with den's MCP server and its runbook guide, to write it. The session is yours: the agent asks before it writes or runs anything.
+With `--agent` (or a description of what it should do), den then starts an agent CLI (Claude Code, Codex, OpenCode, Copilot CLI, Qwen Code, Droid, Pi or Kimi Code) in the folder to write it, with den's runbook guide and, for the agents that take one, den's MCP server; the others check their work with den runbook validate. The session is yours: the agent asks before it writes or runs anything.
 
 ```text
 den runbook new "RDS status" "check my RDS instances in eu-staging, in Rust" --agent claude
@@ -333,7 +333,7 @@ Guide: [docs/runbooks/agents/cli](../runbooks/agents/cli/README.md)
 Flags:
 
 ```text
---agent string   have an agent write it: claude, codex, auto or a runbooks.agents name (default: runbooks.agent, else auto)
+--agent string   have an agent write it: auto, a kind (claude, codex, opencode, copilot, qwen, droid, pi, kimi) or a runbooks.agents name (default: runbooks.agent, else auto)
 --dir string     directory to create the folder in (default: the first of runbooks.dirs)
 ```
 

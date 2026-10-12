@@ -614,3 +614,127 @@ func sessionFolderOf(t *testing.T, cmd termsession.Command) string {
 	}
 	return filepath.Dir(filepath.Dir(cfg))
 }
+
+// Qwen Code, Droid, Pi and Kimi Code take no MCP server for one session: their
+// instructions send them to den runbook validate instead, quoted for a shell.
+// Kimi Code takes no first prompt either, so the request is in its
+// instructions and the user types go.
+func TestCLIFallbackCommands(t *testing.T) {
+	o := opts
+	o.Dir = "/home/me/my runbooks/rds-status"
+	validate := "`/usr/local/bin/den runbook validate -c /home/me/.config/den/den.yaml '/home/me/my runbooks/rds-status'`"
+	for _, c := range []struct {
+		kind string
+		// want are den's arguments, DIR standing for the session's folder and
+		// TEXT for the instructions.
+		want  []string
+		files []string // the files written, under DIR
+	}{
+		{Qwen, []string{"--append-system-prompt", "TEXT", "-i", opts.Request}, nil},
+		{Droid, []string{"--append-system-prompt-file", "DIR/droid/instructions.md", opts.Request}, []string{"droid/instructions.md"}},
+		{Pi, []string{"--append-system-prompt", "DIR/pi/instructions.md", opts.Request}, []string{"pi/instructions.md"}},
+		{Kimi, []string{"--agent-file", "DIR/kimi/den-runbook.md"}, []string{"kimi/den-runbook.md", "kimi/instructions.md"}},
+	} {
+		t.Run(c.kind, func(t *testing.T) {
+			o := o
+			o.Files = t.TempDir()
+			cmd := mustCommand(t, Agent{Kind: c.kind, Path: c.kind}, o)
+			text := instructions(o, kinds[c.kind])
+			dir := ""
+			if c.files != nil {
+				dir = sessionDir(t, o.Files)
+			} else if entries, _ := os.ReadDir(o.Files); len(entries) != 0 {
+				t.Errorf("%s wrote files it does not read: %v", c.kind, entries)
+			}
+			var want []string
+			for _, w := range c.want {
+				if rest, ok := strings.CutPrefix(w, "DIR/"); ok {
+					w = filepath.Join(dir, filepath.FromSlash(rest))
+				}
+				if w == "TEXT" {
+					w = text
+				}
+				want = append(want, w)
+			}
+			if !reflect.DeepEqual(cmd.Args, want) || cmd.Env != nil {
+				t.Errorf("args = %q env %q, want %q", cmd.Args, cmd.Env, want)
+			}
+			for _, f := range c.files {
+				if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
+					t.Error(err)
+				}
+			}
+
+			for _, w := range []string{"Writing a den runbook", "run " + validate + " in your shell until it reports the runbook ready",
+				"You have no den MCP tools in this session"} {
+				if !strings.Contains(text, w) {
+					t.Errorf("instructions lack %q:\n%s", w, text)
+				}
+			}
+			if strings.Contains(text, "call den's validate_runbook") {
+				t.Errorf("instructions send an agent without MCP tools to validate_runbook:\n%s", text)
+			}
+			if got := strings.Contains(text, "## The request\n\n"+opts.Request); got != (c.kind == Kimi) {
+				t.Errorf("request in the instructions = %v, want it only for the agent without a first prompt", got)
+			}
+			if c.files != nil && c.kind != Kimi {
+				if got := readFile(t, filepath.Join(dir, c.files[0])); got != text {
+					t.Errorf("%s = %q, want the instructions", c.files[0], got)
+				}
+			}
+		})
+	}
+
+	o.Files = t.TempDir()
+	mustCommand(t, Agent{Kind: Kimi, Path: "kimi"}, o)
+	dir := sessionDir(t, o.Files)
+	agentFile := readFile(t, filepath.Join(dir, "kimi", "den-runbook.md"))
+	if !strings.HasPrefix(agentFile, "---\nname: den-runbook\ndescription: ") || !strings.Contains(agentFile, "\n---\n${base_prompt}\n") ||
+		!strings.Contains(agentFile, "read "+filepath.Join(dir, "kimi", "instructions.md")+" with your file tools") {
+		t.Errorf("Kimi's agent file = %q, want front matter, the base prompt and the instructions' path", agentFile)
+	}
+	if got := readFile(t, filepath.Join(dir, "kimi", "instructions.md")); got != instructions(o, kinds[Kimi]) {
+		t.Errorf("Kimi's instructions.md = %q", got)
+	}
+
+	o.Edit = true
+	if text := instructions(o, kinds[Pi]); !strings.Contains(text, "changing the den runbook") || !strings.Contains(text, validate) {
+		t.Errorf("edit instructions without MCP tools = %q", text)
+	}
+	o.Config = ""
+	if got := o.validateCommand(); got != "/usr/local/bin/den runbook validate '/home/me/my runbooks/rds-status'" {
+		t.Errorf("without a config = %q", got)
+	}
+}
+
+func TestNote(t *testing.T) {
+	if got := (Agent{Kind: Kimi}).Note("write it"); got != "Kimi Code takes no first prompt: type go in it to start" {
+		t.Errorf("kimi = %q", got)
+	}
+	for _, a := range []Agent{{Kind: Kimi}, {Kind: Pi}, {Kind: Claude}, {Kind: "gemini"}} {
+		request := "write it"
+		if a.Kind == Kimi {
+			request = ""
+		}
+		if got := a.Note(request); got != "" {
+			t.Errorf("%s with %q = %q, want none", a.Kind, request, got)
+		}
+	}
+	if (Agent{Kind: Pi}).MCP() || !(Agent{Kind: Copilot}).MCP() {
+		t.Error("MCP() does not follow the kinds' table")
+	}
+}
+
+func TestQuote(t *testing.T) {
+	for _, c := range []struct{ goos, in, want string }{
+		{"linux", "/usr/local/bin/den", "/usr/local/bin/den"},
+		{"linux", "/home/me/it's mine", `'/home/me/it'\''s mine'`},
+		{"darwin", "", "''"},
+		{"windows", `C:\Program Files\den\den.exe`, `"C:\Program Files\den\den.exe"`},
+		{"windows", "den", "den"},
+	} {
+		if got := quoteFor(c.goos, c.in); got != c.want {
+			t.Errorf("quoteFor(%s, %q) = %s, want %s", c.goos, c.in, got, c.want)
+		}
+	}
+}

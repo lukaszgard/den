@@ -311,7 +311,7 @@ Guide: [docs/runbooks/agents/cli](../runbooks/agents/cli/README.md)
 |---|---|---|---|---|
 | `name` | string | yes |  |  |
 | `command` | string | yes |  |  |
-| `kind` | string |  | `claude`, `codex`, `opencode`, `copilot` |  |
+| `kind` | string |  | `claude`, `codex`, `opencode`, `copilot`, `qwen`, `droid`, `pi`, `kimi` |  |
 
 ## `runbooks.defaults`
 

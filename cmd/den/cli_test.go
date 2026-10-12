@@ -614,6 +614,56 @@ func TestRunbookNewWithOpenCode(t *testing.T) {
 	}
 }
 
+// Pi takes no MCP server: its instructions, in a file it appends to its
+// system prompt, send it to den runbook validate, and the request is its
+// last argument. Kimi Code takes no first prompt, which den says.
+func TestRunbookNewWithAnAgentWithoutMCP(t *testing.T) {
+	cfgPath := tempConfig(t)
+	data, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = []byte(strings.Replace(string(data), "runbooks:\n", "runbooks:\n  dirs: [runbooks]\n", 1))
+	if err := os.WriteFile(cfgPath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	bin, logs := t.TempDir(), t.TempDir()
+	for _, name := range []string{"pi", "kimi"} {
+		fake := "#!/bin/sh\nfor a in \"$@\"; do printf '%s\\n' \"$a\" >> " + filepath.Join(logs, name) + "; done\n"
+		if err := os.WriteFile(filepath.Join(bin, name), []byte(fake), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", bin)
+
+	out, err := runDen(t, "runbook", "new", "RDS status", "check my RDS instances, in Rust", "--agent", "pi", "-c", cfgPath)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	args := strings.Split(strings.TrimSpace(readText(t, filepath.Join(logs, "pi"))), "\n")
+	if len(args) != 3 || args[0] != "--append-system-prompt" || args[2] != "check my RDS instances, in Rust" {
+		t.Fatalf("pi's args = %q, want --append-system-prompt <file> and the request last", args)
+	}
+	if text := readText(t, args[1]); !strings.Contains(text, "runbook validate -c "+cfgPath+" ") || !strings.Contains(text, "Writing a den runbook") {
+		t.Errorf("pi's instructions do not name den runbook validate:\n%.400s", text)
+	}
+	if !strings.Contains(out, "it checks its work with den runbook validate") || strings.Contains(out, "MCP tools") {
+		t.Errorf("den should say how pi checks its work:\n%s", out)
+	}
+
+	out, err = runDen(t, "runbook", "new", "Kimi one", "write it", "--agent", "kimi", "-c", cfgPath)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if !strings.Contains(out, "Kimi Code takes no first prompt: type go in it to start") {
+		t.Errorf("den should say to type go:\n%s", out)
+	}
+	if args := strings.Split(strings.TrimSpace(readText(t, filepath.Join(logs, "kimi"))), "\n"); len(args) != 2 || args[0] != "--agent-file" {
+		t.Errorf("kimi's args = %q, want only --agent-file <file>", args)
+	}
+}
+
 func readText(t *testing.T, path string) string {
 	t.Helper()
 	data, err := os.ReadFile(path)

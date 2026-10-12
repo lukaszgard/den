@@ -473,9 +473,11 @@ func runbookNewCmd() *cobra.Command {
 		Long: "Create a folder for a new runbook in the first of runbooks.dirs, or in --dir,\n" +
 			"from runbooks.template when den.yaml sets one, else from den's own template:\n" +
 			"a runbook.yaml naming every key it may set, a run.sh and a README.md.\n\n" +
-			"With --agent (or a description of what it should do), den then starts Claude Code or\n" +
-			"Codex in the folder, with den's MCP server and its runbook guide, to write it. The\n" +
-			"session is yours: the agent asks before it writes or runs anything.\n\n" +
+			"With --agent (or a description of what it should do), den then starts an agent CLI\n" +
+			"(Claude Code, Codex, OpenCode, Copilot CLI, Qwen Code, Droid, Pi or Kimi Code) in the\n" +
+			"folder to write it, with den's runbook guide and, for the agents that take one, den's\n" +
+			"MCP server; the others check their work with den runbook validate. The session is\n" +
+			"yours: the agent asks before it writes or runs anything.\n\n" +
 			"  den runbook new \"RDS status\" \"check my RDS instances in eu-staging, in Rust\" --agent claude",
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -535,7 +537,8 @@ func runbookNewCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&dir, "dir", "", "directory to create the folder in (default: the first of runbooks.dirs)")
-	cmd.Flags().StringVar(&agentName, "agent", "", "have an agent write it: claude, codex, auto or a runbooks.agents name (default: runbooks.agent, else auto)")
+	cmd.Flags().StringVar(&agentName, "agent", "", "have an agent write it: auto, a kind ("+strings.Join(config.AgentKinds, ", ")+
+		") or a runbooks.agents name (default: runbooks.agent, else auto)")
 	return cmd
 }
 
@@ -559,7 +562,15 @@ func runAgent(cmd *cobra.Command, reg *runbook.Registry, ag agent.Agent, cfgPath
 		return err
 	}
 	out := cmd.OutOrStdout()
-	fmt.Fprintf(out, "starting %s in it, with den's MCP tools and runbook guide…\n\n", ag.Name)
+	if ag.MCP() {
+		fmt.Fprintf(out, "starting %s in it, with den's MCP tools and runbook guide…\n", ag.Name)
+	} else {
+		fmt.Fprintf(out, "starting %s in it, with den's runbook guide; it checks its work with den runbook validate…\n", ag.Name)
+	}
+	if note := ag.Note(request); note != "" {
+		fmt.Fprintln(out, note)
+	}
+	fmt.Fprintln(out)
 
 	c := exec.Command(ac.Path, ac.Args...)
 	c.Dir, c.Stdin, c.Stdout, c.Stderr = ac.Dir, os.Stdin, out, cmd.ErrOrStderr()

@@ -315,10 +315,11 @@ type AgentSpec struct {
 	Command string `yaml:"command" jsonschema:"required"`
 	// Kind says which agent CLI the command starts, so den passes the
 	// arguments that CLI takes: claude (Claude Code), codex (Codex), opencode
-	// (OpenCode) or copilot (Copilot CLI). Empty infers it from a command
-	// starting with one of them, or `ollama launch <kind>` (copilot-cli for
-	// copilot); any other wrapper needs it.
-	Kind string `yaml:"kind,omitempty" jsonschema:"enum=claude,enum=codex,enum=opencode,enum=copilot"`
+	// (OpenCode), copilot (Copilot CLI), qwen (Qwen Code), droid (Droid), pi
+	// (Pi) or kimi (Kimi Code). Empty infers it from a command starting with
+	// one of them, or `ollama launch <kind>` (copilot-cli for copilot); any
+	// other wrapper needs it.
+	Kind string `yaml:"kind,omitempty" jsonschema:"enum=claude,enum=codex,enum=opencode,enum=copilot,enum=qwen,enum=droid,enum=pi,enum=kimi"`
 }
 
 // RunbookSource is a git repository of runbook folders. Its runbooks run
