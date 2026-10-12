@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -563,6 +564,63 @@ func TestRunbookNewWithAnAgent(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, "other")); err == nil {
 		t.Fatal("a missing agent left a folder behind")
 	}
+}
+
+// OpenCode gets den's MCP server and instructions through a config file that
+// OPENCODE_CONFIG names, and the request through --prompt: its positional
+// argument is a project path.
+func TestRunbookNewWithOpenCode(t *testing.T) {
+	cfgPath := tempConfig(t)
+	data, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = []byte(strings.Replace(string(data), "runbooks:\n", "runbooks:\n  dirs: [runbooks]\n", 1))
+	if err := os.WriteFile(cfgPath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// The setting files go in den's state folder, here a temp one.
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	bin := t.TempDir()
+	logs := t.TempDir()
+	record, config := filepath.Join(logs, "opencode.log"), filepath.Join(logs, "config")
+	fake := "#!/bin/sh\n" +
+		"for a in \"$@\"; do printf '%s\\n' \"$a\" >> " + record + "; done\n" +
+		"printf '%s' \"$OPENCODE_CONFIG\" > " + config + "\n"
+	if err := os.WriteFile(filepath.Join(bin, "opencode"), []byte(fake), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin)
+
+	out, err := runDen(t, "runbook", "new", "RDS status", "check my RDS instances, in Rust", "--agent", "opencode", "-c", cfgPath)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if got := strings.Split(strings.TrimSpace(readText(t, record)), "\n"); !slices.Equal(got, []string{"--prompt", "check my RDS instances, in Rust"}) {
+		t.Errorf("opencode's args = %q, want only --prompt and the request", got)
+	}
+	var cfg struct {
+		MCP          map[string]struct{ Command []string }
+		Instructions []string
+	}
+	if err := json.Unmarshal([]byte(readText(t, readText(t, config))), &cfg); err != nil {
+		t.Fatalf("the config OPENCODE_CONFIG named: %v", err)
+	}
+	if cmd := cfg.MCP["den"].Command; len(cmd) != 4 || !slices.Equal(cmd[1:], []string{"mcp", "-c", cfgPath}) {
+		t.Errorf("den's MCP server = %q, want den mcp -c %s", cmd, cfgPath)
+	}
+	if len(cfg.Instructions) != 1 || !strings.Contains(readText(t, cfg.Instructions[0]), "Writing a den runbook") {
+		t.Errorf("instructions = %q, want a file with den's runbook guide", cfg.Instructions)
+	}
+}
+
+func readText(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
 }
 
 // den runbook validate is validate_runbook for an agent's shell: a folder in

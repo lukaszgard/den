@@ -5,9 +5,11 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 	"unicode"
 
 	"github.com/lukaszgard/den/internal/config"
@@ -429,4 +431,186 @@ func TestCommandUnknownKind(t *testing.T) {
 	if _, err := Command(Agent{Name: "X", Kind: "gemini"}, opts); err == nil {
 		t.Error("a kind den cannot start was accepted")
 	}
+}
+
+// sessionDir is the one folder a start wrote its setting files in.
+func sessionDir(t *testing.T, files string) string {
+	t.Helper()
+	entries, err := os.ReadDir(files)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("files holds %v (%v), want one session folder", entries, err)
+	}
+	return filepath.Join(files, entries[0].Name())
+}
+
+func readFile(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
+}
+
+// OpenCode and Copilot CLI read den's instructions from files den writes for
+// the start, take its MCP server for that session only and the request as
+// their first prompt.
+func TestFileAgentCommands(t *testing.T) {
+	t.Setenv("COPILOT_CUSTOM_INSTRUCTIONS_DIRS", "")
+	server := []string{opts.Den, "mcp", "-c", opts.Config}
+	copilotMCP := `{"mcpServers":{"den":{"args":["mcp","-c","` + opts.Config + `"],"command":"` + opts.Den + `","tools":["*"],"type":"local"}}}`
+	for _, c := range []struct {
+		kind string
+		// want are den's arguments without and then with the request.
+		want, request []string
+		env           func(dir string) string
+		check         func(t *testing.T, dir string)
+	}{
+		{
+			kind: OpenCode, request: []string{"--prompt", opts.Request},
+			env: func(dir string) string { return "OPENCODE_CONFIG=" + filepath.Join(dir, "opencode", "opencode.json") },
+			check: func(t *testing.T, dir string) {
+				var cfg struct {
+					Schema string `json:"$schema"`
+					MCP    map[string]struct {
+						Type    string
+						Command []string
+						Enabled bool
+					}
+					Instructions []string
+				}
+				if err := json.Unmarshal([]byte(readFile(t, filepath.Join(dir, "opencode", "opencode.json"))), &cfg); err != nil {
+					t.Fatal(err)
+				}
+				den := cfg.MCP["den"]
+				if cfg.Schema != "https://opencode.ai/config.json" || len(cfg.MCP) != 1 || den.Type != "local" || !den.Enabled || !reflect.DeepEqual(den.Command, server) {
+					t.Errorf("opencode.json = %+v, want den's server %q alone", cfg, server)
+				}
+				instructions := filepath.Join(dir, "opencode", "instructions.md")
+				if !reflect.DeepEqual(cfg.Instructions, []string{instructions}) {
+					t.Errorf("instructions = %q, want %s", cfg.Instructions, instructions)
+				}
+				if got := readFile(t, instructions); got != opts.Instructions() {
+					t.Errorf("instructions.md = %q", got)
+				}
+			},
+		},
+		{
+			kind: Copilot,
+			want: []string{"--additional-mcp-config", copilotMCP, "--allow-tool=den(runbook_guide)", "--allow-tool=den(validate_runbook)"},
+			request: []string{"--additional-mcp-config", copilotMCP, "--allow-tool=den(runbook_guide)", "--allow-tool=den(validate_runbook)",
+				"-i", opts.Request},
+			env: func(dir string) string { return "COPILOT_CUSTOM_INSTRUCTIONS_DIRS=" + filepath.Join(dir, "copilot") },
+			check: func(t *testing.T, dir string) {
+				if got := readFile(t, filepath.Join(dir, "copilot", "AGENTS.md")); got != opts.Instructions() {
+					t.Errorf("AGENTS.md = %q", got)
+				}
+			},
+		},
+	} {
+		t.Run(c.kind, func(t *testing.T) {
+			o := opts
+			o.Files = t.TempDir()
+			cmd := mustCommand(t, Agent{Kind: c.kind, Path: "/bin/" + c.kind}, o)
+			dir := sessionDir(t, o.Files)
+			if cmd.Path != "/bin/"+c.kind || cmd.Dir != opts.Dir || !reflect.DeepEqual(cmd.Args, c.request) {
+				t.Errorf("command = %s %q in %s, want %q", cmd.Path, cmd.Args, cmd.Dir, c.request)
+			}
+			if want := []string{c.env(dir)}; !reflect.DeepEqual(cmd.Env, want) {
+				t.Errorf("env = %q, want %q", cmd.Env, want)
+			}
+			c.check(t, dir)
+			if runtime.GOOS != "windows" {
+				err := filepath.Walk(o.Files, func(path string, info os.FileInfo, err error) error {
+					if err == nil && path != o.Files && info.Mode().Perm()&0o077 != 0 {
+						t.Errorf("%s is %v: other users can read it", path, info.Mode().Perm())
+					}
+					return err
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			o.Request = ""
+			if cmd := mustCommand(t, Agent{Kind: c.kind, Path: c.kind}, o); !reflect.DeepEqual(cmd.Args, c.want) {
+				t.Errorf("without a request = %q, want %q", cmd.Args, c.want)
+			}
+			o.Request = opts.Request
+			wrapped := mustCommand(t, Agent{Kind: c.kind, Path: "ollama", Args: []string{"launch", c.kind}, Separator: true}, o)
+			if want := append([]string{"launch", c.kind, "--"}, c.request...); !reflect.DeepEqual(wrapped.Args, want) {
+				t.Errorf("ollama launch = %q, want %q", wrapped.Args, want)
+			}
+		})
+	}
+
+	o := opts
+	o.Files = t.TempDir()
+	t.Setenv("COPILOT_CUSTOM_INSTRUCTIONS_DIRS", "/mine,/ours")
+	cmd := mustCommand(t, Agent{Kind: Copilot, Path: "copilot"}, o)
+	if want := "COPILOT_CUSTOM_INSTRUCTIONS_DIRS=" + filepath.Join(sessionDir(t, o.Files), "copilot") + ",/mine,/ours"; cmd.Env[0] != want {
+		t.Errorf("env = %q, want the user's folders kept after den's: %q", cmd.Env, want)
+	}
+}
+
+// One start's files go in a folder of its own, which the same start reuses;
+// folders unused for 30 days go, and nothing den did not name is touched.
+func TestSessionFolders(t *testing.T) {
+	o := opts
+	o.Files = t.TempDir()
+	a := Agent{Kind: OpenCode, Path: "opencode"}
+	first := mustCommand(t, a, o)
+	dir := sessionDir(t, o.Files)
+	if again := mustCommand(t, a, o); !reflect.DeepEqual(again.Env, first.Env) {
+		t.Errorf("the same start wrote %q, then %q", first.Env, again.Env)
+	}
+
+	old := time.Now().Add(-31 * 24 * time.Hour)
+	for _, name := range []string{"0123456789abcdef", "fedcba9876543210", "not-dens-folder"} {
+		if err := os.Mkdir(filepath.Join(o.Files, name), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, name := range []string{"0123456789abcdef", "not-dens-folder", filepath.Base(dir)} {
+		if err := os.Chtimes(filepath.Join(o.Files, name), old, old); err != nil {
+			t.Fatal(err)
+		}
+	}
+	o.Dir = "/home/me/.config/den/runbooks/other"
+	other := mustCommand(t, a, o)
+	if reflect.DeepEqual(other.Env, first.Env) {
+		t.Fatal("two runbooks share a folder")
+	}
+	entries, _ := os.ReadDir(o.Files)
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	if slices.Contains(names, "0123456789abcdef") || slices.Contains(names, filepath.Base(dir)) {
+		t.Errorf("folders unused for 31 days are left: %q", names)
+	}
+	if !slices.Contains(names, "fedcba9876543210") || !slices.Contains(names, "not-dens-folder") || len(names) != 3 {
+		t.Errorf("folders = %q, want the new one, the fresh one and the one den did not name", names)
+	}
+
+	// Rewriting its files leaves a folder's time as it was: a start marks
+	// its folder used, so the next one's pruning keeps it.
+	inUse := sessionFolderOf(t, other)
+	if err := os.Chtimes(inUse, old, old); err != nil {
+		t.Fatal(err)
+	}
+	mustCommand(t, a, o)
+	if info, err := os.Stat(inUse); err != nil || time.Since(info.ModTime()) > time.Hour {
+		t.Errorf("the reused folder was not marked used: %v %v", info, err)
+	}
+}
+
+// sessionFolderOf is the session folder an OpenCode command's config is in.
+func sessionFolderOf(t *testing.T, cmd termsession.Command) string {
+	t.Helper()
+	cfg, ok := strings.CutPrefix(cmd.Env[0], "OPENCODE_CONFIG=")
+	if !ok {
+		t.Fatalf("env = %q", cmd.Env)
+	}
+	return filepath.Dir(filepath.Dir(cfg))
 }

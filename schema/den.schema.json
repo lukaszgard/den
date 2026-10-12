@@ -97,7 +97,9 @@
           "type": "string",
           "enum": [
             "claude",
-            "codex"
+            "codex",
+            "opencode",
+            "copilot"
           ]
         }
       },

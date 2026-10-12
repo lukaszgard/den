@@ -734,11 +734,18 @@ func TestRunbookAgents(t *testing.T) {
 		{"empty command", `
   agents: [{name: Opus, command: "  "}]`, `runbooks.agents[0] "Opus": command is required`},
 		{"kind not inferable", `
-  agents: [{name: Opus, command: ./run-it.sh}]`, `cannot tell which agent CLI "./run-it.sh" starts, set kind (one of claude, codex)`},
+  agents: [{name: Opus, command: ./run-it.sh}]`, `cannot tell which agent CLI "./run-it.sh" starts, set kind (one of claude, codex, opencode, copilot)`},
 		{"ollama launch of something else", `
-  agents: [{name: Opus, command: ollama launch opencode}]`, `set kind`},
+  agents: [{name: Opus, command: ollama launch chatgpt}]`, `set kind`},
 		{"unknown kind", `
-  agents: [{name: Opus, command: claude, kind: gemini}]`, `kind "gemini" is not one of claude, codex`},
+  agents: [{name: Opus, command: claude, kind: gemini}]`, `kind "gemini" is not one of claude, codex, opencode, copilot`},
+		{"opencode and copilot, inferred and given", `
+  agent: copilot
+  agents:
+    - {name: Open, command: opencode --model anthropic/claude-sonnet-4-5}
+    - {name: Local, command: ollama launch opencode --model qwen3}
+    - {name: GH, command: ollama launch copilot-cli}
+    - {name: Wrapped, command: ./ai-opencode.sh, kind: opencode}`, ""},
 		{"unknown agent", `
   agent: Nope
   agents: [{name: Opus, command: claude}]`, `runbooks.agent: "Nope" is not an agent den can start`},
@@ -752,7 +759,9 @@ func TestRunbookAgents(t *testing.T) {
   defaults: {agent: codex}
   items: [{name: a, command: x, agent: Opus}]`, ""},
 		{"a runbook's agent den cannot start", `
-  items: [{name: a, command: x, agent: ./my-agent.sh}]`, `runbook "a": agent "./my-agent.sh" is no runbooks.agents name and starts none of claude, codex`},
+  items: [{name: a, command: x, agent: ./my-agent.sh}]`, `runbook "a": agent "./my-agent.sh" is no runbooks.agents name and starts none of claude, codex, opencode, copilot`},
+		{"a runbook's agent: another kind's command line", `
+  items: [{name: a, command: x, agent: copilot --model gpt-5.4}]`, ""},
 		{"the defaults' agent den cannot start", `
   defaults: {agent: Opus}`, `runbooks.defaults: agent "Opus" is no runbooks.agents name`},
 	}
@@ -782,7 +791,13 @@ func TestAgentKind(t *testing.T) {
 		"ollama launch claude --model glm-5:cloud": "claude",
 		"ollama launch codex":                      "codex",
 		"/opt/bin/ollama launch codex":             "codex",
-		"ollama launch opencode":                   "",
+		"ollama launch opencode":                   "opencode",
+		"opencode --model x":                       "opencode",
+		"/opt/bin/copilot":                         "copilot",
+		"ollama launch copilot-cli":                "copilot",
+		"ollama launch copilot":                    "copilot",
+		"ollama launch chatgpt":                    "",
+		"hermes":                                   "",
 		"ollama launch":                            "",
 		"ollama run claude":                        "",
 		"./claude-wrapper.sh":                      "",

@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/lukaszgard/den/internal/config"
 	"github.com/lukaszgard/den/internal/platform"
@@ -24,8 +25,10 @@ import (
 
 // The agents den can start.
 const (
-	Claude = "claude"
-	Codex  = "codex"
+	Claude   = "claude"
+	Codex    = "codex"
+	OpenCode = "opencode"
+	Copilot  = "copilot"
 	// Auto is the first of Kinds that is installed.
 	Auto = "auto"
 )
@@ -54,7 +57,9 @@ type kindSpec struct {
 type session struct {
 	o            Options
 	server       []string // den's MCP server: "mcp", "-c", <config>
-	instructions string
+	instructions string   // instructions(o, spec)
+	// files writes a setting file of this start and returns its absolute path.
+	files func(name, content string) (string, error)
 }
 
 // kinds describes every entry of Kinds; TestEveryKindIsComplete holds the two
@@ -84,6 +89,54 @@ var kinds = map[string]kindSpec{
 			args = append(args, s.o.Request)
 		}
 		return args, nil, nil
+	}},
+	// OpenCode merges the config OPENCODE_CONFIG names with the user's own
+	// (ollama launch passes its own through OPENCODE_CONFIG_CONTENT, which is
+	// merged too), and reads instructions from the files that config lists.
+	OpenCode: {title: "OpenCode", mcp: true, prompt: true, args: func(s session) (args, env []string, err error) {
+		instructions, err := s.files("opencode/instructions.md", s.instructions)
+		if err != nil {
+			return nil, nil, err
+		}
+		cfg, err := s.files("opencode/opencode.json", mustJSON(map[string]any{
+			"$schema": "https://opencode.ai/config.json",
+			"mcp": map[string]any{"den": map[string]any{
+				"type": "local", "command": append([]string{s.o.Den}, s.server...), "enabled": true,
+			}},
+			"instructions": []string{instructions},
+		}))
+		if err != nil {
+			return nil, nil, err
+		}
+		// Its positional argument is the project's path, not a prompt.
+		if s.o.Request != "" {
+			args = append(args, "--prompt", s.o.Request)
+		}
+		return args, []string{"OPENCODE_CONFIG=" + cfg}, nil
+	}},
+	// Copilot CLI adds --additional-mcp-config to the user's MCP servers for
+	// this session, and reads AGENTS.md from the folders
+	// COPILOT_CUSTOM_INSTRUCTIONS_DIRS lists, besides the repository's.
+	Copilot: {title: "Copilot CLI", mcp: true, prompt: true, args: func(s session) (args, env []string, err error) {
+		agentsMD, err := s.files("copilot/AGENTS.md", s.instructions)
+		if err != nil {
+			return nil, nil, err
+		}
+		dirs := filepath.Dir(agentsMD)
+		if own := os.Getenv("COPILOT_CUSTOM_INSTRUCTIONS_DIRS"); own != "" {
+			dirs += "," + own
+		}
+		args = append(args,
+			"--additional-mcp-config", mustJSON(map[string]any{"mcpServers": map[string]any{"den": map[string]any{
+				"type": "local", "command": s.o.Den, "args": s.server, "tools": []string{"*"},
+			}}}),
+			// --allow-tool takes any number of values: one each, with "=",
+			// cannot take what follows for another.
+			"--allow-tool=den(runbook_guide)", "--allow-tool=den(validate_runbook)")
+		if s.o.Request != "" {
+			args = append(args, "-i", s.o.Request)
+		}
+		return args, []string{"COPILOT_CUSTOM_INSTRUCTIONS_DIRS=" + dirs}, nil
 	}},
 }
 
@@ -352,6 +405,10 @@ type Options struct {
 	Request string // what the user asked for; empty starts the agent without a prompt
 	// Edit says the runbook in Dir exists and is to be changed, not written.
 	Edit bool
+	// Files is the directory den keeps the files some agents read their
+	// settings from (OpenCode's config, Copilot's AGENTS.md); empty is
+	// platform.StateDir()/agents. Tests point it at a temp dir.
+	Files string
 }
 
 // Instructions are what the agent is told on top of its own instructions.
@@ -370,8 +427,16 @@ func (o Options) Instructions() string {
 		"validate_runbook with this folder until it reports ok, then tell the user how to run it."
 }
 
+// instructions are what an agent of spec is told: Instructions, for one that
+// takes den's MCP server.
+func instructions(o Options, spec kindSpec) string {
+	return o.Instructions()
+}
+
 // Command is the agent's command line: interactive, in the runbook's folder.
 // The agent's own arguments come first, then "--" when it needs one, then den's.
+// An agent that reads its settings from files has them written first, under
+// o.Files.
 func Command(a Agent, o Options) (termsession.Command, error) {
 	spec, ok := kinds[a.Kind]
 	if !ok {
@@ -385,7 +450,10 @@ func Command(a Agent, o Options) (termsession.Command, error) {
 	if a.Separator {
 		args = append(args, "--")
 	}
-	more, env, err := spec.args(session{o: o, server: server, instructions: o.Instructions()})
+	text := instructions(o, spec)
+	files := newSessionFiles(o.Files, a.Kind, o.Den, o.Config, o.Dir, o.Request, text)
+	more, env, err := spec.args(session{o: o, server: server, instructions: text, files: files.write})
+	files.done(time.Now())
 	if err != nil {
 		return termsession.Command{}, fmt.Errorf("agent %q: %w", a.Name, err)
 	}

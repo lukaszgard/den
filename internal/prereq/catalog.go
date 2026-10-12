@@ -494,16 +494,44 @@ var Catalog = []Tool{
 		},
 		Docs: "https://github.com/openai/codex",
 	},
+	{
+		ID:          "opencode",
+		Purpose:     "writing a runbook from a description (den runbook new --agent opencode)",
+		VersionArgs: []string{"--version"},
+		VersionRe:   anyVersion,
+		Install: map[string][]Recipe{
+			KeyMacOS:   {brew("brew install anomalyco/tap/opencode"), opencodeInstaller},
+			KeyDebian:  {opencodeInstaller},
+			KeyFedora:  {opencodeInstaller},
+			KeyWindows: {scoop("scoop install opencode"), manual("npm install -g opencode-ai")},
+		},
+		Docs: "https://opencode.ai/docs/",
+	},
+	{
+		ID:          "copilot",
+		Purpose:     "writing a runbook from a description (den runbook new --agent copilot)",
+		VersionArgs: []string{"--version"},
+		VersionRe:   anyVersion,
+		Install: map[string][]Recipe{
+			KeyMacOS:   {brew("brew install --cask copilot-cli"), copilotInstaller},
+			KeyDebian:  {copilotInstaller},
+			KeyFedora:  {copilotInstaller},
+			KeyWindows: {winget("winget install GitHub.Copilot"), manual("npm install -g @github/copilot")},
+		},
+		Docs: "https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli",
+	},
 }
 
 // NerdFont is the catalog ID of the font check, which is not a program.
 const NerdFont = "nerd-font"
 
-// The agent CLIs: claude.ai and chatgpt.com host their official installers,
-// which is what their docs lead with.
+// The agent CLIs: their vendors host their official installers, which is
+// what their docs lead with.
 var (
-	claudeInstaller = manual("curl -fsSL https://claude.ai/install.sh | bash")
-	codexInstaller  = manual("curl -fsSL https://chatgpt.com/codex/install.sh | sh")
+	claudeInstaller   = manual("curl -fsSL https://claude.ai/install.sh | bash")
+	codexInstaller    = manual("curl -fsSL https://chatgpt.com/codex/install.sh | sh")
+	opencodeInstaller = manual("curl -fsSL https://opencode.ai/install | bash")
+	copilotInstaller  = manual("curl -fsSL https://gh.io/copilot-install | bash")
 )
 
 // awsV1Removal takes out an AWS CLI v1 that the v2 installer leaves in place.

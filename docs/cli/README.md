@@ -77,7 +77,7 @@ Check what den needs and say how to install what is missing
 
 Check what den needs outside itself and say how to fix what is missing: the config, the AWS CLI and Session Manager plugin, the AWS profiles den.yaml names, SSO logins, local ports, and the client tools the services and secrets use: where each is installed, its version, and the install, upgrade or PATH command for this OS and package manager. den prints these commands; it never runs them. Exits 1 when a check fails.
 
-`--for` checks only what the named features need, with or without a config: `den doctor --for sops` before writing den.yaml, or in an onboarding script. Features: aws, aws_secretsmanager, claude, codex, docker, documentdb, eice, keepassxc, kubectl, mysql, neptune, opensearch, rds, redis, redshift, runbook-sources, sops, ssh, ssm, tui, tunnel, vault, vpn, all. Tunnelled services (rds, redis, …) assume the ssm transport unless ssh, eice or kubectl is named too.
+`--for` checks only what the named features need, with or without a config: `den doctor --for sops` before writing den.yaml, or in an onboarding script. Features: aws, aws_secretsmanager, claude, codex, copilot, docker, documentdb, eice, keepassxc, kubectl, mysql, neptune, opencode, opensearch, rds, redis, redshift, runbook-sources, sops, ssh, ssm, tui, tunnel, vault, vpn, all. Tunnelled services (rds, redis, …) assume the ssm transport unless ssh, eice or kubectl is named too.
 
 `--os` shows the install steps for another platform (macos, debian, fedora, windows, optionally /amd64 or /arm64) without checking this machine, for the features named by `--for` or, without it, for everything den.yaml uses.
 

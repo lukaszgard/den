@@ -28,6 +28,7 @@ transport unless `ssh`, `eice` or `kubectl` is named too.
 | `aws_secretsmanager` | AWS Secrets Manager | aws |
 | `claude` | writing runbooks with Claude Code | claude |
 | `codex` | writing runbooks with Codex | codex |
+| `copilot` | writing runbooks with Copilot CLI | copilot |
 | `docker` | Docker Compose environments | docker |
 | `documentdb` | DocumentDB | mongosh + a transport |
 | `eice` | tunnels through EC2 Instance Connect Endpoint | aws |
@@ -35,6 +36,7 @@ transport unless `ssh`, `eice` or `kubectl` is named too.
 | `kubectl` | tunnels through kubectl port-forward | kubectl |
 | `mysql` | RDS/Aurora MySQL | mysql + a transport |
 | `neptune` | Neptune | curl + a transport |
+| `opencode` | writing runbooks with OpenCode | opencode |
 | `opensearch` | OpenSearch | curl + a transport |
 | `rds` | RDS/Aurora PostgreSQL | psql + a transport |
 | `redis` | ElastiCache and MemoryDB | redis-cli + a transport |
@@ -622,4 +624,60 @@ curl -fsSL https://chatgpt.com/codex/install.sh | sh
 
 ```sh
 powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"
+```
+
+### opencode
+
+Used for writing a runbook from a description (den runbook new --agent opencode). Docs: <https://opencode.ai/docs/>
+
+**macOS** (Homebrew)
+
+```sh
+brew install anomalyco/tap/opencode
+```
+
+**Debian / Ubuntu** (official installer)
+
+```sh
+curl -fsSL https://opencode.ai/install | bash
+```
+
+**Fedora / RHEL** (official installer)
+
+```sh
+curl -fsSL https://opencode.ai/install | bash
+```
+
+**Windows** (Scoop)
+
+```sh
+scoop install opencode
+```
+
+### copilot
+
+Used for writing a runbook from a description (den runbook new --agent copilot). Docs: <https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli>
+
+**macOS** (Homebrew)
+
+```sh
+brew install --cask copilot-cli
+```
+
+**Debian / Ubuntu** (official installer)
+
+```sh
+curl -fsSL https://gh.io/copilot-install | bash
+```
+
+**Fedora / RHEL** (official installer)
+
+```sh
+curl -fsSL https://gh.io/copilot-install | bash
+```
+
+**Windows** (winget)
+
+```sh
+winget install GitHub.Copilot
 ```
