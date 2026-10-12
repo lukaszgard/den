@@ -25,7 +25,7 @@ const (
 // TransportSpec says how den reaches the network a service lives in. Each type
 // uses its own keys; the others must be left out.
 type TransportSpec struct {
-	Type string `yaml:"type" jsonschema:"required,enum=ssm,enum=ssh,enum=eice,enum=kubectl"` // ssm (default) | ssh | eice | kubectl
+	Type string `yaml:"type" jsonschema:"required,enum=ssm,enum=ssh,enum=eice,enum=kubectl"` // how the network is reached; a service without a transport block uses ssm
 
 	// Required by ssh: the destination (user@host) and extra ssh arguments such as
 	// [-i, ~/.ssh/key, -J, jump.example.com]. Key or agent auth only: den
@@ -160,7 +160,7 @@ type SOPSSecretSpec struct {
 	AWSProfile  string `yaml:"aws_profile,omitempty"`                           // exported as AWS_PROFILE for KMS keys
 	AWSRegion   string `yaml:"aws_region,omitempty"`                            // exported as AWS_REGION
 	AutoReveal  bool   `yaml:"auto_reveal,omitempty"`                           // show every value in clear when the file opens
-	View        string `yaml:"view,omitempty" jsonschema:"enum=tree,enum=flat"` // tree | flat; secrets.view when empty
+	View        string `yaml:"view,omitempty" jsonschema:"enum=tree,enum=flat"` // how this secret opens when its values are nested; secrets.view when empty
 }
 
 // AWSSecretsManagerSecretSpec is one AWS Secrets Manager secret, read with the
@@ -173,7 +173,7 @@ type AWSSecretsManagerSecretSpec struct {
 	AWSRegion    string `yaml:"aws_region,omitempty"`                            // the profile's region when empty
 	VersionStage string `yaml:"version_stage,omitempty"`                         // AWSCURRENT (default), AWSPREVIOUS, ...
 	AutoReveal   bool   `yaml:"auto_reveal,omitempty"`                           // show every value in clear when opened
-	View         string `yaml:"view,omitempty" jsonschema:"enum=tree,enum=flat"` // tree | flat; secrets.view when empty
+	View         string `yaml:"view,omitempty" jsonschema:"enum=tree,enum=flat"` // how this secret opens when its values are nested; secrets.view when empty
 }
 
 // KeePassXCSecretSpec is one entry of a KeePass database, read with
@@ -210,7 +210,7 @@ type VaultSecretSpec struct {
 	Login       string `yaml:"login,omitempty"`                                 // shell command run by L, e.g. vault login -method=oidc
 	CLIPath     string `yaml:"cli_path,omitempty"`                              // default: vault on PATH
 	AutoReveal  bool   `yaml:"auto_reveal,omitempty"`                           // show every value in clear when opened
-	View        string `yaml:"view,omitempty" jsonschema:"enum=tree,enum=flat"` // tree | flat; secrets.view when empty
+	View        string `yaml:"view,omitempty" jsonschema:"enum=tree,enum=flat"` // how this secret opens when its values are nested; secrets.view when empty
 }
 
 // UpdatesConfig controls where den checks for and downloads new releases.
@@ -229,7 +229,7 @@ type UpdatesConfig struct {
 
 // LogsConfig controls file-based logging and log level filtering.
 type LogsConfig struct {
-	Level        string `yaml:"level,omitempty" jsonschema:"enum=trace,enum=debug,enum=info,enum=warn,enum=error"` // trace, debug, info (default), warn, error
+	Level        string `yaml:"level,omitempty" jsonschema:"enum=trace,enum=debug,enum=info,enum=warn,enum=error"` // the least severe level written; info when empty
 	FileLocation string `yaml:"file_location,omitempty"`                                                           // e.g. ./dist/logs/den.log
 }
 
@@ -525,7 +525,7 @@ const (
 // RDSSpec holds RDS-specific config.
 type RDSSpec struct {
 	SSMTarget    `yaml:",inline"`
-	Engine       string `yaml:"engine,omitempty" jsonschema:"enum=postgres,enum=mysql"` // postgres (default) | mysql
+	Engine       string `yaml:"engine,omitempty" jsonschema:"enum=postgres,enum=mysql"` // the database engine; postgres when empty
 	UpdatePgpass bool   `yaml:"update_pgpass,omitempty"`                                // postgres only
 
 	RDSHost string `yaml:"rds_host,omitempty" jsonschema:"required"` // endpoint to forward to: instance, cluster or RDS Proxy

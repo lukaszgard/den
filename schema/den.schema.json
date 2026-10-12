@@ -49,7 +49,7 @@
             "tree",
             "flat"
           ],
-          "description": "tree | flat; secrets.view when empty"
+          "description": "how this secret opens when its values are nested; secrets.view when empty"
         }
       },
       "additionalProperties": false,
@@ -387,7 +387,7 @@
             "warn",
             "error"
           ],
-          "description": "trace, debug, info (default), warn, error"
+          "description": "the least severe level written; info when empty"
         },
         "file_location": {
           "type": "string",
@@ -625,7 +625,7 @@
             "postgres",
             "mysql"
           ],
-          "description": "postgres (default) | mysql"
+          "description": "the database engine; postgres when empty"
         },
         "update_pgpass": {
           "type": "boolean",
@@ -1072,7 +1072,7 @@
             "tree",
             "flat"
           ],
-          "description": "tree | flat; secrets.view when empty"
+          "description": "how this secret opens when its values are nested; secrets.view when empty"
         }
       },
       "additionalProperties": false,
@@ -1231,7 +1231,7 @@
             "eice",
             "kubectl"
           ],
-          "description": "ssm (default) | ssh | eice | kubectl"
+          "description": "how the network is reached; a service without a transport block uses ssm"
         },
         "host": {
           "type": "string",
@@ -1449,7 +1449,7 @@
             "tree",
             "flat"
           ],
-          "description": "tree | flat; secrets.view when empty"
+          "description": "how this secret opens when its values are nested; secrets.view when empty"
         }
       },
       "additionalProperties": false,
