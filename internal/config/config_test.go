@@ -734,11 +734,11 @@ func TestRunbookAgents(t *testing.T) {
 		{"empty command", `
   agents: [{name: Opus, command: "  "}]`, `runbooks.agents[0] "Opus": command is required`},
 		{"kind not inferable", `
-  agents: [{name: Opus, command: ./run-it.sh}]`, `cannot tell whether "./run-it.sh" starts claude or codex, set kind`},
+  agents: [{name: Opus, command: ./run-it.sh}]`, `cannot tell which agent CLI "./run-it.sh" starts, set kind (one of claude, codex)`},
 		{"ollama launch of something else", `
   agents: [{name: Opus, command: ollama launch opencode}]`, `set kind`},
 		{"unknown kind", `
-  agents: [{name: Opus, command: claude, kind: gemini}]`, `kind "gemini" is not claude or codex`},
+  agents: [{name: Opus, command: claude, kind: gemini}]`, `kind "gemini" is not one of claude, codex`},
 		{"unknown agent", `
   agent: Nope
   agents: [{name: Opus, command: claude}]`, `runbooks.agent: "Nope" is not an agent den can start`},
@@ -752,7 +752,7 @@ func TestRunbookAgents(t *testing.T) {
   defaults: {agent: codex}
   items: [{name: a, command: x, agent: Opus}]`, ""},
 		{"a runbook's agent den cannot start", `
-  items: [{name: a, command: x, agent: ./my-agent.sh}]`, `runbook "a": agent "./my-agent.sh" is no runbooks.agents name and does not start claude or codex`},
+  items: [{name: a, command: x, agent: ./my-agent.sh}]`, `runbook "a": agent "./my-agent.sh" is no runbooks.agents name and starts none of claude, codex`},
 		{"the defaults' agent den cannot start", `
   defaults: {agent: Opus}`, `runbooks.defaults: agent "Opus" is no runbooks.agents name`},
 	}
@@ -1104,5 +1104,23 @@ func TestAWSEnv(t *testing.T) {
 				t.Errorf("AWSEnv = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+// The schema's enum for AgentSpec.Kind is a struct tag, which cannot read
+// AgentKinds: this keeps the two together.
+func TestAgentKindEnum(t *testing.T) {
+	f, ok := reflect.TypeOf(AgentSpec{}).FieldByName("Kind")
+	if !ok {
+		t.Fatal("AgentSpec has no Kind")
+	}
+	var got []string
+	for _, part := range strings.Split(f.Tag.Get("jsonschema"), ",") {
+		if v, ok := strings.CutPrefix(part, "enum="); ok {
+			got = append(got, v)
+		}
+	}
+	if !reflect.DeepEqual(got, AgentKinds) {
+		t.Errorf("AgentSpec.Kind enum = %v, want AgentKinds %v", got, AgentKinds)
 	}
 }

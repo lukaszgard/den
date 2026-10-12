@@ -11,6 +11,8 @@ import (
 	"unicode"
 
 	"github.com/lukaszgard/den/internal/config"
+	"github.com/lukaszgard/den/internal/prereq"
+	"github.com/lukaszgard/den/internal/termsession"
 )
 
 // fakeBin puts executables called names on a PATH of their own.
@@ -42,8 +44,8 @@ func TestFind(t *testing.T) {
 		t.Fatalf("codex = %s %s %v", kind, path, err)
 	}
 	fakeBin(t)
-	if _, _, err := Find(Auto); err == nil || !strings.Contains(err.Error(), "no agent found") {
-		t.Fatalf("no agent = %v", err)
+	if _, _, err := Find(Auto); err == nil || !strings.Contains(err.Error(), "no agent found: install one of Claude Code, Codex") {
+		t.Fatalf("no agent = %v, want every agent named", err)
 	}
 	if _, _, err := Find("gemini"); err == nil {
 		t.Fatal("an unknown agent was accepted")
@@ -58,8 +60,17 @@ var opts = Options{
 	Request: "check the status of my RDS instances, env eu-staging, in Rust",
 }
 
+func mustCommand(t *testing.T, a Agent, o Options) termsession.Command {
+	t.Helper()
+	cmd, err := Command(a, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cmd
+}
+
 func TestClaudeCommand(t *testing.T) {
-	cmd := Command(Agent{Kind: Claude, Path: "/bin/claude"}, opts)
+	cmd := mustCommand(t, Agent{Kind: Claude, Path: "/bin/claude"}, opts)
 	if cmd.Path != "/bin/claude" || cmd.Dir != opts.Dir {
 		t.Fatalf("command = %s in %s", cmd.Path, cmd.Dir)
 	}
@@ -98,7 +109,7 @@ func TestClaudeCommand(t *testing.T) {
 }
 
 func TestCodexCommand(t *testing.T) {
-	cmd := Command(Agent{Kind: Codex, Path: "/bin/codex"}, opts)
+	cmd := mustCommand(t, Agent{Kind: Codex, Path: "/bin/codex"}, opts)
 	args := cmd.Args
 	if args[len(args)-1] != opts.Request || cmd.Dir != opts.Dir {
 		t.Fatalf("codex args = %q in %s", args, cmd.Dir)
@@ -133,7 +144,7 @@ func TestCodexCommand(t *testing.T) {
 		t.Error("< was escaped: the agent would read \\u003c")
 	}
 
-	if noPrompt := Command(Agent{Kind: Codex, Path: "/bin/codex"}, Options{Den: "den", Dir: "/x"}); len(noPrompt.Args) != 6 {
+	if noPrompt := mustCommand(t, Agent{Kind: Codex, Path: "/bin/codex"}, Options{Den: "den", Dir: "/x"}); len(noPrompt.Args) != 6 {
 		t.Fatalf("without a request codex gets only its settings: %q", noPrompt.Args)
 	}
 }
@@ -272,15 +283,15 @@ func TestCommandPrefixAndSeparator(t *testing.T) {
 		{Agent{Kind: Codex, Path: "codex", Args: []string{"--model", "x"}}, []string{"--model", "x", "-c"}},
 		{Agent{Kind: Codex, Path: "ollama", Args: []string{"launch", "codex"}, Separator: true}, []string{"launch", "codex", "--", "-c"}},
 	} {
-		cmd := Command(c.a, req)
+		cmd := mustCommand(t, c.a, req)
 		if cmd.Path != c.a.Path || !reflect.DeepEqual(cmd.Args[:len(c.want)], c.want) {
 			t.Errorf("%s args start %q, want %q", c.a.Path, cmd.Args[:len(c.want)], c.want)
 		}
 	}
 	// Command must not write into the agent's own arguments.
 	a := Agent{Kind: Claude, Path: "claude", Args: make([]string, 1, 10)}
-	Command(a, req)
-	Command(a, req)
+	mustCommand(t, a, req)
+	mustCommand(t, a, req)
 	if len(a.Args) != 1 {
 		t.Fatal("Command changed the agent's arguments")
 	}
@@ -387,8 +398,35 @@ func TestEditInstructions(t *testing.T) {
 			t.Errorf("edit instructions lack %q:\n%s", want, edit)
 		}
 	}
-	cmd := Command(Agent{Kind: Claude, Path: "/bin/claude"}, Options{Dir: opts.Dir, Guide: opts.Guide, Edit: true, Request: "add a retry"})
+	cmd := mustCommand(t, Agent{Kind: Claude, Path: "/bin/claude"}, Options{Dir: opts.Dir, Guide: opts.Guide, Edit: true, Request: "add a retry"})
 	if !slices.ContainsFunc(cmd.Args, func(a string) bool { return strings.Contains(a, "changing the den runbook") }) {
 		t.Errorf("the command does not carry the edit instructions: %q", cmd.Args)
+	}
+}
+
+// Every name in config.AgentKinds needs a spec here, an install recipe and a
+// `den doctor --for` feature, or a kind validates and then fails to start.
+func TestEveryKindIsComplete(t *testing.T) {
+	for _, k := range config.AgentKinds {
+		t.Run(k, func(t *testing.T) {
+			if spec, ok := kinds[k]; !ok || spec.title == "" || spec.args == nil {
+				t.Errorf("kinds[%q] = %+v, want a title and args", k, spec)
+			}
+			if _, ok := prereq.Lookup(k); !ok {
+				t.Errorf("the prereq catalog has no %q", k)
+			}
+			if _, ok := prereq.Features[k]; !ok {
+				t.Errorf("prereq.Features has no %q", k)
+			}
+		})
+	}
+	if len(kinds) != len(config.AgentKinds) {
+		t.Errorf("kinds has %d entries, config.AgentKinds %d", len(kinds), len(config.AgentKinds))
+	}
+}
+
+func TestCommandUnknownKind(t *testing.T) {
+	if _, err := Command(Agent{Name: "X", Kind: "gemini"}, opts); err == nil {
+		t.Error("a kind den cannot start was accepted")
 	}
 }

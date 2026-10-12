@@ -1,4 +1,4 @@
-// Package agent starts an agent CLI — Claude Code or Codex — on a runbook's
+// Package agent starts an agent CLI — Claude Code, Codex and others — on a runbook's
 // folder, to write the runbook from what the user asked for. den's MCP server
 // and its runbook guide are handed over on the command line, so the agent
 // knows how a runbook looks and can check its work with validate_runbook,
@@ -31,7 +31,70 @@ const (
 )
 
 // Kinds are the agents in the order Auto tries them.
-var Kinds = []string{Claude, Codex}
+var Kinds = config.AgentKinds
+
+// isKind says whether name is an agent CLI den knows how to start.
+func isKind(name string) bool { return slices.Contains(Kinds, name) }
+
+// kindSpec is how den hands one agent CLI its MCP server, instructions and request.
+type kindSpec struct {
+	title string // what messages call it: "Claude Code"
+	// mcp: it takes den's MCP server for this session only. One that does not
+	// checks its work with `den runbook validate` from its shell.
+	mcp bool
+	// prompt: it takes the request as the first prompt of its TUI. One that
+	// does not reads the request with its instructions; the user starts it.
+	prompt bool
+	// args are den's arguments and environment, after the agent's own Args
+	// (and "--").
+	args func(s session) (args, env []string, err error)
+}
+
+// session is what a kindSpec writes its arguments from.
+type session struct {
+	o            Options
+	server       []string // den's MCP server: "mcp", "-c", <config>
+	instructions string
+}
+
+// kinds describes every entry of Kinds; TestEveryKindIsComplete holds the two
+// together.
+var kinds = map[string]kindSpec{
+	Claude: {title: "Claude Code", mcp: true, prompt: true, args: func(s session) (args, env []string, err error) {
+		mcpConfig := mustJSON(map[string]any{"mcpServers": map[string]any{"den": map[string]any{"command": s.o.Den, "args": s.server}}})
+		// The prompt comes first: --mcp-config and --allowedTools take any
+		// number of values and would swallow it.
+		if s.o.Request != "" {
+			args = append(args, s.o.Request)
+		}
+		args = append(args,
+			"--mcp-config", mcpConfig,
+			"--append-system-prompt", s.instructions,
+			"--allowedTools", strings.Join(readOnlyTools, ","))
+		return args, nil, nil
+	}},
+	Codex: {title: "Codex", mcp: true, prompt: true, args: func(s session) (args, env []string, err error) {
+		// -c takes TOML values. A JSON string is a valid TOML basic string,
+		// and a JSON array of them a valid TOML array.
+		args = append(args,
+			"-c", "mcp_servers.den.command="+mustJSON(s.o.Den),
+			"-c", "mcp_servers.den.args="+mustJSON(s.server),
+			"-c", "developer_instructions="+mustJSON(s.instructions))
+		if s.o.Request != "" {
+			args = append(args, s.o.Request)
+		}
+		return args, nil, nil
+	}},
+}
+
+// kindTitles are the agents' titles in the order Auto tries them.
+func kindTitles() []string {
+	titles := make([]string, len(Kinds))
+	for i, k := range Kinds {
+		titles[i] = kinds[k].title
+	}
+	return titles
+}
 
 // The read-only den tools an agent may call without asking: they read the
 // guide and check a folder, nothing more.
@@ -53,9 +116,10 @@ func find(preferred string, specs []config.AgentSpec) (kind, path string, err er
 				return k, p, nil
 			}
 		}
-		return "", "", fmt.Errorf("no agent found: install Claude Code (%s) or Codex (%s)",
-			prereq.InstallHint(Claude), prereq.InstallHint(Codex))
-	case Claude, Codex:
+		return "", "", fmt.Errorf("no agent found: install one of %s (den doctor --for %s shows how)",
+			strings.Join(kindTitles(), ", "), Kinds[0])
+	}
+	if isKind(preferred) {
 		if p, ok := prereq.Find(preferred); ok {
 			return preferred, p, nil
 		}
@@ -66,10 +130,10 @@ func find(preferred string, specs []config.AgentSpec) (kind, path string, err er
 		for i, s := range specs {
 			names[i] = s.Name
 		}
-		return "", "", fmt.Errorf("%q is not an agent den can start (auto, claude, codex or a runbooks.agents name: %s)",
-			preferred, strings.Join(names, ", "))
+		return "", "", fmt.Errorf("%q is not an agent den can start (auto, %s or a runbooks.agents name: %s)",
+			preferred, strings.Join(Kinds, ", "), strings.Join(names, ", "))
 	}
-	return "", "", fmt.Errorf("%q is not an agent den can start (auto, claude or codex)", preferred)
+	return "", "", fmt.Errorf("%q is not an agent den can start (auto or %s)", preferred, strings.Join(Kinds, ", "))
 }
 
 // Agent is an agent den can start: the program, the arguments that come
@@ -77,7 +141,7 @@ func find(preferred string, specs []config.AgentSpec) (kind, path string, err er
 // arguments are written.
 type Agent struct {
 	Name string // what the pop-up shows and --agent names
-	Kind string // Claude or Codex
+	Kind string // one of Kinds
 	Path string // the program, found
 	Args []string
 	// Separator puts "--" between Args and den's arguments. A wrapper such as
@@ -91,7 +155,7 @@ type Agent struct {
 
 // Resolve turns a runbooks.agents entry into an Agent: the command is split on
 // whitespace, the kind is the entry's or inferred from the command, and the
-// program is looked for the way Find does for claude and codex, else on PATH.
+// program is looked for the way Find does for a kind, else on PATH.
 // The error says what is missing.
 func Resolve(spec config.AgentSpec) (Agent, error) {
 	words := strings.Fields(spec.Command)
@@ -102,8 +166,8 @@ func Resolve(spec config.AgentSpec) (Agent, error) {
 	if kind == "" {
 		kind = config.AgentKind(spec.Command)
 	}
-	if kind != Claude && kind != Codex {
-		return Agent{}, fmt.Errorf("agent %q: cannot tell whether %q starts claude or codex, set kind", spec.Name, spec.Command)
+	if !isKind(kind) {
+		return Agent{}, fmt.Errorf("agent %q: cannot tell which agent CLI %q starts, set kind", spec.Name, spec.Command)
 	}
 	prog := programName(words[0])
 	path, err := findProgram(words[0])
@@ -135,7 +199,7 @@ func findProgram(typed string) (string, error) {
 			return "", fmt.Errorf("%s not found", typed)
 		}
 		return word, nil
-	case word == Claude || word == Codex:
+	case isKind(word):
 		if p, ok := prereq.Find(word); ok {
 			return p, nil
 		}
@@ -160,7 +224,7 @@ func findProgram(typed string) (string, error) {
 // name), else the first. Entries that do not resolve are left out, so one
 // missing program does not hide the others; it is an error only when none
 // resolves. Without entries it is Find(preferred), named after its kind.
-// A preferred claude or codex that is no entry's name is the built-in agent,
+// A preferred kind that is no entry's name is the built-in agent,
 // added last and made the default when it is installed, so the pop-up starts
 // what Select, and so the command line, would.
 func Choices(specs []config.AgentSpec, preferred string) ([]Agent, int, error) {
@@ -185,7 +249,7 @@ func Choices(specs []config.AgentSpec, preferred string) ([]Agent, int, error) {
 		}
 		agents = append(agents, a)
 	}
-	if preferred == Claude || preferred == Codex {
+	if isKind(preferred) {
 		if !slices.ContainsFunc(specs, func(s config.AgentSpec) bool { return s.Name == preferred }) {
 			if kind, path, err := Find(preferred); err == nil {
 				def = len(agents)
@@ -200,7 +264,7 @@ func Choices(specs []config.AgentSpec, preferred string) ([]Agent, int, error) {
 }
 
 // Select is the agent a name asks for, as --agent and runbooks.agent spell it.
-// An entry of runbooks.agents wins over claude and codex, which it may shadow,
+// An entry of runbooks.agents wins over the kinds, which it may shadow,
 // and must resolve: the user asked for that one. Otherwise it is Choices'
 // default, where "" and auto mean the first entry that resolves.
 func Select(specs []config.AgentSpec, name string) (Agent, error) {
@@ -224,12 +288,12 @@ func Select(specs []config.AgentSpec, name string) (Agent, error) {
 }
 
 // Pick is the agent a runbook's agent setting asks for: a name Select knows
-// (auto, claude, codex, a runbooks.agents entry), else a command line such as
+// (auto, a kind, a runbooks.agents entry), else a command line such as
 // `claude --model opus`, read the way a runbooks.agents command is. A command
 // keeps itself as its Name, so Pick(specs, a.Name) starts it again.
 func Pick(specs []config.AgentSpec, value string) (Agent, error) {
 	value = strings.TrimSpace(value)
-	if value == "" || value == Auto || value == Claude || value == Codex || slices.ContainsFunc(specs, func(s config.AgentSpec) bool { return s.Name == value }) {
+	if value == "" || value == Auto || isKind(value) || slices.ContainsFunc(specs, func(s config.AgentSpec) bool { return s.Name == value }) {
 		return Select(specs, value)
 	}
 	a, err := Resolve(config.AgentSpec{Name: value, Command: value})
@@ -255,7 +319,7 @@ func Describe(specs []config.AgentSpec, value string) string {
 	switch {
 	case value == "" || value == Auto:
 		return "agent"
-	case value == Claude || value == Codex || slices.ContainsFunc(specs, func(s config.AgentSpec) bool { return s.Name == value }):
+	case isKind(value) || slices.ContainsFunc(specs, func(s config.AgentSpec) bool { return s.Name == value }):
 		return value
 	}
 	return typedLabel(value)
@@ -308,7 +372,11 @@ func (o Options) Instructions() string {
 
 // Command is the agent's command line: interactive, in the runbook's folder.
 // The agent's own arguments come first, then "--" when it needs one, then den's.
-func Command(a Agent, o Options) termsession.Command {
+func Command(a Agent, o Options) (termsession.Command, error) {
+	spec, ok := kinds[a.Kind]
+	if !ok {
+		return termsession.Command{}, fmt.Errorf("agent %q: no way to start kind %q", a.Name, a.Kind)
+	}
 	server := []string{"mcp"}
 	if o.Config != "" {
 		server = append(server, "-c", o.Config)
@@ -317,30 +385,11 @@ func Command(a Agent, o Options) termsession.Command {
 	if a.Separator {
 		args = append(args, "--")
 	}
-	switch a.Kind {
-	case Claude:
-		mcpConfig := mustJSON(map[string]any{"mcpServers": map[string]any{"den": map[string]any{"command": o.Den, "args": server}}})
-		// The prompt comes first: --mcp-config and --allowedTools take any
-		// number of values and would swallow it.
-		if o.Request != "" {
-			args = append(args, o.Request)
-		}
-		args = append(args,
-			"--mcp-config", mcpConfig,
-			"--append-system-prompt", o.Instructions(),
-			"--allowedTools", strings.Join(readOnlyTools, ","))
-	case Codex:
-		// -c takes TOML values. A JSON string is a valid TOML basic string,
-		// and a JSON array of them a valid TOML array.
-		args = append(args,
-			"-c", "mcp_servers.den.command="+mustJSON(o.Den),
-			"-c", "mcp_servers.den.args="+mustJSON(server),
-			"-c", "developer_instructions="+mustJSON(o.Instructions()))
-		if o.Request != "" {
-			args = append(args, o.Request)
-		}
+	more, env, err := spec.args(session{o: o, server: server, instructions: o.Instructions()})
+	if err != nil {
+		return termsession.Command{}, fmt.Errorf("agent %q: %w", a.Name, err)
 	}
-	return termsession.Command{Path: a.Path, Args: args, Dir: o.Dir}
+	return termsession.Command{Path: a.Path, Args: append(args, more...), Env: env, Dir: o.Dir}, nil
 }
 
 // mustJSON encodes v without escaping <, > and &, which TOML would keep as

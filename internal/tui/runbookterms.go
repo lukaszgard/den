@@ -302,9 +302,13 @@ func (m *AppModel) openAgentTerminal(name, request, agentName string, tabID int,
 		cfgPath = abs
 	}
 	home := r.Runbook().Home()
-	cmd := agent.Command(ag, agent.Options{
+	cmd, err := agent.Command(ag, agent.Options{
 		Den: den, Config: cfgPath, Dir: home, Guide: m.runbookReg.Guide(home), Request: request, Edit: edit,
 	})
+	if err != nil {
+		text := err.Error()
+		return []tea.Cmd{func() tea.Msg { return warnFlash(text) }}
+	}
 	cols, rows := m.runbookView.TerminalSize()
 	start := m.startProgram
 	return []tea.Cmd{func() tea.Msg {

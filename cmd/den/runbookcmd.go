@@ -552,14 +552,20 @@ func runAgent(cmd *cobra.Command, reg *runbook.Registry, ag agent.Agent, cfgPath
 			cfgPath = abs
 		}
 	}
-	ac := agent.Command(ag, agent.Options{
+	ac, err := agent.Command(ag, agent.Options{
 		Den: den, Config: cfgPath, Dir: folder, Guide: reg.Guide(folder), Request: request,
 	})
+	if err != nil {
+		return err
+	}
 	out := cmd.OutOrStdout()
 	fmt.Fprintf(out, "starting %s in it, with den's MCP tools and runbook guide…\n\n", ag.Name)
 
 	c := exec.Command(ac.Path, ac.Args...)
 	c.Dir, c.Stdin, c.Stdout, c.Stderr = ac.Dir, os.Stdin, out, cmd.ErrOrStderr()
+	if len(ac.Env) > 0 {
+		c.Env = append(os.Environ(), ac.Env...)
+	}
 	runErr := c.Run()
 
 	reg.Rescan()
