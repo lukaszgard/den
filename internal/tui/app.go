@@ -238,6 +238,8 @@ type Options struct {
 	// RunbookState holds each runbook's DEN_RUNBOOK_STATE folder; "" keeps
 	// none.
 	RunbookState string
+	// RunbookDrafts keeps the requests typed for an agent; nil keeps none.
+	RunbookDrafts *runbook.Drafts
 }
 
 // New creates the root model over mgr's services.
@@ -265,6 +267,11 @@ func New(mgr *service.Manager, opts Options) *AppModel {
 	}
 	if opts.RunbookState != "" {
 		runbookReg.SetStateRoot(opts.RunbookState)
+	}
+	// Last: dropping the saved requests of runbooks that are gone reads the
+	// folders the sources and state above list.
+	if opts.RunbookDrafts != nil {
+		runbookReg.SetDrafts(opts.RunbookDrafts)
 	}
 	terminals := map[service.Service]*detail.Tabs{}
 	runbookTabs := map[string]*components.Tabs{}
@@ -1476,6 +1483,10 @@ func countRunning(svcs []service.Service) int {
 
 // shutdown stops everything den started, for a quit or a restart.
 func (m *AppModel) shutdown() {
+	// First, while nothing is stopped yet: what was typed for an agent since
+	// the form last saved it.
+	m.runbooksPane.SaveDraft()
+	m.runbookView.SaveDraft()
 	// Stop runbooks before cancelling the context so their scripts get an
 	// interrupt and a grace period rather than being orphaned.
 	if m.runbookReg != nil {

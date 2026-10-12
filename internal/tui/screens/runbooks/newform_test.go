@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lukaszgard/den/internal/agent"
 	"github.com/lukaszgard/den/internal/config"
@@ -13,6 +14,7 @@ import (
 	"github.com/lukaszgard/den/internal/tui/testkeys"
 
 	"charm.land/bubbles/v2/textarea"
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -424,5 +426,97 @@ func TestPasteGoesToTheFieldWithTheKeyboard(t *testing.T) {
 	}
 	if f.rows() != before+2 {
 		t.Fatalf("the request has %d rows, want %d", f.rows(), before+2)
+	}
+}
+
+// draftForm is newFormFixture over a registry that keeps drafts in a folder
+// of the test's own, and saves them as soon as a tick comes.
+func draftForm(t *testing.T) (*newForm, *runbook.Registry) {
+	t.Helper()
+	old := draftSaveDelay
+	draftSaveDelay = time.Millisecond
+	t.Cleanup(func() { draftSaveDelay = old })
+	f := newFormFixture(t, 100, 30)
+	f.reg.SetDrafts(runbook.NewDrafts(filepath.Join(t.TempDir(), "drafts")))
+	return f, f.reg
+}
+
+// saveTicks runs cmd and its batches, and returns the draft saves they ask
+// for. A command still running after a moment, a cursor's blink, is left.
+func saveTicks(cmd tea.Cmd) []draftSaveMsg {
+	if cmd == nil {
+		return nil
+	}
+	ch := make(chan tea.Msg, 1)
+	go func() { ch <- cmd() }()
+	var got tea.Msg
+	select {
+	case got = <-ch:
+	case <-time.After(50 * time.Millisecond):
+		return nil
+	}
+	switch msg := got.(type) {
+	case tea.BatchMsg:
+		var out []draftSaveMsg
+		for _, c := range msg {
+			out = append(out, saveTicks(c)...)
+		}
+		return out
+	case draftSaveMsg:
+		return []draftSaveMsg{msg}
+	}
+	return nil
+}
+
+// The form saves its draft once typing pauses: the tick of a key typed before
+// the last one saves nothing, and the save after it keeps the draft's ID.
+func TestTheFormSavesItsDraftOnceTypingPauses(t *testing.T) {
+	f, reg := draftForm(t)
+	first := saveTicks(f.update(testkeys.Text("Rep")))
+	second := saveTicks(f.update(testkeys.Text("ort")))
+	if len(first) != 1 || len(second) != 1 {
+		t.Fatalf("every change should ask for a save: %v, %v", first, second)
+	}
+	f.update(first[0])
+	if got := reg.Drafts(); len(got) != 0 {
+		t.Fatalf("the tick of a key typed before the last one saved %+v", got)
+	}
+	f.update(second[0])
+	got := reg.Drafts()
+	if len(got) != 1 || got[0].Name != "Report" || got[0].ID != f.draft.ID {
+		t.Fatalf("drafts = %+v, want Report, the form's draft %q", got, f.draft.ID)
+	}
+
+	f.press("enter")
+	tick := saveTicks(f.update(testkeys.Text("list the clusters")))
+	f.update(tick[0])
+	got = reg.Drafts()
+	if len(got) != 1 || got[0].ID != f.draft.ID || got[0].Request != "list the clusters" {
+		t.Fatalf("drafts = %+v, want the same draft with the request", got)
+	}
+}
+
+// Nothing is written while the form is empty, and a key that changes nothing
+// asks for no save.
+func TestAnEmptyFormSavesNothing(t *testing.T) {
+	f, reg := draftForm(t)
+	if ticks := saveTicks(f.update(testkeys.Press("down"))); len(ticks) != 0 {
+		t.Errorf("a key that changed nothing asked for a save: %v", ticks)
+	}
+	tick := saveTicks(f.update(testkeys.Text(" ")))
+	if len(tick) != 1 {
+		t.Fatalf("a space is a change: %v", tick)
+	}
+	f.update(tick[0])
+	if got := reg.Drafts(); len(got) != 0 || f.draft.ID != "" {
+		t.Fatalf("a blank form saved %+v", got)
+	}
+}
+
+// Without a place to keep drafts the form asks for no save at all.
+func TestTheFormSavesNoDraftWithoutAStore(t *testing.T) {
+	f := newFormFixture(t, 100, 30)
+	if ticks := saveTicks(f.update(testkeys.Text("Report"))); len(ticks) != 0 {
+		t.Fatalf("asked for saves with nowhere to keep them: %v", ticks)
 	}
 }

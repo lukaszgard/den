@@ -122,6 +122,14 @@ func (m Model) SetDark(isDark bool) Model {
 // Dark reports whether the pane draws for a dark background.
 func (m Model) Dark() bool { return !m.light }
 
+// SaveDraft writes the open form's draft at once, for a den about to quit:
+// what was typed since the last save would be lost.
+func (m Model) SaveDraft() {
+	if m.naming != nil {
+		_ = m.naming.saveDraft()
+	}
+}
+
 // SetSize resizes in place, keeping the cursor, the filter and any prompt.
 func (m Model) SetSize(width, height int) Model {
 	m.width, m.height = width, height
@@ -392,11 +400,11 @@ func (m Model) startNaming() (Model, tea.Cmd) {
 }
 
 func (m Model) updateNaming(msg tea.Msg) (Model, tea.Cmd) {
-	if k, ok := msg.(tea.KeyPressMsg); ok && k.String() == "esc" {
-		m.naming = nil
-		return m, nil
-	}
 	cmd := m.naming.update(msg)
+	if m.naming.closed {
+		m.naming = nil
+		return m, cmd
+	}
 	if !m.naming.done {
 		return m, cmd
 	}

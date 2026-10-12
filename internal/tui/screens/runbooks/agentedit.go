@@ -54,13 +54,13 @@ func (v View) EditWithAgent() (View, tea.Cmd) {
 }
 
 // updateAsk drives the question: enter starts the agent with the request, esc
-// drops it.
+// drops it, asking first to keep what was typed as a draft.
 func (v View) updateAsk(msg tea.Msg) (View, tea.Cmd) {
-	if k, ok := msg.(tea.KeyPressMsg); ok && k.String() == "esc" {
-		v.ask = nil
-		return v, nil
-	}
 	cmd := v.ask.update(msg)
+	if v.ask.closed {
+		v.ask = nil
+		return v, cmd
+	}
 	if !v.ask.done {
 		return v, cmd
 	}
@@ -69,5 +69,13 @@ func (v View) updateAsk(msg tea.Msg) (View, tea.Cmd) {
 	v.ask = nil
 	return v, func() tea.Msg {
 		return msgs.OpenRunbookTerminalMsg{Name: name, AgentEdit: true, Request: request}
+	}
+}
+
+// SaveDraft writes the draft of E's open question at once, for a den about to
+// quit.
+func (v View) SaveDraft() {
+	if v.ask != nil {
+		_ = v.ask.saveDraft()
 	}
 }

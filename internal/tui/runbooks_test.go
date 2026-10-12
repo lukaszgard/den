@@ -46,12 +46,28 @@ type runbookFixture struct {
 	starts *programStarts
 	root   string // the runbooks directory
 	greet  string // the Greet runbook's folder
+	opts   Options
 }
 
 func runbookHarness(t *testing.T) runbookFixture { return runbookHarnessWith(t, nil) }
 
 // runbookHarnessWith is runbookHarness with runbooks.agents set to agents.
 func runbookHarnessWith(t *testing.T, agents []config.AgentSpec) runbookFixture {
+	t.Helper()
+	return runbookHarnessOpts(t, fixtureOpts{agents: agents})
+}
+
+// fixtureOpts are what a runbook fixture may change: runbooks.agents, and
+// whether drafts are kept, with which runbooks.drafts.
+type fixtureOpts struct {
+	agents []config.AgentSpec
+	drafts bool
+	// keep is runbooks.drafts.keep_request; "" leaves it out.
+	keep string
+}
+
+// runbookHarnessOpts is runbookHarness as o says.
+func runbookHarnessOpts(t *testing.T, o fixtureOpts) runbookFixture {
 	t.Helper()
 	dir := t.TempDir()
 	root := filepath.Join(dir, "runbooks")
@@ -80,24 +96,47 @@ func runbookHarnessWith(t *testing.T, agents []config.AgentSpec) runbookFixture 
 				Params: []config.ParamSpec{{Name: "who", Required: true}},
 			}},
 			Sequences: []config.SequenceSpec{{Name: "Both", Steps: []string{"Greet"}}},
-			Agents:    agents,
+			Agents:    o.agents,
 		},
 	}
-	h := &harness{t: t, m: New(managerWith(), Options{
+	if o.keep != "" {
+		cfg.Runbooks.Drafts = &config.RunbookDrafts{KeepRequest: o.keep}
+	}
+	opts := Options{
 		ConfigPath:     filepath.Join(dir, "den.yaml"),
 		Config:         cfg,
 		Version:        "test",
 		RunbookHistory: runbook.NewHistory(filepath.Join(dir, "state")),
-	})}
-	t.Cleanup(func() { h.m.shutdown() })
+	}
+	if o.drafts {
+		opts.RunbookDrafts = runbook.NewDrafts(filepath.Join(dir, "drafts"))
+	}
+	f := runbookFixture{harness: &harness{t: t}, starts: &programStarts{}, root: root, greet: greet, opts: opts}
+	f.open()
+	return f
+}
+
+// open starts den over the fixture's config, on the Runbooks pane, focused.
+func (f runbookFixture) open() {
+	f.t.Helper()
+	h := f.harness
+	h.m = New(managerWith(), f.opts)
+	m := h.m
+	f.t.Cleanup(func() { m.shutdown() })
 	h.send(tea.WindowSizeMsg{Width: 140, Height: 40})
-	starts := &programStarts{}
-	h.m.startProgram = starts.start
+	h.m.startProgram = f.starts.start
 	for h.m.currentPane() != paneRunbooks {
 		h.press("down")
 	}
 	h.press("right")
-	return runbookFixture{harness: h, starts: starts, root: root, greet: greet}
+}
+
+// reopen quits den and starts it again over the same folders, as a person
+// who closed it would: what was only in memory is gone.
+func (f runbookFixture) reopen() {
+	f.t.Helper()
+	f.m.shutdown()
+	f.open()
 }
 
 // flatView is view without its styling, borders and line breaks, its runs of
