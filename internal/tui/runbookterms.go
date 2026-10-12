@@ -128,7 +128,19 @@ func (m *AppModel) openRunbookTerminal(msg msgs.OpenRunbookTerminalMsg) []tea.Cm
 		return m.openAgentTerminal(msg.Name, msg.Request, "", 0, true)
 	}
 	if agentName, ok := m.agentTabs[msg.Name][msg.TabID]; ok && msg.TabID != 0 {
-		return m.openAgentTerminal(msg.Name, "", agentName, msg.TabID, m.agentEdits[msg.Name][msg.TabID])
+		edit := m.agentEdits[msg.Name][msg.TabID]
+		request := ""
+		if saved, ok := m.runbookReg.SavedRequest(msg.Name, draftKind(edit)); ok {
+			// The view asks; its answer comes back as this message, answered.
+			if !msg.Answered && m.showRunbook && m.runbookView.Name() == msg.Name {
+				m.runbookView = m.runbookView.AskResend(msg.TabID, saved.Request)
+				return nil
+			}
+			if msg.Resend {
+				request = saved.Request
+			}
+		}
+		return m.openAgentTerminal(msg.Name, request, agentName, msg.TabID, edit)
 	}
 	// The restart of a failed editor opens its file again, not a shell.
 	if e, ok := m.editorTabs[msg.Name][msg.TabID]; ok && msg.TabID != 0 {

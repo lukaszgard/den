@@ -79,6 +79,8 @@ type RunbookSourceDoneMsg struct {
 // restarts that tab's program after it exited. Scratch is a directory that
 // holds File and goes when the editor exits cleanly. AgentEdit starts the
 // runbook's agent to change it as Request says ("" asks nothing of it).
+// Answered, on the restart of an agent's tab, says the user was asked whether
+// to send the agent its saved request again, and Resend is the answer.
 type OpenRunbookTerminalMsg struct {
 	Name      string
 	Edit      bool
@@ -87,6 +89,8 @@ type OpenRunbookTerminalMsg struct {
 	TabID     int
 	AgentEdit bool
 	Request   string
+	Answered  bool
+	Resend    bool
 }
 
 // DisconnectMsg asks the root model to disconnect a service, once the detail

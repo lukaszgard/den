@@ -469,3 +469,87 @@ func TestKeepRequestUntilExitKeepsItWhenDenClosesTheTab(t *testing.T) {
 		t.Fatal("a tab den stopped should leave the request")
 	}
 }
+
+func hasArg(args []string, want string) bool {
+	return strings.Contains(strings.Join(args, "\n"), want)
+}
+
+func TestRestartingAnAgentAsksToSendTheRequestAgain(t *testing.T) {
+	f := draftsHarness(t, "")
+	f.typeNew("RDS status", "check RDS")
+	f.press("enter")
+	f.agentExits("RDS status", 0, errors.New("exit status 1"))
+
+	f.press("enter")
+	if view := flatView(plain(f.m)); !strings.Contains(view, "Send the request again? y: send it n: start empty esc: cancel") ||
+		!strings.Contains(view, "check RDS") {
+		t.Fatalf("restarting the agent should ask first:\n%s", view)
+	}
+	if len(f.starts.cmds) != 1 {
+		t.Fatal("nothing should start before the answer")
+	}
+	f.press("y")
+	if len(f.starts.cmds) != 2 || f.starts.cmds[1].Args[0] != "check RDS" {
+		t.Fatalf("y should start the agent with the request: %q", f.starts.cmds)
+	}
+	if got := f.m.runbookTabs["RDS status"].Len(); got != 1 {
+		t.Fatalf("the restart should reuse the tab, have %d", got)
+	}
+
+	f.agentExits("RDS status", 1, errors.New("exit status 1"))
+	f.press("enter", "n")
+	if len(f.starts.cmds) != 3 || hasArg(f.starts.cmds[2].Args, "check RDS") {
+		t.Fatalf("n should start the agent without the request: %q", f.starts.cmds[len(f.starts.cmds)-1].Args)
+	}
+
+	f.agentExits("RDS status", 2, errors.New("exit status 1"))
+	f.press("enter", "esc")
+	if len(f.starts.cmds) != 3 || strings.Contains(plain(f.m), "Send the request again?") {
+		t.Fatalf("esc should cancel the restart:\n%s", plain(f.m))
+	}
+}
+
+func TestRestartingAnAgentWithoutASavedRequestStartsAtOnce(t *testing.T) {
+	f := draftsHarness(t, "never")
+	f.typeNew("RDS status", "check RDS")
+	f.press("enter")
+	f.agentExits("RDS status", 0, errors.New("exit status 1"))
+	f.press("enter")
+	if len(f.starts.cmds) != 2 || strings.Contains(plain(f.m), "Send the request again?") {
+		t.Fatalf("with no request kept the restart should not ask:\n%s", plain(f.m))
+	}
+}
+
+// After den restarts the agent's tab is gone: E offers the request instead.
+func TestEAfterReopeningDenOffersTheSavedRequest(t *testing.T) {
+	f := draftsHarness(t, "")
+	f.typeNew("RDS status", "check RDS")
+	f.press("enter")
+	f.reopen()
+
+	f.selectRow("RDS status")
+	f.press("E")
+	view := flatView(plain(f.m))
+	if !strings.Contains(view, "What should change in RDS status?") || !strings.Contains(view, "> check RDS") ||
+		!strings.Contains(view, "the request it was given last") {
+		t.Fatalf("E should open filled with the saved request, saying so:\n%s", view)
+	}
+	// Sent as it is, esc would have nothing to ask.
+	f.press("enter")
+	last := f.starts.cmds[len(f.starts.cmds)-1]
+	if !hasArg(last.Args, "check RDS") {
+		t.Fatalf("enter should send the request again: %q", last.Args)
+	}
+}
+
+func TestEFilledWithTheSavedRequestClosesOnEscUnchanged(t *testing.T) {
+	f := draftsHarness(t, "")
+	f.typeNew("RDS status", "check RDS")
+	f.press("enter")
+	f.reopen()
+	f.selectRow("RDS status")
+	f.press("E", "esc")
+	if f.m.runbookView.CapturingKeys() {
+		t.Fatalf("esc on the request as it was kept should close without asking:\n%s", plain(f.m))
+	}
+}

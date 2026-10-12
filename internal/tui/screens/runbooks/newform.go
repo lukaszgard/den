@@ -54,6 +54,9 @@ type newForm struct {
 	initial string
 	// asking is set while esc's question, keep it as a draft, is up.
 	asking bool
+	// lastRequest is set when E's question opens with the request the
+	// runbook's agent was given last, which it says.
+	lastRequest bool
 	// closed is set once the form is done with and nothing is to be created.
 	closed bool
 	// top is the first of the request's rows shown once it scrolls.
@@ -581,8 +584,11 @@ func (f *newForm) view(requestRows []string, more string) string {
 	}
 
 	if f.editing != "" {
-		request := append([]string{"What should change in " + f.editing + "?",
-			description(f.agents[0].Label() + " changes it in a terminal tab, in its folder" + startsWithGo(f.agents[0]) + "; empty starts it without a request")},
+		about := f.agents[0].Label() + " changes it in a terminal tab, in its folder" + startsWithGo(f.agents[0]) + "; empty starts it without a request"
+		if f.lastRequest {
+			about = "Below is the request it was given last: enter sends it again. " + about
+		}
+		request := append([]string{"What should change in " + f.editing + "?", description(about)},
 			requestRows...)
 		if more != "" {
 			request = append(request, dim.Render(more))
