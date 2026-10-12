@@ -1,0 +1,5 @@
+name: Bastion status
+description: Is the bastion running and reachable over SSM? In Python with boto3
+command: uv run --quiet main.py
+env: demo-e2e
+timeout: 2m

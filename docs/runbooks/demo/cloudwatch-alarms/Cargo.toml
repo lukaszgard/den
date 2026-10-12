@@ -1,0 +1,11 @@
+[package]
+name = "cloudwatch-alarms"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"   # the resolver picks crate versions that build on it
+resolver = "3"
+
+[dependencies]
+aws-config = { version = "1", features = ["behavior-version-latest"] }
+aws-sdk-cloudwatch = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
