@@ -83,10 +83,16 @@ func (v View) updateAsk(msg tea.Msg) (View, tea.Cmd) {
 	}
 	_, request, _ := v.ask.values()
 	name := v.name
-	v.ask = nil
-	return v, func() tea.Msg {
-		return msgs.OpenRunbookTerminalMsg{Name: name, AgentEdit: true, Request: request}
+	var kept tea.Cmd
+	if e, ok := lookup(v.reg, name); ok && !e.isSeq() {
+		if err := v.ask.sent(name, e.runner.Runbook().Dir); err != nil {
+			kept = warn("the request is not kept for a restart: " + err.Error())
+		}
 	}
+	v.ask = nil
+	return v, tea.Batch(kept, func() tea.Msg {
+		return msgs.OpenRunbookTerminalMsg{Name: name, AgentEdit: true, Request: request}
+	})
 }
 
 // SaveDraft writes the draft of E's open question at once, for a den about to

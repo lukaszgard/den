@@ -1,6 +1,10 @@
 package tui
 
 import (
+	"errors"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -298,5 +302,170 @@ func TestADraftOfAChangeReopensFromItsRowAndFromE(t *testing.T) {
 	f.press("E")
 	if view := plain(f.m); !strings.Contains(view, "ask for the name") {
 		t.Fatalf("E on a runbook with a draft of a change should open it:\n%s", view)
+	}
+}
+
+// agentTab is the terminal of the runbook's first terminal tab, as its tabs
+// hold it: an agent's is wrapped.
+func (f runbookFixture) agentTab(name string) liveTerminal {
+	f.t.Helper()
+	tabs := f.m.runbookTabs[name]
+	if tabs == nil || tabs.Len() == 0 {
+		f.t.Fatalf("%s has no terminal tab", name)
+	}
+	return tabs.Term(tabs.Position(1)).(liveTerminal)
+}
+
+// agentExits ends the program of the agent started nth, with err, and tells
+// den, as its waiter would.
+func (f runbookFixture) agentExits(name string, nth int, err error) {
+	f.t.Helper()
+	term := f.agentTab(name)
+	f.starts.terms[nth].exit(err)
+	f.send(terminalChangedMsg{term: term})
+}
+
+func TestEnterTurnsTheDraftIntoASavedRequest(t *testing.T) {
+	f := draftsHarness(t, "")
+	f.keepNew("RDS status", "check RDS")
+	f.selectRow("RDS status")
+	f.press("enter", "enter")
+	if len(f.starts.cmds) != 1 || f.starts.cmds[0].Args[0] != "check RDS" {
+		t.Fatalf("the agent should get the request: %q", f.starts.cmds)
+	}
+	if drafts := f.m.runbookReg.Drafts(); len(drafts) != 0 {
+		t.Fatalf("the draft is still a draft: %+v", drafts)
+	}
+	saved, ok := f.m.runbookReg.SavedRequest("RDS status", runbook.DraftNew)
+	if !ok || saved.Request != "check RDS" || saved.Folder != filepath.Join(f.root, "rds-status") || saved.Agent != "claude" {
+		t.Fatalf("saved request = %+v, %v", saved, ok)
+	}
+}
+
+// A request sent before the form saved it is kept all the same.
+func TestARequestSentAtOnceIsSaved(t *testing.T) {
+	f := draftsHarness(t, "")
+	f.typeNew("RDS status", "check RDS")
+	f.press("enter")
+	if _, ok := f.m.runbookReg.SavedRequest("RDS status", runbook.DraftNew); !ok {
+		t.Fatal("no saved request")
+	}
+}
+
+// With no request there is nothing to give an agent again: the draft goes.
+func TestEnterWithoutARequestDropsTheDraft(t *testing.T) {
+	f := draftsHarness(t, "")
+	f.typeNew("Notes", "")
+	f.press("esc", "y")
+	f.selectRow("Notes")
+	f.press("enter", "enter")
+	if _, ok := f.m.runbookReg.Lookup("Notes"); !ok {
+		t.Fatal("the runbook was not created")
+	}
+	if drafts := f.m.runbookReg.Drafts(); len(drafts) != 0 {
+		t.Fatalf("drafts = %+v", drafts)
+	}
+	if _, ok := f.m.runbookReg.SavedRequest("Notes", ""); ok {
+		t.Fatal("a request was saved without one")
+	}
+}
+
+// A runbook that cannot be created keeps what was typed as a draft.
+func TestARunbookThatCannotBeCreatedKeepsTheDraft(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a read-only folder still takes new folders on Windows")
+	}
+	f := draftsHarness(t, "")
+	f.typeNew("Fresh", "check RDS")
+	if err := os.Chmod(f.root, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(f.root, 0o750) })
+	f.press("enter")
+	if drafts := f.m.runbookReg.Drafts(); len(drafts) != 1 || drafts[0].Request != "check RDS" {
+		t.Fatalf("drafts = %+v, want the request kept", drafts)
+	}
+	if view := plain(f.m); !strings.Contains(view, "kept as a draft") {
+		t.Errorf("no word that it was kept:\n%s", view)
+	}
+}
+
+func TestEStartedSavesTheRequestOfTheChange(t *testing.T) {
+	f := draftsHarness(t, "")
+	f.selectRow("Greet")
+	f.press("E")
+	f.send(testkeys.Text("ask for the name"))
+	f.press("enter")
+	saved, ok := f.m.runbookReg.SavedRequest("Greet", runbook.DraftEdit)
+	if !ok || saved.Request != "ask for the name" || saved.Folder != f.greet {
+		t.Fatalf("saved request = %+v, %v", saved, ok)
+	}
+	if drafts := f.m.runbookReg.Drafts(); len(drafts) != 0 {
+		t.Fatalf("drafts = %+v", drafts)
+	}
+}
+
+func TestKeepRequestNeverRemovesItOnceTheAgentStarted(t *testing.T) {
+	f := draftsHarness(t, "never")
+	f.typeNew("RDS status", "check RDS")
+	f.press("enter")
+	if len(f.starts.terms) != 1 {
+		t.Fatal("the agent did not start")
+	}
+	if _, ok := f.m.runbookReg.SavedRequest("RDS status", ""); ok {
+		t.Fatal("keep_request: never should drop the request once the agent started")
+	}
+}
+
+func TestKeepRequestNeverKeepsItWhenTheAgentFailsToStart(t *testing.T) {
+	f := draftsHarness(t, "never")
+	f.starts.err = errors.New("no pty")
+	f.typeNew("RDS status", "check RDS")
+	f.press("enter")
+	if _, ok := f.m.runbookReg.SavedRequest("RDS status", ""); !ok {
+		t.Fatal("an agent that never started should leave the request")
+	}
+}
+
+func TestKeepRequestUntilExit(t *testing.T) {
+	f := draftsHarness(t, "until-exit")
+	f.typeNew("RDS status", "check RDS")
+	f.press("enter")
+	saved := func() bool {
+		_, ok := f.m.runbookReg.SavedRequest("RDS status", "")
+		return ok
+	}
+	if !saved() {
+		t.Fatal("the request should be kept while the agent runs")
+	}
+	f.agentExits("RDS status", 0, errors.New("exit status 1"))
+	if !saved() {
+		t.Fatal("an agent that failed should leave the request")
+	}
+
+	// Restarted (the question comes in its own test), it then exits cleanly.
+	f.press("enter")
+	if view := plain(f.m); strings.Contains(view, "Send the request again?") {
+		f.press("y")
+	}
+	if len(f.starts.terms) != 2 {
+		t.Fatalf("enter on the exited tab should restart the agent, started %d", len(f.starts.terms))
+	}
+	f.agentExits("RDS status", 1, nil)
+	if saved() {
+		t.Fatal("an agent that exited cleanly by itself should take the request with it")
+	}
+}
+
+// A tab den closes is no clean exit, whatever the program's status says.
+func TestKeepRequestUntilExitKeepsItWhenDenClosesTheTab(t *testing.T) {
+	f := draftsHarness(t, "until-exit")
+	f.typeNew("RDS status", "check RDS")
+	f.press("enter")
+	term := f.agentTab("RDS status")
+	f.m.runbookTabs["RDS status"].StopAll()
+	f.send(terminalChangedMsg{term: term})
+	if _, ok := f.m.runbookReg.SavedRequest("RDS status", ""); !ok {
+		t.Fatal("a tab den stopped should leave the request")
 	}
 }

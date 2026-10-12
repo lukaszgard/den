@@ -477,22 +477,33 @@ func (m Model) updateNaming(msg tea.Msg) (Model, tea.Cmd) {
 	if !m.naming.done {
 		return m, cmd
 	}
-	name, request, agentName := m.naming.values()
+	form := m.naming
+	name, request, agentName := form.values()
 	m.naming = nil
-	if _, err := m.reg.NewRunbook(name, ""); err != nil {
-		return m, func() tea.Msg {
-			return msgs.StatusFlashMsg{Text: err.Error(), Warn: true, Hold: 6 * time.Second}
+	dir, err := m.reg.NewRunbook(name, "")
+	if err != nil {
+		text := err.Error()
+		// What was typed is not lost to a name that turned out to be taken.
+		if form.worthKeeping() && form.saveDraft() == nil {
+			text += " — kept as a draft"
+		}
+		return m.Refresh(), func() tea.Msg {
+			return msgs.StatusFlashMsg{Text: text, Warn: true, Hold: 6 * time.Second}
 		}
 	}
-	m = m.sync()
+	var kept tea.Cmd
+	if err := form.sent(name, dir); err != nil {
+		kept = warn("the request is not kept for a restart: " + err.Error())
+	}
+	m = m.Refresh()
 	if _, ok := lookup(m.reg, name); !ok {
 		// A runbook.yaml from a template that does not load: w says why.
-		return m, flash("created, but it did not load — press w")
+		return m, tea.Batch(kept, flash("created, but it did not load — press w"))
 	}
 	if request != "" {
-		return m, func() tea.Msg { return msgs.OpenRunbookMsg{Name: name, Agent: request, AgentName: agentName} }
+		return m, tea.Batch(kept, func() tea.Msg { return msgs.OpenRunbookMsg{Name: name, Agent: request, AgentName: agentName} })
 	}
-	return m, func() tea.Msg { return msgs.OpenRunbookMsg{Name: name, Edit: true} }
+	return m, tea.Batch(kept, func() tea.Msg { return msgs.OpenRunbookMsg{Name: name, Edit: true} })
 }
 
 // --- rendering ---

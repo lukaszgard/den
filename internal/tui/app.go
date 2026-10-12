@@ -562,6 +562,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Asked before editorClosed takes the editor's tab away.
 		runbookTerm := m.isRunbookTerminal(msg.term)
+		m.agentExited(msg.term)
 		edited := m.sourceEditClosed(msg.term)
 		m.editorClosed(msg.term)
 		if edited != nil || (m.runbookReg.RescanOn() && runbookTerm) {

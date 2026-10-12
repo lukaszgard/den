@@ -211,10 +211,10 @@ func (d *Drafts) Request(name, kind string) (Draft, bool) {
 	return best, found
 }
 
-// Delete removes the draft with the given ID; one that is gone already is no
-// error.
+// Delete removes the draft with the given ID; one that is gone already, or
+// no ID, is no error.
 func (d *Drafts) Delete(id string) error {
-	if d == nil {
+	if d == nil || id == "" {
 		return nil
 	}
 	if !draftIDRe.MatchString(id) {
@@ -233,6 +233,14 @@ func (d *Drafts) Delete(id string) error {
 // asked none of it.
 func (d *Drafts) Forget(name string) error {
 	return d.removeIf(func(dr Draft) bool { return dr.Runbook == name })
+}
+
+// DropRequest removes the saved request of kind of the runbook called name,
+// once it is no longer wanted: see runbooks.drafts.keep_request.
+func (d *Drafts) DropRequest(name, kind string) error {
+	return d.removeIf(func(dr Draft) bool {
+		return dr.State == StateCreated && dr.Runbook == name && dr.Kind == kind
+	})
 }
 
 // dropOrphans removes the saved requests whose runbook's folder is gone.
@@ -377,6 +385,11 @@ func (r *Registry) DeleteDraft(id string) error {
 // kind (DraftNew, DraftEdit, or "" for either).
 func (r *Registry) SavedRequest(name, kind string) (Draft, bool) {
 	return r.draftStore().Request(name, kind)
+}
+
+// DropRequest removes the saved request of kind of the runbook called name.
+func (r *Registry) DropRequest(name, kind string) error {
+	return r.draftStore().DropRequest(name, kind)
 }
 
 func (r *Registry) draftStore() *Drafts {

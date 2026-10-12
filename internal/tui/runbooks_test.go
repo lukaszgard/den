@@ -25,13 +25,19 @@ import (
 	"github.com/lukaszgard/den/internal/tui/testkeys"
 )
 
-// programStarts records the programs the root model started for runbooks.
+// programStarts records the programs the root model started for runbooks;
+// with err set, each fails to start with it.
 type programStarts struct {
 	cmds  []termsession.Command
 	terms []*fakeTerminal
+	err   error
 }
 
 func (ps *programStarts) start(cmd termsession.Command, cols, rows int) (liveTerminal, error) {
+	if ps.err != nil {
+		ps.cmds = append(ps.cmds, cmd)
+		return nil, ps.err
+	}
 	term := &fakeTerminal{changed: make(chan struct{}, 1)}
 	ps.cmds = append(ps.cmds, cmd)
 	ps.terms = append(ps.terms, term)

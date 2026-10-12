@@ -246,11 +246,24 @@ func TestSavedRequests(t *testing.T) {
 		t.Errorf("%d files on disk, want one per runbook and kind", n)
 	}
 
+	if err := d.DropRequest("deploy", DraftEdit); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := d.Request("deploy", DraftEdit); ok {
+		t.Error("DropRequest left the request of the change")
+	}
+	if _, ok := d.Request("deploy", DraftNew); !ok {
+		t.Error("DropRequest of the change took the request of the new runbook too")
+	}
+
 	if err := d.Forget("deploy"); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := d.Request("deploy", ""); ok {
 		t.Error("Forget left a request of deploy")
+	}
+	if err := d.Delete(""); err != nil {
+		t.Errorf("deleting no draft: %v", err)
 	}
 }
 

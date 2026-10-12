@@ -319,6 +319,27 @@ func (f *newForm) saveDraft() error {
 	return nil
 }
 
+// sent turns the form's draft into the saved request of the runbook called
+// name, in folder, which it created or changed: an agent that fails can be
+// given it again. Without a request there is nothing to give: the draft goes.
+func (f *newForm) sent(name, folder string) error {
+	if !f.reg.KeepsDrafts() {
+		return nil
+	}
+	_, request, _ := f.values()
+	if request == "" {
+		return f.reg.DeleteDraft(f.draft.ID)
+	}
+	dr := f.asDraft()
+	dr.State, dr.Runbook, dr.Folder, dr.Request = runbook.StateCreated, name, folder, request
+	saved, err := f.reg.SaveDraft(dr)
+	if err != nil {
+		return err
+	}
+	f.draft = saved
+	return nil
+}
+
 // updateFields hands msg to the field that has the keyboard.
 func (f *newForm) updateFields(msg tea.Msg) tea.Cmd {
 	if f.editing != "" {
