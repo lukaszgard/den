@@ -688,6 +688,8 @@ func TestRunbookValidation(t *testing.T) {
 		{"negative history on an item", "items: [{name: a, command: x, history: -1}]", `runbook "a": history cannot be negative`},
 		{"negative history in defaults", "defaults: {history: -2}", "runbooks.defaults: history cannot be negative"},
 		{"unbounded retry", "items: [{name: a, command: x, retry: {until_success: true, interval: 1s}}]", "needs max_attempts or timeout"},
+		{"unknown keep_request", "drafts: {keep_request: forever}", `runbooks.drafts.keep_request: "forever" is not one of until-deleted, until-exit, never`},
+		{"negative draft days", "drafts: {days: -1}", "runbooks.drafts.days cannot be negative, got -1"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -852,6 +854,33 @@ runbooks:
 	}
 	if !(*RunbooksConfig)(nil).RescanOn() {
 		t.Error("rescan is off without a runbooks block, want on")
+	}
+}
+
+func TestRunbookDrafts(t *testing.T) {
+	var none *RunbooksConfig
+	if none.KeepRequest() != KeepUntilDeleted || none.DraftDays() != 30 {
+		t.Errorf("defaults without a runbooks block = %q/%d, want until-deleted/30", none.KeepRequest(), none.DraftDays())
+	}
+	empty := &RunbooksConfig{Drafts: &RunbookDrafts{}}
+	if empty.KeepRequest() != KeepUntilDeleted || empty.DraftDays() != 30 {
+		t.Errorf("defaults of an empty drafts block = %q/%d", empty.KeepRequest(), empty.DraftDays())
+	}
+
+	cfg, err := load(t, envBlock+`
+runbooks:
+  drafts:
+    keep_request: until-exit
+    days: 0
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.Runbooks.KeepRequest(); got != KeepUntilExit {
+		t.Errorf("keep_request = %q, want until-exit", got)
+	}
+	if got := cfg.Runbooks.DraftDays(); got != 0 {
+		t.Errorf("days = %d; 0 (keep until deleted) must be kept apart from unset", got)
 	}
 }
 

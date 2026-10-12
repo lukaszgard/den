@@ -302,6 +302,47 @@ type RunbooksConfig struct {
 	// host/owner/repo patterns with * wildcards: "ghe.acme.com/ops/*".
 	// Empty allows any.
 	AllowSources []string `yaml:"allow_sources,omitempty"`
+	// Drafts are the requests typed into the Runbooks pane's n and E forms:
+	// how long an unfinished one is kept, and what happens to a request once
+	// its runbook is created.
+	Drafts *RunbookDrafts `yaml:"drafts,omitempty"`
+}
+
+// RunbookDrafts says how long den keeps what was typed for an agent. Drafts
+// stay on this machine, in den's state folder: a request may hold secrets.
+type RunbookDrafts struct {
+	// KeepRequest is what happens to a request once its runbook is created:
+	// until-deleted keeps it until the runbook is deleted, so restarting the
+	// agent can send it again; until-exit removes it when the agent exits
+	// cleanly by itself; never removes it as soon as the agent has started.
+	// Default until-deleted.
+	KeepRequest string `yaml:"keep_request,omitempty" jsonschema:"enum=until-deleted,enum=until-exit,enum=never"`
+	// Days is how many days an untouched draft is kept; 0 keeps drafts until
+	// you delete them. Default 30.
+	Days *int `yaml:"days,omitempty"`
+}
+
+// The values of runbooks.drafts.keep_request.
+const (
+	KeepUntilDeleted = "until-deleted"
+	KeepUntilExit    = "until-exit"
+	KeepNever        = "never"
+)
+
+// KeepRequest is runbooks.drafts.keep_request, until-deleted when unset.
+func (r *RunbooksConfig) KeepRequest() string {
+	if r == nil || r.Drafts == nil || r.Drafts.KeepRequest == "" {
+		return KeepUntilDeleted
+	}
+	return r.Drafts.KeepRequest
+}
+
+// DraftDays is runbooks.drafts.days, 30 when unset; 0 keeps drafts for good.
+func (r *RunbooksConfig) DraftDays() int {
+	if r == nil || r.Drafts == nil || r.Drafts.Days == nil {
+		return 30
+	}
+	return *r.Drafts.Days
 }
 
 // AgentSpec is one named way to start an agent that writes a runbook.

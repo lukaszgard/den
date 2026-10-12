@@ -473,6 +473,7 @@ func validateRunbooks(cfg *Config) []error {
 	add(validateRunbookSettings("runbooks.defaults", cfg.Runbooks.Defaults))
 	add(CheckRunbookAgent("runbooks.defaults", cfg.Runbooks.Defaults.Agent, cfg.Runbooks.Agents))
 	errs = append(errs, validateRunbookAgents(cfg.Runbooks)...)
+	add(validateRunbookDrafts(cfg.Runbooks.Drafts))
 	seen := make(map[string]string) // name -> what declared it
 	for i, rb := range cfg.Runbooks.Items {
 		add(func() error {
@@ -506,6 +507,22 @@ func validateRunbooks(cfg *Config) []error {
 		}())
 	}
 	return append(errs, validateRunbookSources(cfg.Runbooks, cfg.Environments)...)
+}
+
+// keepRequestValues are what runbooks.drafts.keep_request takes.
+var keepRequestValues = []string{KeepUntilDeleted, KeepUntilExit, KeepNever}
+
+func validateRunbookDrafts(d *RunbookDrafts) error {
+	if d == nil {
+		return nil
+	}
+	if d.KeepRequest != "" && !slices.Contains(keepRequestValues, d.KeepRequest) {
+		return fmt.Errorf("runbooks.drafts.keep_request: %q is not one of %s", d.KeepRequest, strings.Join(keepRequestValues, ", "))
+	}
+	if d.Days != nil && *d.Days < 0 {
+		return fmt.Errorf("runbooks.drafts.days cannot be negative, got %d", *d.Days)
+	}
+	return nil
 }
 
 // AgentKinds are the agent CLIs den can start to write a runbook, in the order

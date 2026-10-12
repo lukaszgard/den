@@ -169,6 +169,9 @@ runbooks:                           # user-defined scripts, run with den's conte
     # shell: bash                   # what t opens in the runbook's folder (default $SHELL)
     # editor: code --wait           # what e and o open the script and run logs with (default $VISUAL, $EDITOR, vi)
     # agent: claude --model opus    # what E changes a runbook with: a command line or a name above (default agent)
+  # drafts:                         # what n and E keep of a request typed for an agent
+  #   keep_request: until-deleted   # once the runbook is created: until-deleted, until-exit (the agent exits cleanly) or never
+  #   days: 30                      # days an untouched draft is kept (0: until you delete it)
 
   # sources:                        # git repositories of runbook folders, listed as <source>/<name>
   #   - name: platform-ops          # (den runbook source add <url> writes one; docs/runbook-sources)

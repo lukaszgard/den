@@ -823,6 +823,26 @@
       ],
       "description": "RetrySpec re-runs a runbook until it exits 0."
     },
+    "RunbookDrafts": {
+      "properties": {
+        "keep_request": {
+          "type": "string",
+          "enum": [
+            "until-deleted",
+            "until-exit",
+            "never"
+          ],
+          "description": "KeepRequest is what happens to a request once its runbook is created:\nuntil-deleted keeps it until the runbook is deleted, so restarting the\nagent can send it again; until-exit removes it when the agent exits\ncleanly by itself; never removes it as soon as the agent has started.\nDefault until-deleted."
+        },
+        "days": {
+          "type": "integer",
+          "description": "Days is how many days an untouched draft is kept; 0 keeps drafts until\nyou delete them. Default 30."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "RunbookDrafts says how long den keeps what was typed for an agent."
+    },
     "RunbookSettings": {
       "properties": {
         "history": {
@@ -1034,6 +1054,10 @@
           },
           "type": "array",
           "description": "AllowSources limits the repositories a source may come from, as\nhost/owner/repo patterns with * wildcards: \"ghe.acme.com/ops/*\".\nEmpty allows any."
+        },
+        "drafts": {
+          "$ref": "#/$defs/RunbookDrafts",
+          "description": "Drafts are the requests typed into the Runbooks pane's n and E forms:\nhow long an unfinished one is kept, and what happens to a request once\nits runbook is created."
         }
       },
       "additionalProperties": false,

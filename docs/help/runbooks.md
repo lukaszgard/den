@@ -47,6 +47,7 @@ A `runbooks:` section. Folders are found in `dirs`; `items` are runbooks written
 - `retry`: `until_success`, `interval`, `max_attempts`, `timeout`; one of the last two is required.
 - `sequences[]`: `name` and `steps` (required, runbook names in order), `description`, `confirm`.
 - `sources`, `allow_sources`: git repositories of runbooks; see Runbook sources.
+- `drafts`: what `n` and `E` keep of a request typed for an agent; `keep_request` (`until-deleted`, the default, keeps it until the runbook is deleted; `until-exit` until the agent exits cleanly by itself; `never` until the agent has started) and `days` (how long an untouched draft is kept, default 30; `0` keeps it until you delete it).
 
 Claude Code with a chosen model, and Codex with another:
 
@@ -112,6 +113,15 @@ runbooks:
   defaults:
     history: 50
     editor: code --wait
+```
+
+Drafts kept for a week, and a request dropped once the agent has finished with it:
+
+```yaml
+runbooks:
+  drafts:
+    keep_request: until-exit
+    days: 7
 ```
 
 A one-line runbook written in `den.yaml`, run with the `prod` environment's profile and region after you confirm:

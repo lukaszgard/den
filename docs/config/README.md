@@ -336,6 +336,7 @@ Guide: [docs/runbooks](../runbooks/README.md)
 | `sequences` | list of objects, keys in [`runbooks.sequences[]`](#runbookssequences) | no | runbooks run in order, stopping at the first failure |
 | `sources` | list of objects, keys in [`runbooks.sources[]`](#runbookssources) | no | `sources` are git repositories of runbook folders that den checks out and lists beside your own, each runbook under its source's name: platform-ops/rds-status. Nothing updates on its own: `den runbook source update` moves a source to the newest commit of its ref. |
 | `allow_sources` | list of string | no | `allow_sources` limits the repositories a source may come from, as host/owner/repo patterns with * wildcards: "ghe.acme.com/ops/*". Empty allows any. |
+| `drafts` | object, keys in [`runbooks.drafts`](#runbooksdrafts) | no | `drafts` are the requests typed into the Runbooks pane's n and E forms: how long an unfinished one is kept, and what happens to a request once its runbook is created. |
 
 ## `runbooks.agents[]`
 
@@ -439,6 +440,15 @@ Guide: [docs/runbook-sources](../runbook-sources/README.md)
 | `include` | list of string | no | `include` lists the runbook folders to show, with * wildcards; empty shows every one. `den runbook install` and `uninstall` edit it. |
 | `exclude` | list of string | no | `exclude` hides runbook folders Include would show. |
 | `env_map` | map of string → string | no | `env_map` maps the env names the source's runbooks use to entries of environments. A runbook whose env is not mapped is not shown: its author's "prod" is not necessarily yours. |
+
+## `runbooks.drafts`
+
+This block says how long den keeps what was typed for an agent.
+
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `keep_request` | string, one of `until-deleted`, `until-exit`, `never` | no | `keep_request` is what happens to a request once its runbook is created: until-deleted keeps it until the runbook is deleted, so restarting the agent can send it again; until-exit removes it when the agent exits cleanly by itself; never removes it as soon as the agent has started. Default until-deleted. |
+| `days` | integer | no | `days` is how many days an untouched draft is kept; 0 keeps drafts until you delete them. Default 30. |
 
 ## `secrets`
 
