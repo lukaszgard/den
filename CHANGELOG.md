@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.1.0] - 2026-10-12
+
+**Six more agent CLIs can write and change your runbooks.** `den runbook new --agent`, the
+Runbooks pane's `n` and `E` started only Claude Code and Codex. They now also start OpenCode,
+Copilot CLI, Qwen Code, Droid, Pi and Kimi Code, each with den's runbook guide, and without
+touching that agent's own configuration.
+
+### 📜 Runbooks
+
+- `kind` in `runbooks.agents`, `runbooks.agent`, a runbook's `agent:` and `--agent` take
+  `opencode`, `copilot`, `qwen`, `droid`, `pi` and `kimi` beside `claude` and `codex`. The kind
+  is read from the command (`opencode --model …`, `/opt/bin/copilot`) and from
+  `ollama launch <kind>`, where `ollama launch copilot-cli` means Copilot CLI. `auto` takes the
+  first one installed, in that order after Claude Code and Codex.
+- OpenCode and Copilot CLI get den's MCP server for the session, as Claude Code and Codex do:
+  OpenCode through a config den writes and names in `OPENCODE_CONFIG`, which it merges with
+  yours; Copilot CLI through `--additional-mcp-config`, with an `AGENTS.md` den adds to
+  `COPILOT_CUSTOM_INSTRUCTIONS_DIRS` ahead of your own folders.
+- Qwen Code, Droid, Pi and Kimi Code cannot take an MCP server for one session, so they check
+  their work with the new `den runbook validate` from their shell. Kimi Code takes no first
+  prompt: den puts the request in its instructions and tells you to type `go` in its tab.
+- `den runbook validate [folder] [--json]` checks a runbook folder the way den loads it and
+  reports what the `validate_runbook` MCP tool does, exiting 1 while the folder does not load.
+- The setting files den writes for these agents live in `agents/` under den's state directory,
+  one folder per start, readable only by you; folders unused for 30 days are removed.
+
+### 🔧 Configuration and checks
+
+- `den doctor --for opencode` (and `copilot`, `qwen`, `droid`, `pi`, `kimi`) shows how to
+  install each agent CLI on your OS.
+
 ## [1.0.4] - 2026-10-11
 
 **An old SSO login left in the cache no longer hides a fresh one.** `~/.aws/sso/cache` keeps a
