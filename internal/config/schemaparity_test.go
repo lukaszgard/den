@@ -353,3 +353,28 @@ func TestCheckEnforcesTheSchemasEnumsAndRequiredKeys(t *testing.T) {
 		t.Errorf("the base config (the Help snippets) never uses these, so they are not tested; add a snippet that does:\n  %s", strings.Join(missing, "\n  "))
 	}
 }
+
+// Every key's description is the Go comment on its field, and it is what an
+// editor shows on hover and what the configuration reference prints. The
+// generator once read the comments under the wrong import path, matched none
+// and said nothing: the schema shipped with no description at all.
+func TestSchemaDescribesEveryKey(t *testing.T) {
+	sd := loadSchemaDoc(t)
+	var missing []string
+	collect := func(name string, def map[string]any) {
+		for key, p := range asObject(def["properties"]) {
+			if d, _ := asObject(p)["description"].(string); strings.TrimSpace(d) == "" {
+				missing = append(missing, name+"."+key)
+			}
+		}
+	}
+	collect("root", sd.root)
+	for name, def := range sd.Defs {
+		collect(name, def)
+	}
+	slices.Sort(missing)
+	if len(missing) > 0 {
+		t.Errorf("%d keys have no description; write a comment on the field and run make generate:\n  %s",
+			len(missing), strings.Join(missing, "\n  "))
+	}
+}

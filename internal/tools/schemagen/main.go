@@ -33,7 +33,9 @@ func run(out string) error {
 		RequiredFromJSONSchemaTags: true,
 		ExpandedStruct:             true,
 	}
-	if err := r.AddGoComments("den", "./internal/config"); err != nil {
+	// The base is the module path (go.mod): comments are looked up by the
+	// types' import paths, and any other base matches none of them, silently.
+	if err := r.AddGoComments("github.com/lukaszgard/den", "./internal/config"); err != nil {
 		return fmt.Errorf("read config comments: %w", err)
 	}
 	s := r.Reflect(&config.Config{})
