@@ -15,11 +15,12 @@ description, and every Description cell of the configuration reference was empty
 - The configuration reference on the documentation site fills its Description column from the
   same text.
 - The reference's Required column says yes or no for every key, where it left optional keys
-  blank, and a key with a fixed set of values lists them in its Type (`string, one of ssm, ssh,
-  …`) instead of in an Allowed values column that stood empty on all but 11 rows. A key needed only in some setups says when in its description: `aws_region_code` and
+  blank. A key needed only in some setups says when in its description: `aws_region_code` and
   `ec2_instance_id` (in the service's section or from its `env`), the transport's `host`,
   `endpoint_id` and `resource`, Redshift's `cluster_identifier` and `workgroup_name`, the VPN's
   `config_file` and KeePassXC's `key_file`.
+- A key with a fixed set of values lists them in its Type (`string, one of ssm, ssh, …`), in
+  place of an Allowed values column that stood empty on all but 11 rows.
 - The schema marks `rds_host`, `db_user` (RDS), `documentdb_host`, `redshift_host`,
   `opensearch_host`, `neptune_host` and a runbook parameter's `name` as required, as den itself
   always did, so an editor flags them when they are missing.
