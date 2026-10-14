@@ -6,6 +6,7 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/lukaszgard/den/internal/tui/components"
 	"github.com/lukaszgard/den/internal/tui/testkeys"
 
 	"charm.land/lipgloss/v2"
@@ -362,5 +363,38 @@ func TestSetDarkSwitchesTheColours(t *testing.T) {
 	m = m.SetDark(false)
 	if !strings.Contains(m.View(80, 30, true), lightRGB) {
 		t.Fatal("the open topic should switch to the light colours")
+	}
+}
+
+// zoneOf is the zone under the first cell of text in the list, which is what a
+// click there would land on.
+func zoneOf(t *testing.T, m Model, text string) string {
+	t.Helper()
+	clean, zones := components.ScanZones(m.View(80, 30, true))
+	for y, line := range strings.Split(ansi.Strip(clean), "\n") {
+		if i := strings.Index(line, text); i >= 0 {
+			id, _ := zones.At(ansi.StringWidth(line[:i]), y)
+			return id
+		}
+	}
+	t.Fatalf("%q is not in the list:\n%s", text, ansi.Strip(clean))
+	return ""
+}
+
+// A click on a topic selects it; a heading is nothing to click, and while a
+// topic is open the list is not on screen to be clicked.
+func TestClickSelectsATopic(t *testing.T) {
+	m := newTestModel(t, 80, 30)
+	if id := zoneOf(t, m, "DATA STORES"); id != "" {
+		t.Fatalf("the heading is the zone %q", id)
+	}
+	redis := zoneOf(t, m, "Redis")
+	m = m.Click(redis)
+	if !strings.Contains(ansi.Strip(m.View(80, 30, true)), "▸ Redis") {
+		t.Fatal("a click on Redis should select it")
+	}
+	m = press(m, "up", "enter")
+	if m = m.Click(redis); m.Reading() != "RDS" || press(m, "esc").cursor != 1 {
+		t.Fatal("a click while a topic is open should do nothing")
 	}
 }
