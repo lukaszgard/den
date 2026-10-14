@@ -186,7 +186,7 @@ func TestEnterOpensTheRunbookViewAndEscLeavesIt(t *testing.T) {
 		t.Fatal("enter on a runbook did not open its view")
 	}
 	view := plain(f.m)
-	for _, want := range []string{"runbook", "Greet", "Logs", "History", "About", "./run.sh", "env dev"} {
+	for _, want := range []string{"runbook", "Greet", "Run │ History │ About", "./run.sh", "env dev"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("the view lacks %q:\n%s", want, view)
 		}
@@ -197,13 +197,13 @@ func TestEnterOpensTheRunbookViewAndEscLeavesIt(t *testing.T) {
 	}
 }
 
-func TestRunFromTheViewShowsItsOutputInLogs(t *testing.T) {
+func TestRunFromTheViewShowsItsOutputInRun(t *testing.T) {
 	f := runbookHarness(t)
 	f.selectRow("Greet")
 	f.press("enter", "r")
 	f.waitRun("Greet")
 	if view := plain(f.m); !strings.Contains(view, "hello from greet as dev-profile") || !strings.Contains(view, "EXIT 0") {
-		t.Fatalf("the run's output is not in Logs, run in its folder with its env:\n%s", view)
+		t.Fatalf("the run's output is not in Run, run in its folder with its env:\n%s", view)
 	}
 }
 
@@ -308,7 +308,7 @@ func TestEOpensTheScriptInTheEditor(t *testing.T) {
 }
 
 // o opens the log of the run on screen in the editor, in a tab named after
-// the run: on History the run picked, on Logs the last one.
+// the run: on History the run picked, on Run the last one.
 func TestOOpensTheRunsLogInTheEditor(t *testing.T) {
 	t.Setenv("VISUAL", "nvim -R")
 	f := runbookHarness(t)
@@ -338,9 +338,9 @@ func TestOOpensTheRunsLogInTheEditor(t *testing.T) {
 		t.Fatalf("the editor's tab is not named after the run:\n%s", plain(f.m))
 	}
 
-	f.press("ctrl+t", "left", "left", "left", "left", "o") // back to Logs
+	f.press("ctrl+t", "left", "left", "left", "left", "o") // back to Run
 	if len(f.starts.cmds) != 2 || f.starts.cmds[1].Args[len(f.starts.cmds[1].Args)-1] != filepath.Join(logs, "log-02.log") {
-		t.Fatalf("o on Logs did not open the last run's log: %d programs", len(f.starts.cmds))
+		t.Fatalf("o on Run did not open the last run's log: %d programs", len(f.starts.cmds))
 	}
 }
 
@@ -356,7 +356,7 @@ func TestOOnASequenceNamesItsLog(t *testing.T) {
 	}
 }
 
-// Each run has a log of its own: Logs shows the last run alone, and History
+// Each run has a log of its own: Run shows the last run alone, and History
 // lists the runs with the selected one's log under them, enter showing that
 // log full height and esc going back to the list before leaving the view.
 func TestHistoryShowsEachRunsOwnLog(t *testing.T) {
@@ -370,7 +370,7 @@ func TestHistoryShowsEachRunsOwnLog(t *testing.T) {
 	f.press("r")
 	f.waitRun("Greet")
 	if view := plain(f.m); strings.Contains(view, "hello from") || !strings.Contains(view, "second run") {
-		t.Fatalf("Logs shows more than the last run:\n%s", view)
+		t.Fatalf("Run shows more than the last run:\n%s", view)
 	}
 
 	f.press("right") // History
@@ -631,7 +631,7 @@ func TestFilesShowsAFileAndEOpensItInTheEditor(t *testing.T) {
 }
 
 // An editor that exits takes its tab with it and hands the screen back to the
-// tab it was opened from: Files, still showing the file, or Logs for the
+// tab it was opened from: Files, still showing the file, or Run for the
 // script. A shell keeps its tab, to be restarted; an editor that exits behind
 // another tab leaves the selection where it is.
 func TestAnEditorClosesItsTabAndGoesBackWhenItExits(t *testing.T) {
@@ -659,13 +659,13 @@ func TestAnEditorClosesItsTabAndGoesBackWhenItExits(t *testing.T) {
 		t.Fatalf("Files should be back, showing run.sh, with den's keys:\n%s", view)
 	}
 
-	f.press("esc", "left", "left", "left", "e") // the script, from Logs
+	f.press("esc", "left", "left", "left", "e") // the script, from Run
 	if len(f.starts.cmds) != 2 || !strings.Contains(plain(f.m), "1 vi") {
-		t.Fatalf("e on Logs should open the script in the editor:\n%s", plain(f.m))
+		t.Fatalf("e on Run should open the script in the editor:\n%s", plain(f.m))
 	}
 	exited(1)
-	if tabs.Len() != 0 || tabs.FixedName(tabs.Selected()) != "Logs" {
-		t.Fatalf("the editor should hand the screen back to Logs, not %q", tabs.FixedName(tabs.Selected()))
+	if tabs.Len() != 0 || tabs.FixedName(tabs.Selected()) != "Run" {
+		t.Fatalf("the editor should hand the screen back to Run, not %q", tabs.FixedName(tabs.Selected()))
 	}
 
 	f.press("t")
@@ -674,7 +674,7 @@ func TestAnEditorClosesItsTabAndGoesBackWhenItExits(t *testing.T) {
 		t.Fatalf("a shell that exits keeps its tab:\n%s", plain(f.m))
 	}
 
-	f.press("ctrl+t", "right", "e", "ctrl+t", "left") // from Logs, then back on the shell
+	f.press("ctrl+t", "right", "e", "ctrl+t", "left") // from Run, then back on the shell
 	exited(3)
 	if tabs.Len() != 1 || tabs.Current() != components.Terminal(f.starts.terms[2]) {
 		t.Fatalf("an editor exiting behind the shell should close and leave the shell on screen, %d tabs", tabs.Len())

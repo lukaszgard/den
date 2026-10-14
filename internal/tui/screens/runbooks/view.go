@@ -23,16 +23,17 @@ import (
 
 // The fixed tabs of the runbook view, before its terminals.
 const (
-	tabLogs    = "Logs"
+	tabRun     = "Run"
 	tabHistory = "History"
 	tabAbout   = "About"
 	tabFiles   = "Files"
 )
 
 // FixedTabs are the tabs the view of the runbook or sequence called name has
-// before its terminals. The root model makes the Tabs it owns with them.
+// before its terminals: Run, the current or last run, then History, About and
+// Files. The root model makes the Tabs it owns with them.
 func FixedTabs(reg *runbook.Registry, name string) []string {
-	tabs := []string{tabLogs, tabHistory}
+	tabs := []string{tabRun, tabHistory}
 	e, ok := lookup(reg, name)
 	if !ok || e.isSeq() || e.runner.Runbook().Settings.About {
 		tabs = append(tabs, tabAbout)
@@ -47,7 +48,7 @@ func FixedTabs(reg *runbook.Registry, name string) []string {
 
 // View is the full-screen view of one runbook or sequence. It is built like
 // the service detail view, and behaves like it: a header, then tabs — the
-// logs of the current or last run, the runs kept on disk each with its own
+// output of the current or last run, the runs kept on disk each with its own
 // log, what the runbook is and what den hands it, the files in its folder —
 // and the terminals opened in the runbook's folder, which the root model owns
 // so they outlive the view.
@@ -234,7 +235,7 @@ func (v *View) fit() {
 func (v View) tab() string {
 	tabs := v.strip.Tabs()
 	if tabs == nil {
-		return tabLogs
+		return tabRun
 	}
 	return tabs.FixedName(tabs.Selected())
 }
@@ -346,7 +347,7 @@ func (v View) key(msg tea.KeyPressMsg) (View, tea.Cmd) {
 		name := v.name
 		return v, func() tea.Msg { return msgs.OpenRunbookTerminalMsg{Name: name, Edit: true} }
 	case "o":
-		if tab := v.tab(); tab == tabLogs || tab == tabHistory {
+		if tab := v.tab(); tab == tabRun || tab == tabHistory {
 			return v, v.openLog(e)
 		}
 		if v.tab() == tabFiles {
@@ -358,7 +359,7 @@ func (v View) key(msg tea.KeyPressMsg) (View, tea.Cmd) {
 	}
 
 	switch v.tab() {
-	case tabLogs:
+	case tabRun:
 		return v, v.logs.Update(msg)
 	case tabHistory:
 		if v.histOpen {
@@ -387,14 +388,14 @@ func (v View) key(msg tea.KeyPressMsg) (View, tea.Cmd) {
 }
 
 // openLog opens the log file of the run on screen in the editor, in a terminal
-// tab of the view: the run Logs shows, or the one picked in History.
+// tab of the view: the run on the Run tab, or the one picked in History.
 func (v View) openLog(e entry) tea.Cmd {
 	st := e.state()
 	path := ""
 	switch {
 	case v.tab() == tabHistory && v.histCursor < len(v.history):
 		path = v.history[v.histCursor].LogPath()
-	case v.tab() == tabLogs:
+	case v.tab() == tabRun:
 		path = st.LogPath
 	}
 	switch {
@@ -457,7 +458,7 @@ func (v View) refresh() View {
 	v.lastTab = tab
 	st := e.state()
 	switch tab {
-	case tabLogs:
+	case tabRun:
 		v.refreshLogs(st)
 	case tabHistory:
 		if entered {
@@ -918,7 +919,7 @@ func (v View) helpLine() string {
 		keys = append(keys, key("D", "delete"))
 	}
 	switch v.tab() {
-	case tabLogs:
+	case tabRun:
 		keys = append(keys, key("o", "log in editor"))
 	case tabHistory:
 		if v.histOpen {
@@ -942,9 +943,9 @@ func (v View) Shortcuts() []components.ShortcutGroup {
 	e, _ := lookup(v.reg, v.name)
 	run := []components.Shortcut{
 		{Keys: "r", Text: "Run it (parameters and confirmation first)"},
-		{Keys: "x", Text: "Cancel the run (on Logs, History, About, Files)"},
+		{Keys: "x", Text: "Cancel the run (on Run, History, About, Files)"},
 		{Keys: "y", Text: "Copy the den run command for it"},
-		{Keys: "o", Text: "Open the run's log in the editor (Logs, History)"},
+		{Keys: "o", Text: "Open the run's log in the editor (Run, History)"},
 	}
 	if e.seq == nil {
 		run = append(run,
@@ -965,7 +966,7 @@ func (v View) Shortcuts() []components.ShortcutGroup {
 			{Keys: "esc ctrl+t", Text: "Give den the keys back (esc twice in an editor)"},
 		}},
 		{Title: "View", Keys: []components.Shortcut{
-			{Keys: "↑ ↓", Text: "Scroll the logs, About or a file shown; pick a run or a file"},
+			{Keys: "↑ ↓", Text: "Scroll Run, About or a file shown; pick a run or a file"},
 			{Keys: "enter", Text: "On Files: show the file picked; esc goes back to the tree"},
 			{Keys: "esc", Text: "Back to the list (from a run's whole log or a file: to the runs or files)"},
 		}},

@@ -154,7 +154,7 @@ runbooks:
       command: flyway -url="jdbc:postgresql://127.0.0.1:${DEN_PORT_RDS_ORDERS_DEV}/orders" -password="$DEN_PARAM_DB_PASSWORD" "$DEN_PARAM_TARGET"
 ```
 
-Colours: den asks every run for them (`FORCE_COLOR=1`, `CLICOLOR_FORCE=1`), so Logs and History, and the Logs panel, show what a shell would. A tool that ignores both needs its flag; `NO_COLOR` in `env_vars` turns the request off:
+Colours: den asks every run for them (`FORCE_COLOR=1`, `CLICOLOR_FORCE=1`), so the Run and History tabs, and the Logs panel, show what a shell would. A tool that ignores both needs its flag; `NO_COLOR` in `env_vars` turns the request off:
 
 ```yaml
 runbooks:

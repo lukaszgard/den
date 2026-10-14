@@ -50,7 +50,7 @@ Type "r"
 Wait+Screen@120s /EXIT 0/
 
 # ── Its output ────────────────────────────────────────────────────────────────
-# Logs is the first tab: the new runbook's output.
+# Run is the first tab: the new runbook's output.
 Left@200ms 4
 Sleep 6s     # Read: the table the runbook prints
 Escape
