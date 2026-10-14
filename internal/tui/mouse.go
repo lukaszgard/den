@@ -51,11 +51,16 @@ func (m *AppModel) click(x, y int) []tea.Cmd {
 
 	// A stray click must never answer a question, nor reach what a pop-up
 	// covers.
+	var cmd tea.Cmd
 	switch {
 	case m.shortcuts.Open() || m.cfgPrompt != nil:
 		return nil
-	case m.showRunbook || m.showDetail:
-		return nil
+	case m.showRunbook:
+		m.runbookView, cmd = m.runbookView.Click(id, double)
+		return []tea.Cmd{cmd}
+	case m.showDetail:
+		m.detailModel, cmd = m.detailModel.Click(id, double)
+		return []tea.Cmd{cmd}
 	case m.paneModal():
 		return nil
 	}
@@ -87,7 +92,9 @@ func (m *AppModel) click(x, y int) []tea.Cmd {
 // "any other key" would read the arrow as an answer; the shortcuts pop-up
 // scrolls with it wherever the pointer is.
 func (m *AppModel) wheel(msg tea.MouseWheelMsg) []tea.Cmd {
-	key := arrow(msg.Button == tea.MouseWheelUp)
+	up := msg.Button == tea.MouseWheelUp
+	key := arrow(up)
+	var cmds []tea.Cmd
 	switch {
 	case m.shortcuts.Open():
 		for range wheelStep {
@@ -96,8 +103,22 @@ func (m *AppModel) wheel(msg tea.MouseWheelMsg) []tea.Cmd {
 		return nil
 	case m.cfgPrompt != nil:
 		return nil
-	case m.showRunbook || m.showDetail:
-		return nil
+	// A full-screen view takes the wheel wherever the pointer is: it is all
+	// one area, and a terminal being typed into gets the arrows, as before.
+	case m.showRunbook:
+		for range wheelStep {
+			var cmd tea.Cmd
+			m.runbookView, cmd = m.runbookView.Wheel(up)
+			cmds = append(cmds, cmd)
+		}
+		return cmds
+	case m.showDetail:
+		for range wheelStep {
+			var cmd tea.Cmd
+			m.detailModel, cmd = m.detailModel.Wheel(up)
+			cmds = append(cmds, cmd)
+		}
+		return cmds
 	// The menu ignores the wheel: a notch too many would switch panels.
 	case !m.inPanel(msg.X, msg.Y) || m.paneModal():
 		return nil
@@ -108,7 +129,6 @@ func (m *AppModel) wheel(msg tea.MouseWheelMsg) []tea.Cmd {
 	}
 	// The panel scrolls without taking the focus, as a window under the
 	// pointer does.
-	var cmds []tea.Cmd
 	for range wheelStep {
 		cmds = append(cmds, p.update(key, true))
 	}

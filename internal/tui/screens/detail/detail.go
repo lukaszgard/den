@@ -277,6 +277,33 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+// Click handles a click on the zone id, a second one in a row on it being a
+// double-click: a tab, or the screen of the terminal on it. Not while a
+// disconnect waits for its answer: a stray click is none.
+func (m Model) Click(id string, double bool) (Model, tea.Cmd) {
+	if m.confirmDisconnect {
+		return m, nil
+	}
+	_, cmd := m.strip.Click(id, double)
+	m.fitBody()
+	return m, cmd
+}
+
+// Wheel handles a notch of the wheel as the arrow it stands for: it scrolls
+// the logs, and reaches the program of a terminal being typed into. While the
+// view asks something it is dropped, since any other key keeps what is asked
+// about. Update keeps an arrow off the logs while a terminal hides them.
+func (m Model) Wheel(up bool) (Model, tea.Cmd) {
+	if m.confirmDisconnect || m.strip.Renaming() || m.strip.ConfirmingClose() {
+		return m, nil
+	}
+	key := tea.KeyPressMsg{Code: tea.KeyDown}
+	if up {
+		key = tea.KeyPressMsg{Code: tea.KeyUp}
+	}
+	return m.Update(key)
+}
+
 // tabKey handles the keys of the terminal tabs, and the answer to a
 // disconnect question, and reports whether msg was one. Anything else falls
 // through to the keys the view always had.
@@ -306,7 +333,7 @@ func (m Model) Render() (view string, cursor *tea.Cursor) {
 	upper := m.upperSection()
 	if term := m.terminal(); term != nil {
 		cols, rows, top := m.bodyArea(upper)
-		body = fitLines(term.View(), rows)
+		body = components.Zone("body", fitLines(term.View(), rows))
 		cursor = m.strip.Cursor(1, top, cols, rows) // 1: the box's left border
 	}
 	boxContent := strings.Join([]string{upper, m.strip.Bar(m.width - 4), body}, "\n")

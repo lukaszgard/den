@@ -269,6 +269,65 @@ func (v View) Update(msg tea.Msg) (View, tea.Cmd) {
 	return v, cmd
 }
 
+// asking reports that a pop-up or a question has the keyboard: a run's
+// parameters or confirmation, a move, a fork, a delete, a resend, E's request,
+// a tab's new name or its close. The mouse answers none of them.
+func (v View) asking() bool {
+	return v.flow.active() || v.mig.active() || v.fork.active() || v.del.active() || v.resend.active() || v.ask != nil ||
+		v.strip.Renaming() || v.strip.ConfirmingClose()
+}
+
+// Click handles a click on the zone id, a second one in a row on it being a
+// double-click: a tab, a terminal's screen, a run in History or a file in
+// Files. A click selects; a double-click does what enter does.
+func (v View) Click(id string, double bool) (View, tea.Cmd) {
+	if v.asking() {
+		return v, nil
+	}
+	if handled, cmd := v.strip.Click(id, double); handled {
+		v = v.refresh()
+		v.fit()
+		return v, cmd
+	}
+	switch tab := v.tab(); {
+	case tab == tabHistory && !v.histOpen:
+		i, ok := components.ZoneIndex(id, "run")
+		if !ok || i >= len(v.history) {
+			return v, nil
+		}
+		v.histCursor = i
+	case tab == tabFiles && !v.previewOpen:
+		i, ok := components.ZoneIndex(id, "file")
+		if !ok || i >= len(v.files.rows) {
+			return v, nil
+		}
+		v.filesCursor = i
+	default:
+		return v, nil
+	}
+	if double {
+		return v.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	}
+	v = v.refresh()
+	v.fit()
+	return v, nil
+}
+
+// Wheel handles a notch of the wheel as the arrow it stands for: it scrolls
+// Run, About or a file, moves through the runs and the files, and reaches the
+// program of a terminal being typed into. While the view asks something it is
+// dropped, since "any other key" would read it as an answer.
+func (v View) Wheel(up bool) (View, tea.Cmd) {
+	if v.asking() {
+		return v, nil
+	}
+	key := tea.KeyPressMsg{Code: tea.KeyDown}
+	if up {
+		key = tea.KeyPressMsg{Code: tea.KeyUp}
+	}
+	return v.Update(key)
+}
+
 func (v View) key(msg tea.KeyPressMsg) (View, tea.Cmd) {
 	// tab in a pop-up does nothing, as in the list: the parameter form would
 	// take it for "next", which on its last field starts the run.
@@ -644,7 +703,7 @@ func (v View) Render() (view string, cursor *tea.Cursor) {
 
 func (v View) body(rows int) string {
 	if term := v.strip.Current(); term != nil {
-		return fitLines(term.View(), rows)
+		return components.Zone("body", fitLines(term.View(), rows))
 	}
 	switch v.tab() {
 	case tabHistory:
@@ -710,7 +769,7 @@ func (v View) historyBody(rows int) string {
 			h.StartedAt.Local().Format("Mon 2 Jan 15:04"),
 			muted.Render(pad(orDash(h.Origin), 8)),
 			dim.Render(strings.Join(params, " ")))
-		lines = append(lines, lipgloss.NewStyle().MaxWidth(v.width-4).Render(line))
+		lines = append(lines, components.Zone(components.ZoneID("run", i), lipgloss.NewStyle().MaxWidth(v.width-4).Render(line)))
 	}
 	if end < len(v.history) {
 		lines = append(lines, dim.Render(fmt.Sprintf("   ↓ %d more · %s", len(v.history)-end, v.histKept(e, ok))))

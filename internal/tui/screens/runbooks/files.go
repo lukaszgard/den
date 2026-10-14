@@ -422,7 +422,7 @@ func (v View) filesBody(rows int) string {
 	list := v.filesListRows(rows)
 	var lines []string
 	for i := v.filesOffset; i < min(v.filesOffset+list, len(v.files.rows)); i++ {
-		lines = append(lines, lipgloss.NewStyle().MaxWidth(width).Render(v.fileLine(i)))
+		lines = append(lines, components.Zone(components.ZoneID("file", i), lipgloss.NewStyle().MaxWidth(width).Render(v.fileLine(i))))
 	}
 	if list == len(v.files.rows) {
 		return strings.Join(append(lines, "", dim.Render(truncate(" "+summary, width))), "\n")

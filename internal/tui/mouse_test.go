@@ -280,3 +280,23 @@ func TestClickingAHelpTopic(t *testing.T) {
 		t.Fatalf("a double-click opened %q, want Transports", got)
 	}
 }
+
+// In the detail view a click on the client's screen types into it, a click on
+// Logs takes the keyboard back, and the wheel reaches the client being typed
+// into as the arrows did.
+func TestTheMouseInTheDetailView(t *testing.T) {
+	h, _, starts := terminalHarness(t)
+	h.press("t", "ctrl+t")
+	h.clickText("fake client screen")
+	if !h.m.detailModel.CapturingKeys() {
+		t.Fatal("a click on the client's screen should type into it")
+	}
+	h.wheel(panelX, 10, true)
+	if got := starts.terms[0].typed(); got != "up" {
+		t.Fatalf("the client got %q, want the wheel as ↑", got)
+	}
+	h.clickText("Logs")
+	if h.m.detailModel.CapturingKeys() || h.m.detailModel.View() == "" || strings.Contains(plain(h.m), "fake client screen") {
+		t.Fatal("a click on Logs should show the logs, den having the keys")
+	}
+}

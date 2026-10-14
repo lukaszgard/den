@@ -1905,3 +1905,114 @@ func TestBackgroundColorReachesTheRunbookView(t *testing.T) {
 		t.Fatal("a view opened after the reply should start in its palette")
 	}
 }
+
+// ── the mouse in the runbook view ────────────────────────────────────────────
+
+// twoRuns opens Greet's view and runs it twice, the second run printing
+// something else.
+func (f runbookFixture) twoRuns() {
+	f.t.Helper()
+	f.selectRow("Greet")
+	f.press("enter", "r")
+	f.waitRun("Greet")
+	if err := os.WriteFile(filepath.Join(f.greet, "run.sh"), []byte("#!/bin/sh\necho second run\n"), 0o700); err != nil {
+		f.t.Fatal(err)
+	}
+	f.press("r")
+	f.waitRun("Greet")
+}
+
+// selectedTab is the name of the fixed tab the view of name is on.
+func (f runbookFixture) selectedTab(name string) string {
+	tabs := f.m.runbookTabs[name]
+	return tabs.FixedName(tabs.Selected())
+}
+
+// A click on a tab selects it; on History a click picks a run, whose log the
+// divider then names, and a double-click shows that log full height.
+func TestClickingHistoryAndItsRuns(t *testing.T) {
+	f := runbookHarness(t)
+	f.twoRuns()
+	f.clickText("History")
+	if f.selectedTab("Greet") != "History" {
+		t.Fatalf("a click on History selected %q", f.selectedTab("Greet"))
+	}
+	if !strings.Contains(plain(f.m), "log-02.log") {
+		t.Fatalf("History should start on the newest run:\n%s", plain(f.m))
+	}
+	x, y := screenPos(t, f.m, "▸ ")
+	f.click(x+4, y+1) // the older run, the row under the cursor
+	if view := plain(f.m); !strings.Contains(view, "log-01.log") {
+		t.Fatalf("a click on the older run should select it:\n%s", view)
+	}
+	f.click(x+4, y+1)
+	if view := plain(f.m); strings.Contains(view, "▸ ") || !strings.Contains(view, "esc: runs") {
+		t.Fatalf("a double-click on a run should show its whole log:\n%s", view)
+	}
+}
+
+// The wheel moves through History as ↑ and ↓ do.
+func TestTheWheelInTheRunbookView(t *testing.T) {
+	f := runbookHarness(t)
+	f.twoRuns()
+	f.press("right")
+	_, y := screenPos(t, f.m, "▸ ")
+	f.wheel(10, y, false)
+	if view := plain(f.m); !strings.Contains(view, "log-01.log") {
+		t.Fatalf("the wheel down should select the older run:\n%s", view)
+	}
+}
+
+// On Files a click picks a file and a double-click shows it.
+func TestClickingAFile(t *testing.T) {
+	f := runbookHarness(t)
+	f.selectRow("Greet")
+	f.press("enter")
+	f.clickText("Files")
+	f.clickText("README.md")
+	if strings.Contains(plain(f.m), "The friendliest runbook.") {
+		t.Fatal("one click should only pick the file")
+	}
+	f.clickText("README.md")
+	if view := plain(f.m); !strings.Contains(view, "The friendliest runbook.") {
+		t.Fatalf("a double-click on README.md should show it:\n%s", view)
+	}
+}
+
+// A click on a terminal's screen hands it the keyboard, and a click on a tab
+// takes it back.
+func TestClickingATerminalsBody(t *testing.T) {
+	t.Setenv("SHELL", "/bin/zsh")
+	f := runbookHarness(t)
+	f.selectRow("Greet")
+	f.press("enter", "t", "ctrl+t")
+	if f.m.runbookView.CapturingKeys() {
+		t.Fatal("ctrl+t should give den the keyboard")
+	}
+	f.clickText("fake client screen")
+	if !f.m.runbookView.CapturingKeys() {
+		t.Fatal("a click on the terminal should type into it")
+	}
+	f.clickText("History")
+	if f.m.runbookView.CapturingKeys() || f.selectedTab("Greet") != "History" {
+		t.Fatal("a click on History should leave the terminal for History")
+	}
+}
+
+// While the view asks something, here a run's parameter, a click or the wheel
+// answers nothing.
+func TestTheRunbookViewIgnoresTheMouseWhileItAsks(t *testing.T) {
+	f := runbookHarness(t)
+	f.selectRow("Ask")
+	f.press("enter")
+	x, y := screenPos(t, f.m, "History")
+	f.press("r")
+	if !f.m.runbookView.CapturingKeys() {
+		t.Fatal("r on Ask should ask for its parameter")
+	}
+	f.click(x, y)
+	f.wheel(x, y+3, false)
+	if !f.m.runbookView.CapturingKeys() || f.selectedTab("Ask") != "Run" {
+		t.Fatal("the mouse should not reach a view that asks something")
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lukaszgard/den/internal/service"
+	"github.com/lukaszgard/den/internal/tui/components"
 	"github.com/lukaszgard/den/internal/tui/msgs"
 	"github.com/lukaszgard/den/internal/tui/testkeys"
 
@@ -609,5 +610,60 @@ func TestBodyStartsUnderTheRuleBelowTheTabs(t *testing.T) {
 	}
 	if !strings.Contains(lines[top], "first line of the client") {
 		t.Fatalf("row %d should be the terminal's first line:\n%s", top, strings.Join(lines, "\n"))
+	}
+}
+
+// zoneOf is the zone under the first cell of text in the view, which is what
+// a click there would land on.
+func zoneOf(t *testing.T, m Model, text string) string {
+	t.Helper()
+	clean, zones := components.ScanZones(m.View())
+	for y, line := range strings.Split(ansi.Strip(clean), "\n") {
+		if i := strings.Index(line, text); i >= 0 {
+			id, _ := zones.At(ansi.StringWidth(line[:i]), y)
+			return id
+		}
+	}
+	t.Fatalf("%q is not in the view:\n%s", text, ansi.Strip(clean))
+	return ""
+}
+
+// A click on a tab selects it, a click on a client's screen types into it,
+// and while a disconnect waits for its answer no click is one.
+func TestClickingTheTabs(t *testing.T) {
+	m, tabs, _ := rdsView(2, 120, 30)
+	m, _ = m.Click(zoneOf(t, m, "2 psql"), false)
+	if tabs.Selected() != 2 || m.CapturingKeys() {
+		t.Fatalf("selected %d: a click on 2 psql should select it, den keeping the keys", tabs.Selected())
+	}
+	m, _ = m.Click(zoneOf(t, m, "terminal 2"), false)
+	if !m.CapturingKeys() {
+		t.Fatal("a click on the client's screen should type into it")
+	}
+	m, _ = m.Click(zoneOf(t, m, "Logs"), false)
+	if tabs.Selected() != 0 || m.CapturingKeys() {
+		t.Fatal("a click on Logs should go back to the logs, den having the keys")
+	}
+	logs := zoneOf(t, m, "1 psql")
+	m = m.AskDisconnect()
+	if m, _ = m.Click(logs, false); tabs.Selected() != 0 || !m.CapturingKeys() {
+		t.Fatal("a click while a disconnect is asked should do nothing")
+	}
+}
+
+// The wheel scrolls the logs, but not while a client's screen hides them.
+func TestTheWheelScrollsTheLogs(t *testing.T) {
+	m, tabs, _ := rdsView(1, 120, 30)
+	bottom := ansi.Strip(m.View())
+	m, _ = m.Wheel(true)
+	if ansi.Strip(m.View()) == bottom {
+		t.Fatal("the wheel up should scroll the logs")
+	}
+	m, _ = m.Wheel(false)
+	tabs.Select(1)
+	m, _ = m.Wheel(true)
+	tabs.Select(0)
+	if ansi.Strip(m.View()) != bottom {
+		t.Fatal("the wheel over a client's screen scrolled the logs under it")
 	}
 }
