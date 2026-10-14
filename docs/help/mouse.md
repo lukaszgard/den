@@ -11,7 +11,7 @@ den reads the mouse as well as the keyboard. A click selects what it lands on, a
 - Click a row of the menu to show its panel, the menu keeping the focus; double-click it to open the panel.
 - Click a row of a panel to focus the panel and select the row: a service, a tunnel, a VPN, an AWS session or profile, a secret or one of its values, a runbook, a Docker service, a problem of `den.yaml`, a Help topic.
 - Double-click a row to do what `enter` does on it: open a service's detail view or a runbook's view, log in to an AWS session, open a secret or a Help topic.
-- Scroll a panel with the wheel while the menu has the focus: the panel under the pointer moves, the focus stays where it is.
+- Turn the wheel over a panel to move through it as ↑ and ↓ do, wherever the focus is; the focus stays where it is.
 - Click a tab of a service's detail view or of a runbook's view to show it; `‹` and `›` step to the tabs the bar has no room for.
 - Click a terminal's screen, or double-click its tab, to type into it; click another tab to give den the keys back.
 - In a runbook's view, click a run in History or a file in Files, and double-click it to see the run's whole log or the file.
@@ -37,6 +37,7 @@ den reads the mouse as well as the keyboard. A click selects what it lands on, a
 - Pop-ups, forms and y/n questions are keyboard-only: a click or a turn of the wheel while one is up does nothing, so a stray click never answers one.
 - The hint lines and the bars at the bottom are text, not buttons.
 - The wheel over the menu does nothing, so a notch too many never switches panels.
+- Most panels show their cursor only while they have the focus: the wheel over one while the menu has it moves a cursor you see once you click or tab into the panel.
 - No hover, no dragging, and only the left button.
 
 ## When it goes wrong
