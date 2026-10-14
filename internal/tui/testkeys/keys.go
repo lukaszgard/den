@@ -1,7 +1,8 @@
-// Package testkeys builds the key messages tests send to the TUI. Every test
-// goes through Press, Text and Paste instead of filling in a tea.KeyPressMsg by
-// hand, so the shape of a key message lives in one file: when Bubble Tea
-// changes it, only this file follows.
+// Package testkeys builds the key and mouse messages tests send to the TUI.
+// Every test goes through Press, Text, Paste, Click and Wheel instead of
+// filling in a tea.KeyPressMsg or a tea.MouseClickMsg by hand, so the shape of
+// those messages lives in one file: when Bubble Tea changes it, only this file
+// follows.
 //
 // The messages are built the way Bubble Tea's own parser delivers them, so a
 // test sees what a terminal would send: ctrl+letter is the letter with ModCtrl,
@@ -143,4 +144,20 @@ func Text(s string) tea.KeyPressMsg {
 // Paste is text the terminal pasted rather than typed.
 func Paste(s string) tea.PasteMsg {
 	return tea.PasteMsg{Content: s}
+}
+
+// Click is a press of the left button on the cell at column x, row y of the
+// screen, both from 0.
+func Click(x, y int) tea.MouseClickMsg {
+	return tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft}
+}
+
+// Wheel is one notch of the wheel, up or down, with the pointer on the cell at
+// column x, row y.
+func Wheel(x, y int, up bool) tea.MouseWheelMsg {
+	button := tea.MouseWheelDown
+	if up {
+		button = tea.MouseWheelUp
+	}
+	return tea.MouseWheelMsg{X: x, Y: y, Button: button}
 }

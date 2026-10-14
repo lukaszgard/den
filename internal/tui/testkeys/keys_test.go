@@ -129,3 +129,15 @@ func TestPressPanicsOnACombinationItCannotBuild(t *testing.T) {
 		}()
 	}
 }
+
+// A click and a turn of the wheel are built as a terminal reports them: the
+// left button, zero-based cells from the top left of the screen.
+func TestMouseMessages(t *testing.T) {
+	c := Click(3, 7).Mouse()
+	if c.X != 3 || c.Y != 7 || c.Button != tea.MouseLeft {
+		t.Fatalf("Click(3, 7) = %+v", c)
+	}
+	if up, down := Wheel(1, 2, true).Mouse(), Wheel(1, 2, false).Mouse(); up.Button != tea.MouseWheelUp || down.Button != tea.MouseWheelDown || up.X != 1 || up.Y != 2 {
+		t.Fatalf("Wheel = %+v, %+v", up, down)
+	}
+}
