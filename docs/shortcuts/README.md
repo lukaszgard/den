@@ -184,6 +184,31 @@ In the Connect panel:
 In the detail view, `y` copies the connect command, `Y` the command with the password or
 token inlined, and `p` the raw token.
 
+## Mouse
+
+den reads clicks and the wheel in every panel and view, and the keys keep working as
+before. A click selects, a double-click does what `Enter` does, and the wheel is `↑` or
+`↓` sent to what is under the pointer.
+
+| Where                              | Click                                       | Double-click                                 | Wheel                                        |
+|------------------------------------|---------------------------------------------|----------------------------------------------|----------------------------------------------|
+| The menu                           | Show the panel; the menu keeps the focus    | Open the panel                               | Nothing                                      |
+| A panel's rows                     | Focus the panel and select the row          | What `Enter` does on the row                 | Move through the panel without focusing it   |
+| A view's tabs, `‹` `›`             | Show the tab; leaves a terminal typed into  | On a terminal: type into it, or restart it   | —                                            |
+| A terminal's screen                | Type into it (not into an exited one)       | —                                            | `↑` `↓` to its program while you type into it |
+| History, Files                     | Pick a run or a file                        | The run's whole log, or the file             | Move through the runs or the tree            |
+| Run, About, a file shown, the logs | —                                           | —                                            | Scroll                                       |
+| The shortcuts pop-up               | Nothing                                     | Nothing                                      | Scroll it                                    |
+
+- **Selecting text.** While den has the mouse, a plain drag does not select. Hold
+  `Option` (iTerm2, Terminal.app) or `Shift` (most other terminals) while you drag.
+- **Keyboard-only.** Pop-ups, forms and y/n questions take no click and no wheel, so a
+  stray click never answers one; hint lines and the bars at the bottom are not buttons.
+- **Terminal tabs.** A click hands a tab the keyboard, but the program in it never sees
+  the mouse: `vim` or `less` get the wheel as arrow keys, and no clicks.
+
+The Help panel has the same as a topic: Mouse, under Getting started.
+
 ## Searching the changelog
 
 The changelog (`s` in the Updates panel) is a long document, and searches like a Help
