@@ -34,7 +34,7 @@ owner-only permissions:
 
 | Credential | Written to | Lifetime |
 |---|---|---|
-| RDS / Aurora (PostgreSQL) token, Redshift credentials | `~/.pgpass` (mode 0600), when `update_pgpass` is on | 15 minutes (Redshift 15 minutes to 1 hour), renewed while connected |
+| RDS / Aurora (PostgreSQL) token, Redshift credentials | `~/.pgpass` (mode 0600; `%APPDATA%\postgresql\pgpass.conf` on Windows, or `$PGPASSFILE` when set), when `update_pgpass` is on | 15 minutes (Redshift 15 minutes to 1 hour), renewed while connected |
 | RDS / Aurora (MySQL, MariaDB) token | `~/.config/den/mysql/<local_port>.cnf` (mode 0600, in a 0700 folder) | 15 minutes, renewed while connected |
 | ElastiCache / MemoryDB token | nowhere: handed to `redis-cli` in a terminal tab through `REDISCLI_AUTH`, or shown with `Y` / `p` | 15 minutes |
 | DocumentDB, OpenSearch, Neptune | no token: `mongosh` signs with the AWS profile, and den's local proxy signs each request | the AWS session |

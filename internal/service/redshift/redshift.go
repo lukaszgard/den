@@ -1,6 +1,6 @@
 // Package redshift opens SSM tunnels to Amazon Redshift (provisioned clusters
 // and Serverless workgroups) and logs in with temporary database credentials
-// minted from the caller's IAM identity, kept in ~/.pgpass for psql.
+// minted from the caller's IAM identity, kept in the pgpass file for psql.
 package redshift
 
 import (
@@ -113,7 +113,7 @@ func (e *engine) dbUser() string {
 	return "<iam-user>"
 }
 
-// Credential mints temporary credentials and, when enabled, writes them to ~/.pgpass.
+// Credential mints temporary credentials and, when enabled, writes them to the pgpass file.
 func (e *engine) Credential(ctx context.Context, log func(string)) (ssmfwd.Credential, error) {
 	cfg, err := awsauth.LoadConfig(ctx, e.env.CredentialProfile, e.env.AWSRegionCode)
 	if err != nil {
@@ -132,7 +132,7 @@ func (e *engine) Credential(ctx context.Context, log func(string)) (ssmfwd.Crede
 		if err := pgpass.Update(e.spec.LocalPort, e.spec.DBName, creds.User, creds.Password); err != nil {
 			log(fmt.Sprintf("pgpass update failed: %v", err))
 		} else {
-			log("~/.pgpass updated")
+			log(pgpass.Path() + " updated")
 		}
 	}
 	return ssmfwd.Credential{Secret: creds.Password, Expires: creds.Expires}, nil

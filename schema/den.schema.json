@@ -763,7 +763,7 @@
         },
         "update_pgpass": {
           "type": "boolean",
-          "description": "keep ~/.pgpass in sync with the current credential"
+          "description": "keep the pgpass file (~/.pgpass, %APPDATA%\\postgresql\\pgpass.conf on Windows) in sync with the current credential"
         },
         "redshift_host": {
           "type": "string",

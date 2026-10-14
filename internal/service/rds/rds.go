@@ -1,6 +1,7 @@
 // Package rds opens SSM tunnels to RDS/Aurora and authenticates over them with
-// IAM database auth tokens. For PostgreSQL the token is kept in ~/.pgpass so
-// psql picks it up; for MySQL/MariaDB it goes into a per-service option file.
+// IAM database auth tokens. For PostgreSQL the token is kept in the pgpass file
+// (~/.pgpass, %APPDATA%\postgresql\pgpass.conf on Windows) so psql picks it
+// up; for MySQL/MariaDB it goes into a per-service option file.
 package rds
 
 import (
@@ -90,8 +91,8 @@ func (e *engine) conninfo() string {
 }
 
 // Credential generates an IAM token and stores it where the client looks:
-// the MySQL option file always (the connect command depends on it), ~/.pgpass
-// when update_pgpass is enabled.
+// the MySQL option file always (the connect command depends on it), the pgpass
+// file when update_pgpass is enabled.
 func (e *engine) Credential(ctx context.Context, log func(string)) (ssmfwd.Credential, error) {
 	// The token signs host and port, so it must name the port RDS listens on,
 	// not the local end of the tunnel.
@@ -112,7 +113,7 @@ func (e *engine) Credential(ctx context.Context, log func(string)) (ssmfwd.Crede
 		if err := pgpass.Update(e.spec.LocalPort, e.dbName(), e.dbUser(), token); err != nil {
 			log(fmt.Sprintf("pgpass update failed: %v", err))
 		} else {
-			log("~/.pgpass updated")
+			log(pgpass.Path() + " updated")
 		}
 	}
 	return ssmfwd.Credential{Secret: token, Expires: expires}, nil

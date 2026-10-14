@@ -9,7 +9,7 @@ Two engines are supported:
 
 | `engine`             | Covers                                                  | Token goes to                               | Client  |
 |----------------------|---------------------------------------------------------|---------------------------------------------|---------|
-| `postgres` (default) | RDS PostgreSQL, Aurora PostgreSQL, RDS Proxy for either | `~/.pgpass` (with `update_pgpass: true`)    | `psql`  |
+| `postgres` (default) | RDS PostgreSQL, Aurora PostgreSQL, RDS Proxy for either | `~/.pgpass` (`%APPDATA%\postgresql\pgpass.conf` on Windows, or `$PGPASSFILE` when set), with `update_pgpass: true` | `psql`  |
 | `mysql`              | RDS MySQL, RDS MariaDB, Aurora MySQL                    | `~/.config/den/mysql/<local_port>.cnf`      | `mysql` |
 
 Any endpoint works as `rds_host`: instance, cluster (writer or reader) or RDS Proxy.
