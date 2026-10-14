@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.2.1] - 2026-10-14
+
+**`update_pgpass` works on Windows.** den wrote the token to `~/.pgpass`, a file `psql` on
+Windows never reads, so `psql` kept asking for a password. den now writes it where `psql`
+looks on each system.
+
+### 🔌 Data stores and tunnels
+
+- With `update_pgpass: true`, RDS PostgreSQL and Redshift services write the token to
+  `%APPDATA%\postgresql\pgpass.conf` on Windows, creating the `postgresql` folder when it is
+  missing. macOS and Linux keep `~/.pgpass`.
+- When `PGPASSFILE` is set, den writes to that file on any system: `psql` reads it in place
+  of `~/.pgpass`, so the token used to land in a file it skipped.
+- The connect log names the file den wrote, and `den mcp`'s `connect` tells an agent the same
+  path.
+- On Windows, a `~/.pgpass` left by an earlier version was never read; you can delete it.
+
 ## [1.2.0] - 2026-10-12
 
 **What you type for an agent is no longer lost.** The request of the Runbooks pane's `n` and
