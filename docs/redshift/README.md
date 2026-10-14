@@ -62,7 +62,7 @@ services:
 | `db_name`            | no          | Database to log in to (default `dev`, the database every cluster is created with)    |
 | `db_user`            | no          | Provisioned only. Log in as this existing database user instead of your IAM identity |
 | `credential_ttl`     | no          | Credential lifetime, `15m`–`1h` (default `15m`)                                      |
-| `update_pgpass`      | no          | Keep `~/.pgpass` in sync with the current credentials                                 |
+| `update_pgpass`      | no          | Keep `~/.pgpass` (`%APPDATA%\postgresql\pgpass.conf` on Windows, or `$PGPASSFILE` when set) in sync with the current credentials |
 | `local_port`         | no          | Local end of the tunnel (default `55439`)                                            |
 | `reconnect`          | no          | Auto-reopen the SSM port-forward when it drops (e.g. SSM idle timeout). Credentials are renewed while connected either way |
 

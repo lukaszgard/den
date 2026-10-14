@@ -213,7 +213,7 @@ Guide: [docs/redshift](../redshift/README.md)
 | `credential_profile` | string | no | profile credentials are minted as, and the identity the data store sees; aws_profile when unset |
 | `aws_region_code` | string | no | AWS region of the bastion and of the credential calls; required, here or from the service's env |
 | `transport` | object, keys in [`environments.<name>.transport`](#environmentsnametransport) | no | how the network is reached; SSM when unset |
-| `update_pgpass` | boolean | no | keep ~/.pgpass in sync with the current credential |
+| `update_pgpass` | boolean | no | keep the pgpass file (~/.pgpass, %APPDATA%\postgresql\pgpass.conf on Windows) in sync with the current credential |
 | `redshift_host` | string | yes | cluster or workgroup endpoint |
 | `cluster_identifier` | string | no | provisioned: the cluster; set this or workgroup_name |
 | `workgroup_name` | string | no | Serverless: the workgroup; set this or cluster_identifier |

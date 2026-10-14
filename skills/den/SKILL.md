@@ -37,7 +37,7 @@ The `credential` field says how the client authenticates, never the secret itsel
 
 | It says | Do |
 |---|---|
-| `~/.pgpass` | run `psql` as given; the IAM token is already in `~/.pgpass` |
+| `~/.pgpass` (`%APPDATA%\postgresql\pgpass.conf` on Windows, or `$PGPASSFILE` when set) | run `psql` as given; the IAM token is already in that file |
 | option file | run the `mysql` command as given; it reads the token from that file |
 | AWS profile (DocumentDB) | run `mongosh` as given; it signs with that profile |
 | proxy signs requests (OpenSearch, Neptune) | send plain HTTP to `localhost:port` |

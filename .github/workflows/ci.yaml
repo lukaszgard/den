@@ -34,7 +34,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
+        os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -42,9 +42,20 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - run: make build vet
+      - if: runner.os == 'Linux'
+        run: make build vet
       # Race detector plus the per-package coverage floors.
-      - run: make cover
+      - if: runner.os == 'Linux'
+        run: make cover
+      # Most suites fake aws/sops/vault with sh scripts, which Windows cannot run;
+      # a package joins this list once its tests pass on Windows.
+      - if: runner.os == 'Windows'
+        run: go build ./...
+      # Compiles every test file for Windows too.
+      - if: runner.os == 'Windows'
+        run: go vet ./...
+      - if: runner.os == 'Windows'
+        run: go test ./internal/service/pgpass/ ./internal/platform/
 
   vuln:
     runs-on: ubuntu-latest

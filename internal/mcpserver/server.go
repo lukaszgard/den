@@ -26,6 +26,7 @@ import (
 	"github.com/lukaszgard/den/internal/config"
 	"github.com/lukaszgard/den/internal/runbook"
 	"github.com/lukaszgard/den/internal/service"
+	"github.com/lukaszgard/den/internal/service/pgpass"
 )
 
 // Options is what the server serves.
@@ -225,7 +226,7 @@ func credentialHint(svc service.Service, sum service.Summary) string {
 		if strings.HasPrefix(sum.ConnectCommand, "mysql") {
 			return "the IAM token is in the option file the connect command reads"
 		}
-		return "the IAM token is written to ~/.pgpass when update_pgpass is on; otherwise it is only available in den's TUI (detail view, Y)"
+		return "the IAM token is written to " + pgpass.Path() + " when update_pgpass is on; otherwise it is only available in den's TUI (detail view, Y)"
 	case service.TypeRedis:
 		if service.HoldsToken(svc) && svc.State().Token != "" {
 			return "IAM auth: the token is withheld from agents — copy the full command from den's TUI (detail view, Y)"

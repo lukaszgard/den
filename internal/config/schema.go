@@ -614,7 +614,7 @@ type DocumentDBSpec struct {
 // temporary database credentials.
 type RedshiftSpec struct {
 	SSMTarget    `yaml:",inline"`
-	UpdatePgpass bool `yaml:"update_pgpass,omitempty"` // keep ~/.pgpass in sync with the current credential
+	UpdatePgpass bool `yaml:"update_pgpass,omitempty"` // keep the pgpass file (~/.pgpass, %APPDATA%\postgresql\pgpass.conf on Windows) in sync with the current credential
 
 	RedshiftHost      string `yaml:"redshift_host,omitempty" jsonschema:"required"` // cluster or workgroup endpoint
 	ClusterIdentifier string `yaml:"cluster_identifier,omitempty"`                  // provisioned: the cluster; set this or workgroup_name

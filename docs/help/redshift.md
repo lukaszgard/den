@@ -32,7 +32,7 @@ A service of `type: redshift` with a `redshift:` section; set exactly one of `cl
 - `db_name` (default `dev`): the database to log in to.
 - `db_user` (provisioned only): log in as this existing user instead of your IAM identity.
 - `credential_ttl` (default `15m`): how long the credentials live, `15m` to `1h`.
-- `update_pgpass` (default `false`): keep `~/.pgpass` in sync with the current credentials.
+- `update_pgpass` (default `false`): keep `~/.pgpass` (`%APPDATA%\postgresql\pgpass.conf` on Windows, or `$PGPASSFILE` when set) in sync with the current credentials.
 - `local_port` (default `55439`): where it appears on `127.0.0.1`.
 
 A provisioned cluster, logged in to as your IAM identity:

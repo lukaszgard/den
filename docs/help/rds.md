@@ -31,7 +31,7 @@ A service of `type: rds` with an `rds:` section. The keys every data store share
 - `engine` (default `postgres`): `postgres` for RDS and Aurora PostgreSQL, `mysql` for RDS MySQL, MariaDB and Aurora MySQL. It picks the remote port (5432 or 3306), the client and where the token goes.
 - `db_user` (required for `mysql`): the database user with IAM auth.
 - `db_name`: the database the client opens; MySQL leaves it to the client when unset.
-- `update_pgpass` (default `false`, PostgreSQL only): keep `~/.pgpass` in sync with the current token.
+- `update_pgpass` (default `false`, PostgreSQL only): keep `~/.pgpass` (`%APPDATA%\postgresql\pgpass.conf` on Windows, or `$PGPASSFILE` when set) in sync with the current token.
 - `local_port` (default `50432`): where the database appears on `127.0.0.1`.
 
 PostgreSQL through the environment `dev`, with `psql` reading the token from `~/.pgpass`:
