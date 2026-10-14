@@ -197,6 +197,24 @@ func TestEnterOpensTheRunbookViewAndEscLeavesIt(t *testing.T) {
 	}
 }
 
+// The tabs sit between two rules: the header's above them and the bar's own
+// under them.
+func TestTheRunbookViewHasARuleUnderItsTabs(t *testing.T) {
+	f := runbookHarness(t)
+	f.selectRow("Greet")
+	f.press("enter")
+	lines := strings.Split(plain(f.m), "\n")
+	for i, line := range lines {
+		if strings.Contains(line, "Run │ History") {
+			if i+1 == len(lines) || !strings.Contains(lines[i+1], strings.Repeat("─", 60)) {
+				t.Fatalf("no rule under the tabs:\n%s", strings.Join(lines, "\n"))
+			}
+			return
+		}
+	}
+	t.Fatalf("no tab bar:\n%s", strings.Join(lines, "\n"))
+}
+
 func TestRunFromTheViewShowsItsOutputInRun(t *testing.T) {
 	f := runbookHarness(t)
 	f.selectRow("Greet")

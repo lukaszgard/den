@@ -297,9 +297,18 @@ var (
 
 const tabSeparator = " │ "
 
-// Bar is the line between a view's header and its body, at most width cells:
-// "─ Logs" for a view without terminals, and the tabs otherwise.
+// TabBarLines is how many rows Bar takes: the tabs, and the rule under them.
+const TabBarLines = 2
+
+// Bar is what sits between a view's header and its body, at most width cells:
+// "─ Logs" for a view without terminals, and the tabs otherwise, then a rule
+// under them like the one closing the header above, so the tabs read as a
+// row of their own rather than the body's first line.
 func (s TabStrip) Bar(width int) string {
+	return s.tabsLine(width) + "\n" + tabDim.Render(strings.Repeat("─", max(width, 1)))
+}
+
+func (s TabStrip) tabsLine(width int) string {
 	if s.tabs == nil {
 		return tabRule.Render("─ Logs ")
 	}

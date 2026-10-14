@@ -594,3 +594,20 @@ func TestHelpLineNamesTheTerminalKeyOnANarrowTerminal(t *testing.T) {
 		}
 	}
 }
+
+// The tab bar is two lines, the tabs and a rule under them, and a terminal's
+// body starts under both: its first line is the row after the rule.
+func TestBodyStartsUnderTheRuleBelowTheTabs(t *testing.T) {
+	m, tabs, terms := rdsView(1, 120, 30)
+	tabs.Select(1)
+	terms[0].screen = "first line of the client"
+	m, _ = m.Update(msgs.TickMsg{})
+	lines := strings.Split(ansi.Strip(m.View()), "\n")
+	_, _, top := m.bodyArea(m.upperSection())
+	if !strings.Contains(lines[top-1], strings.Repeat("─", 100)) || !strings.Contains(lines[top-2], "Logs │ 1 ") {
+		t.Fatalf("rows %d and %d should be the tabs and the rule under them:\n%s", top-2, top-1, strings.Join(lines, "\n"))
+	}
+	if !strings.Contains(lines[top], "first line of the client") {
+		t.Fatalf("row %d should be the terminal's first line:\n%s", top, strings.Join(lines, "\n"))
+	}
+}

@@ -213,7 +213,7 @@ func (v View) bodySize() (cols, rows int) {
 // those sections and the tab bar.
 func (v View) bodyArea(upperSection string) (cols, rows, top int) {
 	upper := lipgloss.Height(lipgloss.NewStyle().Width(v.width - 2).Render(upperSection))
-	return v.width - 4, max(v.boxInnerHeight()-upper-1, 1), 1 + upper + 1
+	return v.width - 4, max(v.boxInnerHeight()-upper-components.TabBarLines, 1), 1 + upper + components.TabBarLines
 }
 
 // fit sizes the body's views, and the terminal on screen, to the box.

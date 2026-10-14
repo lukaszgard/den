@@ -15,6 +15,7 @@ current credential.
 │  psql "host=localhost port=50111 dbname=orders user=app_iam …"   y: copy │
 │ ──────────────────────────────────────────────────────────────────────── │
 │─ Logs │ 1 psql ● │ 2 migration ● │ 3 psql ○                              │
+│ ──────────────────────────────────────────────────────────────────────── │
 │orders=> select count(*) from orders;                                     │
 │ count                                                                    │
 │-------                                                                   │

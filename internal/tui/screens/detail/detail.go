@@ -83,7 +83,7 @@ func (m Model) bodySize() (cols, rows int) {
 // those sections and the tab bar.
 func (m Model) bodyArea(upperSection string) (cols, rows, top int) {
 	upper := lipgloss.Height(lipgloss.NewStyle().Width(m.width - 2).Render(upperSection))
-	return m.width - 4, max(m.boxInnerHeight()-upper-1, 1), 1 + upper + 1 // -1: the tab bar
+	return m.width - 4, max(m.boxInnerHeight()-upper-components.TabBarLines, 1), 1 + upper + components.TabBarLines
 }
 
 // fitBody sizes the log view and the terminal on screen to that area. A

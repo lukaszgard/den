@@ -687,6 +687,7 @@ that the name and the account stay readable.
 │ ! asks before running · bash · timeout 10m · keeps 50 runs · y: copy den run │
 │ ──────────────────────────────────────────────────────────────────────────── │
 │─ Run │ History │ About │ Files │ 1 zsh ● │ 2 nvim ○                          │
+│ ──────────────────────────────────────────────────────────────────────────── │
 │[12:04:29] rotating app_rw in prod                                            │
 │[12:04:31] ✓ new password stored                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -704,6 +705,7 @@ that the name and the account stay readable.
 
 ```
 │─ Run │ History │ About │ Files                                                │
+│ ──────────────────────────────────────────────────────────────────────────── │
 │▸ ✓ exit 0      2.1s     Fri 3 Oct 12:04  tui       tier=prod                 │
 │  ✗ exit 1      0.8s     Fri 3 Oct 11:52  den run   tier=prod                 │
 │  ✗ interrupted –        Thu 2 Oct 17:10  mcp       tier=stage                │
@@ -732,6 +734,7 @@ that the name and the account stay readable.
 
 ```
 │─ Run │ History │ About │ Files │ 1 run.sh ●                                   │
+│ ──────────────────────────────────────────────────────────────────────────── │
 │  .                                                                           │
 │  ├── logs/  7 runs · History                                                 │
 │  ├── README.md                                                               │

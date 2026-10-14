@@ -8,6 +8,7 @@ import (
 	"github.com/lukaszgard/den/internal/tui/testkeys"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 type stubTerm struct {
@@ -306,6 +307,22 @@ func TestTabStripCursor(t *testing.T) {
 		term.cursor = off
 		if got := s.Cursor(1, 5, 80, 20); got != nil {
 			t.Fatalf("cursor %+v is outside the 80x20 area but %+v was shown", off, got)
+		}
+	}
+}
+
+// The tabs sit between two rules: the one closing the header above them, and
+// one of the bar's own under them, as wide as the bar.
+func TestTabStripBarHasARuleUnderTheTabs(t *testing.T) {
+	tabs := NewTabs("Run", "History")
+	tabs.Add("zsh", &stubTerm{})
+	for name, s := range map[string]TabStrip{"tabs": NewTabStrip(tabs, nil), "no tabs": NewTabStrip(nil, nil)} {
+		lines := strings.Split(ansi.Strip(s.Bar(40)), "\n")
+		if len(lines) != TabBarLines {
+			t.Fatalf("%s: the bar has %d lines, want %d:\n%s", name, len(lines), TabBarLines, strings.Join(lines, "\n"))
+		}
+		if lines[1] != strings.Repeat("─", 40) {
+			t.Errorf("%s: under the tabs %q, want a rule 40 cells wide", name, lines[1])
 		}
 	}
 }

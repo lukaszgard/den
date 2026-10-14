@@ -21,11 +21,11 @@ off; that text is now in the Help panel, which scrolls.
 │  psql "host=local╭──────────────────────────────────────────────────────╮            │
 │ ─────────────────│  Shortcuts — orders-int                              │─────────── │
 │─ Logs │ 1 psql ● │                                                      │            │
-│Starting session w│  Connection                                          │            │
-│Port 50111 opened │    c      Connect: open the tunnel, mint a token     │            │
-│Waiting for connec│    d      Disconnect: close tunnel and terminals     │            │
-│IAM token generate│    a      SSM port-forward auto-reconnect on/off     │            │
-│                  │    a reopens it after a drop (SSM idle timeout).     │            │
+│ ─────────────────│  Connection                                          │─────────── │
+│Starting session w│    c      Connect: open the tunnel, mint a token     │            │
+│Port 50111 opened │    d      Disconnect: close tunnel and terminals     │            │
+│Waiting for connec│    a      SSM port-forward auto-reconnect on/off     │            │
+│IAM token generate│    a reopens it after a drop (SSM idle timeout).     │            │
 │                  │                                                      │            │
 │                  │  Token                                               │            │
 │                  │    r      Mint a new token now                       │            │
