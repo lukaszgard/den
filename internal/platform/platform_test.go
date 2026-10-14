@@ -5,8 +5,18 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 )
+
+// xdg is an absolute XDG directory on the OS running the tests. Windows reads
+// "/xdg" as relative, having no drive, and den ignores a relative XDG path.
+var xdg = func() string {
+	if runtime.GOOS == "windows" {
+		return `C:\xdg`
+	}
+	return "/xdg"
+}()
 
 func TestExpandHome(t *testing.T) {
 	home, err := os.UserHomeDir()
@@ -97,12 +107,12 @@ func TestConfigDir(t *testing.T) {
 		want string
 	}{
 		{"linux", nil, filepath.Join("/home/u", ".config", "den")},
-		{"darwin", map[string]string{"XDG_CONFIG_HOME": "/xdg"}, filepath.Join("/xdg", "den")},
+		{"darwin", map[string]string{"XDG_CONFIG_HOME": xdg}, filepath.Join(xdg, "den")},
 		// The XDG spec says to ignore a relative path.
 		{"linux", map[string]string{"XDG_CONFIG_HOME": "rel"}, filepath.Join("/home/u", ".config", "den")},
 		{"windows", map[string]string{"APPDATA": `C:\Users\u\AppData\Roaming`}, filepath.Join(`C:\Users\u\AppData\Roaming`, "den")},
 		// XDG wins on Windows too, as for the state and data directories.
-		{"windows", map[string]string{"XDG_CONFIG_HOME": "/xdg", "APPDATA": `C:\a`}, filepath.Join("/xdg", "den")},
+		{"windows", map[string]string{"XDG_CONFIG_HOME": xdg, "APPDATA": `C:\a`}, filepath.Join(xdg, "den")},
 		// APPDATA means nothing off Windows.
 		{"linux", map[string]string{"APPDATA": "/appdata"}, filepath.Join("/home/u", ".config", "den")},
 		{"windows", nil, filepath.Join("/home/u", ".config", "den")},
@@ -127,7 +137,7 @@ func TestStateDir(t *testing.T) {
 		want string
 	}{
 		{"linux", nil, filepath.Join("/home/u", ".local", "state", "den")},
-		{"darwin", map[string]string{"XDG_STATE_HOME": "/xdg"}, filepath.Join("/xdg", "den")},
+		{"darwin", map[string]string{"XDG_STATE_HOME": xdg}, filepath.Join(xdg, "den")},
 		// The XDG spec says to ignore a relative path.
 		{"linux", map[string]string{"XDG_STATE_HOME": "rel"}, filepath.Join("/home/u", ".local", "state", "den")},
 		{"windows", map[string]string{"LOCALAPPDATA": `C:\Users\u\AppData\Local`}, filepath.Join(`C:\Users\u\AppData\Local`, "den")},
@@ -148,7 +158,7 @@ func TestDataDir(t *testing.T) {
 		want string
 	}{
 		{"linux", nil, filepath.Join("/home/u", ".local", "share", "den")},
-		{"darwin", map[string]string{"XDG_DATA_HOME": "/xdg"}, filepath.Join("/xdg", "den")},
+		{"darwin", map[string]string{"XDG_DATA_HOME": xdg}, filepath.Join(xdg, "den")},
 		// The XDG spec says to ignore a relative path.
 		{"linux", map[string]string{"XDG_DATA_HOME": "rel"}, filepath.Join("/home/u", ".local", "share", "den")},
 		{"windows", map[string]string{"LOCALAPPDATA": `C:\Users\u\AppData\Local`}, filepath.Join(`C:\Users\u\AppData\Local`, "den")},
