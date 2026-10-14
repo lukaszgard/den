@@ -613,19 +613,27 @@ func TestBodyStartsUnderTheRuleBelowTheTabs(t *testing.T) {
 	}
 }
 
+// cellOf is the cell where text starts in the view.
+func cellOf(t *testing.T, m Model, text string) (x, y int) {
+	t.Helper()
+	clean, _ := components.ScanZones(m.View())
+	for y, line := range strings.Split(ansi.Strip(clean), "\n") {
+		if i := strings.Index(line, text); i >= 0 {
+			return ansi.StringWidth(line[:i]), y
+		}
+	}
+	t.Fatalf("%q is not in the view:\n%s", text, ansi.Strip(clean))
+	return 0, 0
+}
+
 // zoneOf is the zone under the first cell of text in the view, which is what
 // a click there would land on.
 func zoneOf(t *testing.T, m Model, text string) string {
 	t.Helper()
-	clean, zones := components.ScanZones(m.View())
-	for y, line := range strings.Split(ansi.Strip(clean), "\n") {
-		if i := strings.Index(line, text); i >= 0 {
-			id, _ := zones.At(ansi.StringWidth(line[:i]), y)
-			return id
-		}
-	}
-	t.Fatalf("%q is not in the view:\n%s", text, ansi.Strip(clean))
-	return ""
+	x, y := cellOf(t, m, text)
+	_, zones := components.ScanZones(m.View())
+	id, _ := zones.At(x, y)
+	return id
 }
 
 // A click on a tab selects it, a click on a client's screen types into it,
@@ -636,7 +644,11 @@ func TestClickingTheTabs(t *testing.T) {
 	if tabs.Selected() != 2 || m.CapturingKeys() {
 		t.Fatalf("selected %d: a click on 2 psql should select it, den keeping the keys", tabs.Selected())
 	}
-	m, _ = m.Click(zoneOf(t, m, "terminal 2"), false)
+	x, y := cellOf(t, m, "terminal 2")
+	if !m.TerminalAt(x, y) || m.TerminalAt(x, 0) || m.TerminalAt(0, y) {
+		t.Fatal("TerminalAt should cover the client's screen and nothing else")
+	}
+	m, _ = m.Click("body", false)
 	if !m.CapturingKeys() {
 		t.Fatal("a click on the client's screen should type into it")
 	}

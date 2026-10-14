@@ -271,8 +271,8 @@ func (s *TabStrip) Key(msg tea.KeyPressMsg) (handled bool, cmd tea.Cmd) {
 	return true, nil
 }
 
-// Click handles a click on the bar, or on the body of the terminal on screen
-// (the zone "body", which the view marks), and reports whether id was the
+// Click handles a click on the bar, or on the screen of the terminal shown
+// (the zone "body", which the view finds), and reports whether id was the
 // strip's. A click on a tab selects it and takes the keyboard back from a
 // terminal: picking a tab is an act of its own, not a key for the program. A
 // double-click on a terminal's tab does what enter does there, and a click on

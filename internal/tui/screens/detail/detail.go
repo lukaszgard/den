@@ -277,6 +277,19 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+// TerminalAt reports whether the cell x, y of the screen is on the screen of
+// the terminal the view shows, if one is: the zone "body" of Click. It is not
+// marked as the other zones are, since a mark on each of its lines cost more
+// to draw than the rest of the frame; bodyArea, which draws it and places its
+// cursor, says where it is, and the view starts at the top of the screen.
+func (m Model) TerminalAt(x, y int) bool {
+	if m.terminal() == nil {
+		return false
+	}
+	cols, rows, top := m.bodyArea(m.upperSection())
+	return x >= 1 && x < 1+cols && y >= top && y < top+rows // 1: the box's left border
+}
+
 // Click handles a click on the zone id, a second one in a row on it being a
 // double-click: a tab, or the screen of the terminal on it. Not while a
 // disconnect waits for its answer: a stray click is none.
@@ -333,7 +346,7 @@ func (m Model) Render() (view string, cursor *tea.Cursor) {
 	upper := m.upperSection()
 	if term := m.terminal(); term != nil {
 		cols, rows, top := m.bodyArea(upper)
-		body = components.Zone("body", fitLines(term.View(), rows))
+		body = fitLines(term.View(), rows)
 		cursor = m.strip.Cursor(1, top, cols, rows) // 1: the box's left border
 	}
 	boxContent := strings.Join([]string{upper, m.strip.Bar(m.width - 4), body}, "\n")

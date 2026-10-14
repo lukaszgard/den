@@ -269,6 +269,19 @@ func (v View) Update(msg tea.Msg) (View, tea.Cmd) {
 	return v, cmd
 }
 
+// TerminalAt reports whether the cell x, y of the screen is on the screen of
+// the terminal the view shows, if one is: the zone "body" of Click. It is not
+// marked as the other zones are, since a mark on each of its lines cost more
+// to draw than the rest of the frame; bodyArea, which draws it and places its
+// cursor, says where it is, and the view starts at the top of the screen.
+func (v View) TerminalAt(x, y int) bool {
+	if v.strip.Current() == nil {
+		return false
+	}
+	cols, rows, top := v.bodyArea(v.upperSection())
+	return x >= 1 && x < 1+cols && y >= top && y < top+rows // 1: the box's left border
+}
+
 // asking reports that a pop-up or a question has the keyboard: a run's
 // parameters or confirmation, a move, a fork, a delete, a resend, E's request,
 // a tab's new name or its close. The mouse answers none of them.
@@ -703,7 +716,7 @@ func (v View) Render() (view string, cursor *tea.Cursor) {
 
 func (v View) body(rows int) string {
 	if term := v.strip.Current(); term != nil {
-		return components.Zone("body", fitLines(term.View(), rows))
+		return fitLines(term.View(), rows)
 	}
 	switch v.tab() {
 	case tabHistory:

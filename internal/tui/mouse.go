@@ -41,6 +41,13 @@ func (m *AppModel) inPanel(x, y int) bool {
 // the same zone within components.DoubleClick is a double-click.
 func (m *AppModel) click(x, y int) []tea.Cmd {
 	id, _ := m.zones.At(x, y)
+	switch {
+	case id != "":
+	case m.showRunbook && m.runbookView.TerminalAt(x, y):
+		id = "body"
+	case m.showDetail && m.detailModel.TerminalAt(x, y):
+		id = "body"
+	}
 	now := time.Now()
 	double := id != "" && id == m.lastClick.id && now.Sub(m.lastClick.at) < components.DoubleClick
 	m.lastClick.id, m.lastClick.at = id, now

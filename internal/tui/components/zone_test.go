@@ -154,3 +154,28 @@ func TestZoneIndex(t *testing.T) {
 		}
 	}
 }
+
+// cellWidth measures what den draws as ansi.StringWidth does: colours, links
+// and other escape sequences take no cells, wide characters two.
+func TestCellWidthAgreesWithStringWidth(t *testing.T) {
+	red := lipgloss.NewStyle().Foreground(lipgloss.Color("#ff0000")).Bold(true)
+	for _, s := range []string{
+		"",
+		"plain ascii",
+		red.Render("styled") + " text",
+		"日本語 and ascii",
+		" icon " + red.Render("  AWS"),
+		"é combining",
+		"\x1b]8;;https://example.com\x1b\\link\x1b]8;;\x1b\\ after",
+		"\x1b]0;title\x07bell-terminated",
+		"\x1b_den-zone:x\x1b\\inside",
+		"tab\tand\x7fcontrol",
+		"\x1b[1;38;2;1;2;3mtruecolour\x1b[0m",
+		"\x1b[", // a sequence cut short
+		"👍 ok",
+	} {
+		if got, want := cellWidth(s), ansi.StringWidth(s); got != want {
+			t.Errorf("cellWidth(%q) = %d, want %d", s, got, want)
+		}
+	}
+}
