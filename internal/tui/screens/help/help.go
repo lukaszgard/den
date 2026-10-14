@@ -462,7 +462,17 @@ func (m Model) line(r row, width, titleWidth int, focused bool) string {
 	if room := width - 8 - titleWidth; room >= 12 {
 		line += "   " + dim.Render(ansi.Truncate(about, room, "…"))
 	}
-	return line
+	return components.Zone(components.ZoneID("topic", r.index), line)
+}
+
+// Click moves the cursor to the topic the zone id marks; not while a topic is
+// open.
+func (m Model) Click(id string) Model {
+	if i, ok := components.ZoneIndex(id, "topic"); ok && !m.open && i < len(m.visible()) {
+		m.cursor = i
+		m.offset = m.scroll(m.rows())
+	}
+	return m
 }
 
 func plural(n int, one, many string) string {

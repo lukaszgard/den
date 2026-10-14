@@ -167,6 +167,15 @@ func (m Model) clampOffset() Model {
 	return m
 }
 
+// Click moves the cursor to the session or profile the zone id marks.
+func (m Model) Click(id string) Model {
+	if i, ok := components.ZoneIndex(id, "row"); ok && i < len(m.rows()) {
+		m.cursor = i
+		m = m.clampOffset()
+	}
+	return m
+}
+
 // SSOCacheDir returns the SSO cache directory used by this pane.
 func (m Model) SSOCacheDir() string { return m.ssoCacheDir }
 
@@ -437,7 +446,7 @@ func (m Model) View(width, height int, focused bool) string {
 			if focused && m.cursor == i {
 				label = selectedRowStyle.Render("► " + name)
 			}
-			ssoRows = append(ssoRows, label+"  "+tokenPart)
+			ssoRows = append(ssoRows, components.Zone(components.ZoneID("row", i), label+"  "+tokenPart))
 		}
 	}
 
@@ -479,12 +488,14 @@ func (m Model) View(width, height int, focused bool) string {
 		if len(name) > maxNameW {
 			name = name[:maxNameW-1] + "…"
 		}
+		// The cursor spans sessions then profiles, and so do the zones.
+		zone := components.ZoneID("row", len(m.sessions)+i)
 		if focused && i == profCursor {
 			row := selectedRowStyle.Width(leftWidth).Render(fmt.Sprintf("► %s", name))
-			listLines = append(listLines, row)
+			listLines = append(listLines, components.Zone(zone, row))
 		} else {
 			row := fmt.Sprintf("  %s", dimStyle.Render(name))
-			listLines = append(listLines, row)
+			listLines = append(listLines, components.Zone(zone, row))
 		}
 	}
 

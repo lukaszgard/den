@@ -186,6 +186,15 @@ type AppModel struct {
 	// view or a pane. While it is open it gets every key.
 	shortcuts components.Shortcuts
 
+	// zones are where the clickable areas of the last frame landed, and
+	// lastClick the zone clicked last and when: a second click on it soon
+	// after is a double-click. See mouse.go.
+	zones     components.Zones
+	lastClick struct {
+		id string
+		at time.Time
+	}
+
 	// terminals are the terminal tabs of each service that has any, and
 	// startTerminal runs a client for one. See terminals.go.
 	terminals     map[service.Service]*detail.Tabs
@@ -819,6 +828,23 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.handleRightKey(msg)...)
 		}
 
+	// ── mouse ──────────────────────────────────────────────────────────────
+	// Only the left button and the wheel up and down mean anything; see
+	// mouse.go.
+	case tea.MouseClickMsg:
+		if msg.Button == tea.MouseLeft {
+			cmds = append(cmds, m.click(msg.X, msg.Y)...)
+		}
+
+	case tea.MouseWheelMsg:
+		if msg.Button == tea.MouseWheelUp || msg.Button == tea.MouseWheelDown {
+			cmds = append(cmds, m.wheel(msg)...)
+		}
+
+	// A release or a move of the mouse is nothing to den; without this case
+	// they would reach the Secrets pane below.
+	case tea.MouseMsg:
+
 	// ── paste ──────────────────────────────────────────────────────────────
 	// Pasted text goes where typed text would: a terminal, a name, a search
 	// box, a form. Anywhere else it is dropped, as it never matched a key.
@@ -982,11 +1008,14 @@ func (m *AppModel) handleRightKey(msg tea.KeyPressMsg) []tea.Cmd {
 
 // View is the root model's screen. den runs on the terminal's alternate screen,
 // which a view asks for itself; the panes and components below it draw plain
-// strings.
+// strings. It also asks for the clicks and the wheel, and takes out of the
+// frame the zones the panes marked, remembering where they landed.
 func (m *AppModel) View() tea.View {
 	content, cursor := m.screen()
+	content, m.zones = components.ScanZones(content)
 	v := tea.NewView(content)
 	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
 	v.Cursor = cursor
 	v.WindowTitle = m.windowTitle()
 	v.ProgressBar = m.progressBar()
@@ -1142,7 +1171,7 @@ func (m *AppModel) renderLeft(height int) string {
 				Width(leftPaneWidth).
 				Render("   " + label)
 		}
-		rows = append(rows, row)
+		rows = append(rows, components.Zone(components.ZoneID("menu", i), row))
 	}
 
 	// Version badge — the update hint gets its own line since the pane is too narrow for both

@@ -213,6 +213,14 @@ func (m Model) SelectedService() (service.Service, bool) {
 // Cursor returns the current cursor index within the active list.
 func (m Model) Cursor() int { return m.cursor }
 
+// Click moves the cursor to the row the zone id marks.
+func (m Model) Click(id string) Model {
+	if i, ok := components.ZoneIndex(id, "row"); ok && i < len(m.filtered()) {
+		m.cursor = i
+	}
+	return m
+}
+
 func (m Model) View(width, height int, focused bool) string {
 	var sections []string
 	sections = append(sections, "")
@@ -284,7 +292,7 @@ func (m Model) View(width, height int, focused bool) string {
 					Width(width - 2).
 					Render(line)
 			}
-			sections = append(sections, line)
+			sections = append(sections, components.Zone(components.ZoneID("row", i), line))
 		}
 	}
 

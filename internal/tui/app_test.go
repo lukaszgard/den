@@ -135,6 +135,37 @@ func (h *harness) press(keys ...string) {
 	}
 }
 
+// click clicks the cell at column x, row y of den's screen. A frame is drawn
+// first, as one always is before a click can land on it.
+func (h *harness) click(x, y int) {
+	h.t.Helper()
+	h.m.View()
+	h.send(testkeys.Click(x, y))
+}
+
+// clickText clicks the first cell of text where den's screen shows it, which
+// goes through the zones of the frame that was really drawn.
+func (h *harness) clickText(text string) {
+	h.t.Helper()
+	x, y := screenPos(h.t, h.m, text)
+	h.send(testkeys.Click(x, y))
+}
+
+// doubleClickText clicks text twice in a row.
+func (h *harness) doubleClickText(text string) {
+	h.t.Helper()
+	h.clickText(text)
+	h.clickText(text)
+}
+
+// wheel turns the wheel one notch, up or down, with the pointer on the cell
+// at column x, row y.
+func (h *harness) wheel(x, y int, up bool) {
+	h.t.Helper()
+	h.m.View()
+	h.send(testkeys.Wheel(x, y, up))
+}
+
 // send delivers msg, then runs the commands it returned and feeds back the
 // messages they produce. Commands that block — the tick and the service event
 // waiter — are abandoned after a short wait; nothing here depends on them.
@@ -1109,7 +1140,7 @@ func TestKeyboardEnhancementsDecideWhatAltEscMeans(t *testing.T) {
 
 // screenPos is where text starts on den's screen, as the column and row a
 // terminal cursor is placed by.
-func screenPos(t *testing.T, m *AppModel, text string) (x, y int) {
+func screenPos(t testing.TB, m *AppModel, text string) (x, y int) {
 	t.Helper()
 	for row, line := range strings.Split(plain(m), "\n") {
 		if col := strings.Index(line, text); col >= 0 {

@@ -603,6 +603,31 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	return m, nil
 }
 
+// Click moves the cursor of the list on screen — the files, a database's
+// entries or the open file's values — to the row the zone id marks. Not while
+// a password is asked for, the search box has the keyboard, or a read is in
+// flight or failed: what the click landed on is about to change.
+func (m Model) Click(id string) Model {
+	if m.typing || m.prompting || m.loading || m.readErr != "" {
+		return m
+	}
+	switch {
+	case m.listing():
+		if i, ok := components.ZoneIndex(id, "entry"); ok && i < len(m.visibleEntries()) {
+			m.entryCur = i
+		}
+	case m.open:
+		if i, ok := components.ZoneIndex(id, "field"); ok && i < len(m.visibleFields()) && i != m.fieldCur {
+			m.fieldCur, m.revealed = i, false
+		}
+	default:
+		if i, ok := components.ZoneIndex(id, "item"); ok && i < len(m.visibleItems()) {
+			m.cursor = i
+		}
+	}
+	return m
+}
+
 // searchTarget is the query, cursor and row count of whichever list is on
 // screen, which the search box edits.
 func (m *Model) searchTarget() (query *string, cursor *int, count int) {
@@ -1069,7 +1094,7 @@ func (m Model) renderList(width, height int, focused bool) string {
 		if focused && row == m.cursor {
 			line = selectedStyle(width).Render(line)
 		}
-		rows = append(rows, line)
+		rows = append(rows, components.Zone(components.ZoneID("item", row), line))
 	}
 	// The search bar is pinned to the last line.
 	bodyH := max(height-1, 0)
@@ -1215,7 +1240,7 @@ func (m Model) renderFlat(vis []int, width, visible int, focused bool) []string 
 		if focused && i == m.fieldCur {
 			line = selectedStyle(width).Render(line)
 		}
-		rows = append(rows, line)
+		rows = append(rows, components.Zone(components.ZoneID("field", i), line))
 	}
 	return rows
 }
@@ -1308,7 +1333,7 @@ func (m Model) renderTree(vis []int, width, visible int, focused bool) []string 
 		if focused && row.vis == m.fieldCur {
 			line = selectedStyle(width).Render(line)
 		}
-		out = append(out, line)
+		out = append(out, components.Zone(components.ZoneID("field", row.vis), line))
 	}
 	return out
 }
@@ -1371,7 +1396,7 @@ func (m Model) renderEntries(width, visible int, focused bool) []string {
 		if focused && i == m.entryCur {
 			line = selectedStyle(width).Render(line)
 		}
-		rows = append(rows, line)
+		rows = append(rows, components.Zone(components.ZoneID("entry", i), line))
 	}
 	return rows
 }

@@ -225,6 +225,17 @@ func (m Model) Selected() (string, bool) {
 	return e.name(), true
 }
 
+// Click moves the cursor to the row the zone id marks; not while a prompt,
+// a question or the filter has the keyboard.
+func (m Model) Click(id string) Model {
+	rows := m.filtered()
+	if i, ok := components.ZoneIndex(id, "row"); ok && i < len(rows) && !m.Busy() {
+		m.cursor = i
+		m.offset = scrollOffset(m.offset, m.cursor, m.listRows(), len(rows))
+	}
+	return m
+}
+
 func (m Model) selected() (entry, bool) {
 	rows := m.filtered()
 	if m.cursor < 0 || m.cursor >= len(rows) {
@@ -562,7 +573,7 @@ func (m Model) renderList(width, height int, focused bool) string {
 			lines = append(lines, dim.Render(fmt.Sprintf("   ↑ %d more", offset)))
 		}
 		for i := offset; i < end; i++ {
-			lines = append(lines, m.tableRow(rows[i], i == m.cursor, focused, widths))
+			lines = append(lines, components.Zone(components.ZoneID("row", i), m.tableRow(rows[i], i == m.cursor, focused, widths)))
 		}
 		if end < len(rows) {
 			lines = append(lines, dim.Render(fmt.Sprintf("   ↓ %d more", len(rows)-end)))
