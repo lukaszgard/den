@@ -1,5 +1,39 @@
 # Changelog
 
+## [1.3.0] - 2026-10-14
+
+**den takes the mouse.** A click selects what it lands on, a double-click does what `enter`
+does there, and the wheel moves through what is under the pointer, in the menu, the panels,
+a service's detail view and a runbook's view. The keys work as before. While den has the
+mouse a plain drag no longer selects text: hold Option (iTerm2, Terminal.app) or Shift (most
+other terminals) to select. The Help panel's new Mouse topic says what goes where.
+
+### 🖥 The dashboard
+
+- A click on a menu row shows its panel, the menu keeping the focus; a double-click opens it.
+- A click on a row of Connect, Tunnel, VPN, AWS, Secrets, Create Env, Runbooks, the Config
+  problem list or the Help topics focuses the panel and selects the row; a double-click does
+  what `enter` does on it, so it opens a service's detail view or a runbook's view, logs in
+  to an AWS session, opens a secret or a Help topic.
+- The wheel over a panel moves through it as `↑` and `↓` do, without taking the focus from
+  the menu; the wheel over the menu does nothing. The shortcuts pop-up (`h`) scrolls with it.
+- Pop-ups, forms and y/n questions stay keyboard-only: a click or the wheel while one is up
+  does nothing, so a stray click never answers one.
+- In a service's detail view and a runbook's view, a click on a tab shows it (`‹` and `›`
+  step to the tabs the bar has no room for), and a click on a terminal's screen types into
+  it; picking another tab gives den the keys back. The wheel scrolls the logs, and reaches
+  the program of a terminal being typed into as arrow keys.
+- The tabs of both views sit between two rules: a line under the tab bar now keeps them apart
+  from the first line of the body.
+
+### 📜 Runbooks
+
+- The first tab of a runbook's view is now **Run**, not Logs: it shows the current or last
+  run, and no longer shares its name with the Logs panel. The bar reads `Run │ History │ About
+  │ Files`.
+- A click picks a run in History or a file in Files; a double-click shows the run's whole log
+  or the file.
+
 ## [1.2.1] - 2026-10-14
 
 **`update_pgpass` works on Windows.** den wrote the token to `~/.pgpass`, a file `psql` on
