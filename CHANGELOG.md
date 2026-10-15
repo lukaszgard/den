@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.4.0] - 2026-10-15
+
+**The AWS panel says when an SSO login ends.** Each logged-in session's row gave a bar and a
+countdown, and the only place the end time showed was the SSO cache, written in UTC, which reads
+as local time when it is not. The row now gives the end on your clock, with the zone, so it
+cannot be taken for UTC.
+
+### 🖥 The dashboard
+
+- The SSO Login box of the AWS panel ends each logged-in row with the local time the login ends:
+  `2h 28m remaining · until 14:59:16 CEST`, or `until Fri 02:15:00 CEST` when that is another
+  day. After a den login it is den's record of the login; after a login den did not start, it is
+  the current access token's expiry.
+- The bar gets shorter to make room. A panel too narrow for the clock leaves it out and keeps the
+  countdown, so the row never wraps. The Connect list keeps only its countdown.
+
 ## [1.3.0] - 2026-10-14
 
 **den takes the mouse.** A click selects what it lands on, a double-click does what `enter`

@@ -108,6 +108,13 @@ export-credentials` (when a profile references the session) and falls back to th
 AWS CLI's own token cache otherwise. The token bar is scaled to the token's real
 lifetime, typically 8-12 hours.
 
+Next to the bar, the row gives the time the login ends on the local clock, with
+the zone's abbreviation so it cannot be taken for the UTC the caches hold:
+`until 14:59:16 CEST`, or `until Fri 02:15:00 CEST` when that is another day.
+After a den login it is den's record; after a login den did not start, it is the
+current access token's expiry, which moves on at each renewal.
+When the pane is too narrow for the clock, the row keeps only the countdown.
+
 From the command line, the session is an ordinary service:
 
 ```bash
