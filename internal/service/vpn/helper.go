@@ -245,9 +245,11 @@ func SudoersFile(user string, slugs []string) string {
 
 // Script renders the wrapper. openfortivpnPath is baked in at install time.
 func Script(openfortivpnPath string) string {
-	return strings.ReplaceAll(strings.ReplaceAll(helperScript,
-		"@OPENFORTIVPN@", openfortivpnPath),
-		"@PREFIX@", HelperPrefix)
+	return strings.NewReplacer(
+		"@OPENFORTIVPN@", openfortivpnPath,
+		"@PREFIX@", HelperPrefix,
+		"@KILL_HUNG@", killHung("-x openfortivpn"),
+	).Replace(helperScript)
 }
 
 const helperScript = `#!/bin/sh
@@ -353,6 +355,12 @@ cmd_stop() {
 		stopped=1
 	fi
 
+	# openfortivpn logs out of the gateway on TERM, and over a dead connection
+	# that logout never returns. Printing "stopped" once the signal was sent is
+	# how one such process outlived its stop and had a second one started on
+	# top of it, so whatever is still running after 5 s is KILLed.
+	@KILL_HUNG@
+
 	# openfortivpn normally stops its own pppd child. When it is killed instead of
 	# shutting down cleanly, pppd reparents to init and keeps its ppp interface up,
 	# still holding a VPN-assigned address. Those never go away on their own.
@@ -366,6 +374,14 @@ cmd_stop() {
 			kill -TERM "$p" 2>/dev/null && stopped=1
 		fi
 	done
+
+	# den logs a failing stop, and refuses to start a tunnel over one still
+	# running; a "stopped" here would hide both.
+	left=$(pgrep -x openfortivpn 2>/dev/null | tr '\n' ' ')
+	if [ -n "$left" ]; then
+		echo "den-vpn: openfortivpn (pid ${left% }) did not stop" >&2
+		exit 1
+	fi
 
 	if [ "$stopped" = "1" ]; then
 		echo "den-vpn: stopped"

@@ -64,10 +64,18 @@ func helperCommand(action, slug string) (string, []string) {
 	return "sudo", []string{"-n", HelperPath, action, slug}
 }
 
-// stopCommand returns the OS-appropriate command to terminate the running
-// openfortivpn process. On macOS a second osascript prompt appears.
-// When gateway is set it matches on the full command pattern; otherwise it
-// falls back to process-name match (-x) which is safe when only one instance runs.
+// killHung waits up to 5 s for the openfortivpn processes match selects (pgrep
+// arguments, already shell-quoted) to act on the SIGTERM sent before it, then
+// SIGKILLs whatever is left. openfortivpn logs out of the gateway on TERM, and
+// over a dead connection that logout never returns: the process then lives on
+// with its ppp interface and split DNS, and every later connect starts a second
+// one on top of it. A KILLed openfortivpn leaves its pppd behind, so callers
+// run reapOrphanedPPPD after this.
+func killHung(match string) string {
+	return `i=0; while [ "$i" -lt 50 ] && pgrep ` + match + ` >/dev/null 2>&1; do sleep 0.1; i=$((i + 1)); done; ` +
+		`pkill -KILL ` + match + ` 2>/dev/null || true`
+}
+
 // reapOrphanedPPPD kills pppd processes left behind by an openfortivpn that was
 // killed rather than shut down cleanly. openfortivpn normally terminates its
 // pppd child itself; when it cannot, pppd reparents to init and keeps its ppp
@@ -81,21 +89,25 @@ const reapOrphanedPPPD = `for p in $(pgrep -f ':169.254.2.1 noipdefault' 2>/dev/
 	`[ "$(ps -o comm= -p $p 2>/dev/null | sed 's|.*/||')" = pppd ] || continue; ` +
 	`if [ "$(ps -o ppid= -p $p 2>/dev/null | tr -d ' ')" = "1" ]; then kill -TERM $p 2>/dev/null; fi; done`
 
+// stopCommand returns the OS-appropriate command to terminate the running
+// openfortivpn process. On macOS a second osascript prompt appears.
+// When gateway is set it matches on the full command pattern; otherwise it
+// falls back to process-name match (-x) which is safe when only one instance runs.
 func stopCommand(gateway, configFile string) (string, []string, error) {
-	var killArgs []string
+	match := "-x openfortivpn"
 	if gateway != "" {
-		killArgs = []string{"-TERM", "-f", "openfortivpn " + gateway}
-	} else {
-		killArgs = []string{"-TERM", "-x", "openfortivpn"}
+		// The bracket keeps the pattern from matching the `sh -c` running this
+		// stop, whose own command line holds it: that shell would be KILLed
+		// halfway through, before the pppd reap.
+		match = "-f " + shellQuote("[o]penfortivpn "+gateway)
 	}
+	// Reap after the pkill so openfortivpn gets its chance to stop pppd
+	// itself; only what it leaves behind is swept.
+	inner := "pkill -TERM " + match + "; " + killHung(match) + "; sleep 1; " + reapOrphanedPPPD
 	switch runtime.GOOS {
 	case "darwin":
-		// Reap after the pkill so openfortivpn gets its chance to stop pppd
-		// itself; only what it leaves behind is swept.
-		inner := "pkill " + strings.Join(killArgs, " ") + "; sleep 1; " + reapOrphanedPPPD
 		return "osascript", []string{"-e", fmt.Sprintf(`do shell script %q with administrator privileges`, inner)}, nil
 	case "linux":
-		inner := "pkill " + strings.Join(killArgs, " ") + "; sleep 1; " + reapOrphanedPPPD
 		return "pkexec", []string{"sh", "-c", inner}, nil
 	default:
 		return "", nil, fmt.Errorf("VPN stop not supported on %s", runtime.GOOS)
