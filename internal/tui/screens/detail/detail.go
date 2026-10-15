@@ -290,6 +290,12 @@ func (m Model) TerminalAt(x, y int) bool {
 	return x >= 1 && x < 1+cols && y >= top && y < top+rows // 1: the box's left border
 }
 
+// TextArea is the inside of the view's box, where a drag selects text: the
+// box starts on the first row of the screen, and its border is one cell.
+func (m Model) TextArea() components.Rect {
+	return components.Rect{X0: 1, Y0: 1, X1: m.width - 1, Y1: 1 + m.boxInnerHeight()}
+}
+
 // Click handles a click on the zone id, a second one in a row on it being a
 // double-click: a tab, or the screen of the terminal on it. Not while a
 // disconnect waits for its answer: a stray click is none.

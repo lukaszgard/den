@@ -588,8 +588,8 @@ func programName(line string) string {
 }
 
 // runbookKey routes a key while the runbook view is open, as the detail view's
-// are: to the view first when it needs every key, then h for its shortcuts,
-// then esc back to the list, then the view.
+// are: to the view first when it needs every key, then h for its shortcuts and
+// M for the mouse, then esc back to the list, then the view.
 func (m *AppModel) runbookKey(msg tea.KeyPressMsg) []tea.Cmd {
 	var cmd tea.Cmd
 	if m.runbookView.CapturingKeys() {
@@ -597,8 +597,11 @@ func (m *AppModel) runbookKey(msg tea.KeyPressMsg) []tea.Cmd {
 		return []tea.Cmd{cmd}
 	}
 	if k := msg.String(); k == "h" || k == "?" {
-		m.shortcuts = components.OpenShortcuts(m.runbookView.Name(), m.runbookView.Shortcuts())
+		m.shortcuts = components.OpenShortcuts(m.runbookView.Name(), append(m.runbookView.Shortcuts(), viewShortcuts))
 		return nil
+	}
+	if msg.String() == "M" {
+		return []tea.Cmd{m.toggleMouse()}
 	}
 	if isBack(msg) && !m.runbookView.OwnsBack() {
 		m.showRunbook = false

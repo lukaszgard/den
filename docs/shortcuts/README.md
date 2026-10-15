@@ -101,6 +101,7 @@ service:
 |                 | `Y` copy it with the token inlined    | services whose command can carry it                              |
 | Terminal tabs   | `t`, `←` `→`, `1`-`9`, `Enter`, `n`, `x` | services with [terminal tabs](../terminal/README.md): every tunnelled data store |
 | View            | `↑` `↓`, `h` `?`, `Esc`               | every service                                                    |
+| den             | `M` the mouse to the terminal         | every service                                                    |
 
 `r` means three different things depending on the service, which is the main reason
 the pop-up exists: a new token for RDS, the reconnect toggle for a tunnel or a VPN,
@@ -136,9 +137,9 @@ request's last row) moves from the request to the Agent row; on the name it does
 | Secrets  | Secrets (`Enter`, `/`, `Esc`), Values (`r`, `a`, `t`, `y`, `e`), Access (`L`, `l`) |
 | Runbooks | Runbooks (`Enter`, `r`, `x`, `n`, `m`, `D`, `s`, `/`, `w`)                        |
 | Help     | Topics (`↑` `↓`, `Enter`, `/`, `Esc`), or Topic (scroll, `/`, `n` `N`, `Esc`) in an open one |
-| all seven | den (`Tab`, `R`, `h` `?`, `Esc`, `q`)                                           |
+| all seven | den (`Tab`, `R`, `M`, `h` `?`, `Esc`, `q`)                                      |
 
-A runbook's view lists Runbook (`r`, `x`, `y`, `o`, `t`, `e`, `m`, `D`), Tabs and View.
+A runbook's view lists Runbook (`r`, `x`, `y`, `o`, `t`, `e`, `m`, `D`), Tabs, View and den (`M`).
 
 The pop-up is only about keys. What each feature does and how its part of `den.yaml`
 is written is in the Help panel (`?` from the menu), one topic per feature with
@@ -166,6 +167,7 @@ describes in context. Each other panel's keys are in its own page
 | `L`                 | Jump to the Logs panel                                                  |
 | `?`                 | Jump to the Help panel: one topic per feature; `/` searches them all    |
 | `R`                 | Reload the config file, checked first; see [Editing den.yaml](../config-reload/README.md) |
+| `M`                 | Give the mouse to the terminal, whose own drag-to-select then works; `M` again gives it back to den (also in the detail and runbook views; text in a search box, a terminal tab or a form) |
 | `q` / `Ctrl+C`      | Quit, which stops every tunnel                                          |
 
 In the Connect panel:
@@ -186,9 +188,9 @@ token inlined, and `p` the raw token.
 
 ## Mouse
 
-den reads clicks and the wheel in every panel and view, and the keys keep working as
-before. A click selects, a double-click does what `Enter` does, and the wheel is `↑` or
-`↓` sent to what is under the pointer.
+den reads clicks, drags and the wheel in every panel and view, and the keys keep working
+as before. A click selects, a double-click does what `Enter` does, a drag selects text
+and copies it, and the wheel is `↑` or `↓` sent to what is under the pointer.
 
 | Where                              | Click                                       | Double-click                                 | Wheel                                        |
 |------------------------------------|---------------------------------------------|----------------------------------------------|----------------------------------------------|
@@ -199,11 +201,21 @@ before. A click selects, a double-click does what `Enter` does, and the wheel is
 | History, Files                     | Pick a run or a file                        | The run's whole log, or the file             | Move through the runs or the tree            |
 | Run, About, a file shown, the logs | —                                           | —                                            | Scroll                                       |
 | The shortcuts pop-up               | Nothing                                     | Nothing                                      | Scroll it                                    |
+| Drag: any text, outside a pop-up   | Press and drag: select it; let go: copy it  | —                                            | Clears the selection                         |
 
-- **Selecting text.** While den has the mouse, a plain drag does not select. Hold
-  `Option` (iTerm2, Terminal.app) or `Shift` (most other terminals) while you drag.
-- **Keyboard-only.** Pop-ups, forms and y/n questions take no click and no wheel, so a
-  stray click never answers one; hint lines and the bars at the bottom are not buttons.
+- **Selecting text.** A drag selects in reverse video, and letting go copies the text,
+  with `copied N lines` in the status bar; a key, a click or the wheel clears it. The
+  selection stays in what it started in (the menu, the panel, the inside of a view's
+  box, or one bar), so no border or menu text comes with it. It copies what is on
+  screen: a line cut with `…` stays cut, a wrapped line comes out as several lines, and
+  a drag does not scroll. For the terminal's own selection, press `M` (the status bar
+  then ends with `M: mouse to den`; `M` again gives the mouse back to den), or hold the
+  terminal's modifier while you drag: `Option` in iTerm2, `Fn` in Terminal.app (or `⌘R`,
+  View → Allow Mouse Reporting), `Shift` in Ghostty, kitty, WezTerm, Alacritty and
+  Windows Terminal.
+- **Keyboard-only.** Pop-ups, forms and y/n questions take no click, no drag and no
+  wheel, so a stray click never answers one; hint lines and the bars at the bottom are
+  not buttons.
 - **Terminal tabs.** A click hands a tab the keyboard, but the program in it never sees
   the mouse: `vim` or `less` get the wheel as arrow keys, and no clicks.
 

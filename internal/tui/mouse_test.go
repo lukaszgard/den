@@ -5,11 +5,16 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lukaszgard/den/internal/config"
 	"github.com/lukaszgard/den/internal/service"
+	"github.com/lukaszgard/den/internal/tui/components"
+	"github.com/lukaszgard/den/internal/tui/msgs"
+	"github.com/lukaszgard/den/internal/tui/testkeys"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // panelX is a column inside the panel, right of the menu and its separator.
@@ -298,5 +303,237 @@ func TestTheMouseInTheDetailView(t *testing.T) {
 	h.clickTab("Logs")
 	if h.m.detailModel.CapturingKeys() || h.m.detailModel.View() == "" || strings.Contains(plain(h.m), "fake client screen") {
 		t.Fatal("a click on Logs should show the logs, den having the keys")
+	}
+}
+
+// ── selecting text with a drag ───────────────────────────────────────────────
+
+// clipboard swaps the system clipboard for one the test reads, so a drag
+// never touches the developer's.
+func clipboard(t *testing.T) *string {
+	t.Helper()
+	copied := new(string)
+	saved := components.WriteClipboard
+	components.WriteClipboard = func(text string) error { *copied = text; return nil }
+	t.Cleanup(func() { components.WriteClipboard = saved })
+	return copied
+}
+
+// dragOver presses the left button on the cell x0, y0, drags to x1, y1 and
+// lets go there, a frame drawn before each as the terminal shows one.
+func (h *harness) dragOver(x0, y0, x1, y1 int) {
+	h.t.Helper()
+	h.m.View()
+	h.send(testkeys.Click(x0, y0))
+	h.m.View()
+	h.send(testkeys.Drag(x1, y1))
+	h.m.View()
+	h.send(testkeys.Release(x1, y1))
+}
+
+// reverse is how a selection is drawn.
+const reverse = "\x1b[7m"
+
+// A drag over the panel copies the panel's text and nothing of the menu
+// beside it, however far left it goes, and says how much it copied.
+func TestADragCopiesThePanelsText(t *testing.T) {
+	copied := clipboard(t)
+	h := newHarness(t, managerWith(newSvc(service.TypeRDS, "orders-db"), newSvc(service.TypeRDS, "billing-db")), nil)
+	x0, y0 := screenPos(t, h.m, "orders-db")
+	x1, y1 := screenPos(t, h.m, "billing-db")
+	h.dragOver(x0, y0, x1+len("billing-db")-1, y1)
+	lines := strings.Split(*copied, "\n")
+	if len(lines) != 2 || !strings.HasPrefix(lines[0], "orders-db") || !strings.HasSuffix(lines[1], "billing-db") {
+		t.Fatalf("copied %q, want orders-db's row from the name on and billing-db's up to its name", *copied)
+	}
+	for _, menu := range []string{"Connect", "Tunnel", "│"} {
+		if strings.Contains(*copied, menu) {
+			t.Fatalf("copied %q, which has %q from outside the panel", *copied, menu)
+		}
+	}
+	if !strings.Contains(plain(h.m), "copied 2 lines") {
+		t.Fatalf("the status bar should say what was copied:\n%s", plain(h.m))
+	}
+
+	// Dragged on into the menu, the selection stops at the panel's edge.
+	h.dragOver(x1+3, y1, 2, y0)
+	if strings.Contains(*copied, "Connect") || !strings.Contains(*copied, "orders-db") || !strings.HasSuffix(*copied, "bill") {
+		t.Fatalf("copied %q, want orders-db's row from the panel's edge, then billing-db's up to bill", *copied)
+	}
+}
+
+// A click is not a drag: it selects its row, and copies nothing.
+func TestAClickCopiesNothing(t *testing.T) {
+	copied := clipboard(t)
+	h := newHarness(t, managerWith(newSvc(service.TypeRDS, "orders-db"), newSvc(service.TypeRDS, "billing-db")), nil)
+	x, y := screenPos(t, h.m, "billing-db")
+	h.dragOver(x, y, x, y)
+	if *copied != "" || h.m.flashMsg != "" || strings.Contains(h.m.View().Content, reverse) {
+		t.Fatalf("a click copied %q and flashed %q", *copied, h.m.flashMsg)
+	}
+	if h.m.leftFocused || h.m.connectPane.Cursor() != 1 {
+		t.Fatal("the click should still select billing-db")
+	}
+}
+
+// The selection shows in reverse video after the button is let go, until a
+// key, which still does what it does.
+func TestTheSelectionShowsUntilAKey(t *testing.T) {
+	clipboard(t)
+	h := newHarness(t, managerWith(newSvc(service.TypeRDS, "orders-db"), newSvc(service.TypeRDS, "billing-db")), nil)
+	if strings.Contains(h.m.View().Content, reverse) {
+		t.Fatal("the screen is in reverse video before any drag")
+	}
+	x, y := screenPos(t, h.m, "orders-db")
+	h.dragOver(x, y, x+5, y)
+	if !strings.Contains(h.m.View().Content, reverse+"orders") {
+		t.Fatalf("the selection should show in reverse video: %q", h.m.View().Content)
+	}
+	h.press("down")
+	if strings.Contains(h.m.View().Content, reverse) || h.m.connectPane.Cursor() != 1 {
+		t.Fatal("a key should clear the selection and still move the cursor")
+	}
+	h.dragOver(x, y, x+5, y)
+	h.wheel(panelX, 5, false)
+	if strings.Contains(h.m.View().Content, reverse) {
+		t.Fatal("the wheel should clear the selection")
+	}
+}
+
+// A drag is not a click: a click right after one, on the row it started on,
+// is a first click, not the second of a double-click.
+func TestAClickAfterADragIsNotADoubleClick(t *testing.T) {
+	clipboard(t)
+	h := newHarness(t, managerWith(newSvc(service.TypeRDS, "orders-db")), nil)
+	x, y := screenPos(t, h.m, "orders-db")
+	h.dragOver(x, y, x+4, y)
+	h.click(x, y)
+	if h.m.showDetail {
+		t.Fatal("a click after a drag opened the detail view as a double-click")
+	}
+}
+
+// In the detail view a drag keeps to the inside of the box: its border is not
+// text to copy.
+func TestADragInTheDetailViewCopiesNoBorder(t *testing.T) {
+	copied := clipboard(t)
+	h := newHarness(t, managerWith(newSvc(service.TypeRDS, "orders-db")), nil)
+	h.doubleClickText("orders-db")
+	if !h.m.showDetail {
+		t.Fatal("a double-click should open the detail view")
+	}
+	h.dragOver(0, 1, h.m.width-1, h.m.height-1)
+	if !strings.Contains(*copied, "orders-db") {
+		t.Fatalf("copied %q, want the inside of the box", *copied)
+	}
+	for _, corner := range []string{"╭", "╮", "╰", "╯"} {
+		if strings.Contains(*copied, corner) {
+			t.Fatalf("copied %q, which has the corner %s", *copied, corner)
+		}
+	}
+	for _, line := range strings.Split(*copied, "\n") {
+		if strings.HasPrefix(line, "│") || strings.HasSuffix(line, "│") {
+			t.Fatalf("copied the box's side in %q", line)
+		}
+	}
+	if strings.Contains(*copied, "esc: back") {
+		t.Fatal("a drag that starts in the box should not reach the help line under it")
+	}
+
+	// The help line under the box is a row of its own.
+	x, y := screenPos(t, h.m, "esc: back")
+	h.dragOver(x, y, x+8, y-5)
+	if *copied != "esc: back" {
+		t.Fatalf("copied %q, want the help line's own text", *copied)
+	}
+}
+
+// While a pop-up is up a drag selects nothing, as a click answers nothing.
+func TestADragUnderAPopUpSelectsNothing(t *testing.T) {
+	copied := clipboard(t)
+	h := newHarness(t, managerWith(newSvc(service.TypeRDS, "orders-db")), nil)
+	h.press("tab", "h")
+	h.dragOver(panelX, 3, panelX+20, 10)
+	if *copied != "" || strings.Contains(h.m.View().Content, reverse) || !h.m.shortcuts.Open() {
+		t.Fatalf("a drag under the shortcuts copied %q", *copied)
+	}
+}
+
+// ── M: the mouse to the terminal ─────────────────────────────────────────────
+
+// mouseIsDens reports whether den asks the terminal for the mouse.
+func mouseIsDens(m *AppModel) bool { return m.View().MouseMode == tea.MouseModeCellMotion }
+
+// M gives the mouse to the terminal, whose own selection then works, and
+// takes it back, from the menu, the panel, the detail view and the runbook
+// view. While the terminal has it, the status bar says how to get it back.
+func TestMGivesTheMouseToTheTerminal(t *testing.T) {
+	h := newHarness(t, managerWith(newSvc(service.TypeRDS, "orders-db")), nil)
+	h.press("M")
+	if mouseIsDens(h.m) || !strings.Contains(plain(h.m), "M: mouse to den") {
+		t.Fatalf("M from the menu should give the mouse away and say so:\n%s", plain(h.m))
+	}
+	h.press("M")
+	if !mouseIsDens(h.m) || strings.Contains(plain(h.m), "mouse to den") {
+		t.Fatal("M again should take the mouse back")
+	}
+
+	h.press("tab", "M")
+	if mouseIsDens(h.m) {
+		t.Fatal("M from the panel should give the mouse away")
+	}
+	h.press("enter", "M")
+	if !h.m.showDetail || !mouseIsDens(h.m) {
+		t.Fatal("M in the detail view should take the mouse back")
+	}
+
+	f := runbookHarness(t)
+	f.selectRow("Greet")
+	f.press("enter", "M")
+	if !f.m.showRunbook || mouseIsDens(f.m) {
+		t.Fatal("M in the runbook view should give the mouse away")
+	}
+}
+
+// The marker fits the status bar however narrow the terminal, cutting what
+// the bar said rather than wrapping, which would push den's header off.
+func TestTheMouseMarkerFitsTheStatusBar(t *testing.T) {
+	h := newHarness(t, managerWith(newSvc(service.TypeRDS, "orders-db")), nil)
+	h.send(tea.WindowSizeMsg{Width: 90, Height: 20})
+	h.press("M")
+	h.send(msgs.StatusFlashMsg{Text: strings.Repeat("a long status ", 10), Hold: time.Minute})
+	lines := strings.Split(plain(h.m), "\n")
+	bar := lines[len(lines)-2]
+	if !strings.HasSuffix(strings.TrimRight(bar, " "), "…  M: mouse to den") || ansi.StringWidth(bar) > 90 {
+		t.Fatalf("status bar %q: want the status cut and the marker at its end, in 90 cells", bar)
+	}
+	if len(lines) != 20 {
+		t.Fatalf("the frame is %d lines, want 20", len(lines))
+	}
+}
+
+// M typed into a search box, a terminal or a question is text, not den's.
+func TestMIsTextWhereTextIsTyped(t *testing.T) {
+	h := newHarness(t, managerWith(newSvc(service.TypeRDS, "orders-db")), nil)
+	h.press("tab", "/", "M")
+	if !mouseIsDens(h.m) || !h.m.connectPane.Searching() || strings.Contains(plain(h.m), "○ orders-db") {
+		t.Fatal("M in the search box should filter the list, not give the mouse away")
+	}
+
+	d, _, starts := terminalHarness(t)
+	d.press("t", "M")
+	if !mouseIsDens(d.m) || starts.terms[0].typed() != "M" {
+		t.Fatalf("the client got %q: M should reach it", starts.terms[0].typed())
+	}
+	d.press("ctrl+t", "M")
+	if mouseIsDens(d.m) {
+		t.Fatal("with den's keys back, M should give the mouse away")
+	}
+
+	f := runbookHarness(t)
+	f.selectRow("Ask")
+	f.press("enter", "r", "M")
+	if !mouseIsDens(f.m) {
+		t.Fatal("M typed as a parameter should not give the mouse away")
 	}
 }

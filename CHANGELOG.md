@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.5.0] - 2026-10-15
+
+**Copy text from den again.** Since den took the mouse in 1.3.0 a drag selected nothing, and the
+Option-drag the docs suggested makes a rectangular selection in Terminal.app. den now selects for
+itself: drag over text, let go, and it is copied. `M` hands the mouse back to the terminal when
+its own selection is what you need.
+
+### 🖥 The dashboard
+
+- A drag selects text in reverse video, and letting go copies it, with `copied 3 lines` in the
+  status bar. A key, a click or the wheel clears the highlight. Clicks, double-clicks and the
+  wheel work as before.
+- The selection stays in what it started in: the menu, the panel, the inside of a service's
+  detail view or a runbook's view, or one bar at the bottom. It never picks up the menu beside a
+  panel or a box's border, so a drag over a terminal tab copies only what its program wrote.
+- It copies what is on screen: a line cut with `…` stays cut, a wrapped line comes out as several
+  lines, and a drag does not scroll. Under a pop-up or a question a drag selects nothing.
+- Without a system clipboard (no `xclip` or `wl-copy`, a session over SSH) den asks the terminal
+  to set it with OSC 52 and says `(sent to the terminal)`; tmux passes that on only with
+  `set -g set-clipboard on`.
+- `M` gives the mouse to the terminal, whose own drag-to-select then works in full, and takes it
+  back: from the menu, a panel, the detail view and the runbook view, unless a search box, a
+  terminal tab or a form is taking the keys. While the terminal has it, the status bar ends with
+  `M: mouse to den`. The shortcuts pop-ups list it.
+- The Mouse help topic and the shortcuts page give each terminal's modifier for its own
+  selection: Option in iTerm2, Fn in Terminal.app (or ⌘R), Shift in Ghostty, kitty, WezTerm,
+  Alacritty and Windows Terminal.
+
 ## [1.4.0] - 2026-10-15
 
 **The AWS panel says when an SSO login ends.** Each logged-in session's row gave a bar and a
