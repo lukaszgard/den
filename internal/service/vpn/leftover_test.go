@@ -2,8 +2,11 @@ package vpn
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/lukaszgard/den/internal/config"
 )
 
 // psPrints is the body of a fake ps that prints lines as
@@ -80,5 +83,28 @@ func TestManualCommands(t *testing.T) {
 		if kill != c.kill || stop != c.stop {
 			t.Errorf("manualCommands(%s, helper=%v) =\n  %q\n  %q\nwant\n  %q\n  %q", c.goos, c.helper, kill, stop, c.kill, c.stop)
 		}
+	}
+}
+
+// Without the helper (no sudo on this PATH) den's stop raises the admin
+// dialog, and its stop command is not offered.
+func TestServiceLeftovers(t *testing.T) {
+	s := newSvc(t, &config.VPNSpec{})
+	fakePATH(t, map[string]string{"ps": psPrints("29035 1 03-13:40:22 /usr/sbin/pppd 230400 :169.254.2.1 noipdefault")})
+
+	l := s.Leftovers(t.Context())
+	if l == nil || len(l.Processes) != 1 {
+		t.Fatalf("Leftovers() = %+v, want the pppd", l)
+	}
+	if p := l.Processes[0]; p.Name != "pppd" || p.PID != "29035" || p.Age < 3*24*time.Hour {
+		t.Errorf("process = %+v", p)
+	}
+	if !l.AdminPrompt || l.StopCommand != "" || !strings.Contains(l.KillCommand, "kill 29035") {
+		t.Errorf("AdminPrompt=%v StopCommand=%q KillCommand=%q", l.AdminPrompt, l.StopCommand, l.KillCommand)
+	}
+
+	fakePATH(t, map[string]string{"ps": psPrints("31000 500 00:07 vim openfortivpn.conf")})
+	if l := s.Leftovers(t.Context()); l != nil {
+		t.Errorf("Leftovers() = %+v with nothing left, want nil", l)
 	}
 }

@@ -136,9 +136,9 @@ func TestRunOnceRefusesASecondOpenfortivpn(t *testing.T) {
 		name, ps, want string
 	}{
 		{"openfortivpn", "4242 1 01:00 /usr/local/bin/openfortivpn -c /opt/den/etc/test.conf",
-			"openfortivpn (pid 4242) is still running"},
+			"openfortivpn (pid 4242) is still running — press c"},
 		{"orphaned pppd", "29035 1 03-13:40:22 /usr/sbin/pppd 230400 :169.254.2.1 noipdefault",
-			"pppd (pid 29035) is still running"},
+			"pppd (pid 29035) is still running — press c"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			s := newSvc(t, &config.VPNSpec{Reconnect: true})

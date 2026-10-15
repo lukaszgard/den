@@ -82,7 +82,7 @@ func (m *AppModel) click(x, y int) []tea.Cmd {
 	// covers.
 	var cmd tea.Cmd
 	switch {
-	case m.shortcuts.Open() || m.cfgPrompt != nil:
+	case m.popUp():
 		return nil
 	case m.showRunbook:
 		m.runbookView, cmd = m.runbookView.Click(id, double)
@@ -130,7 +130,7 @@ func (m *AppModel) wheel(msg tea.MouseWheelMsg) []tea.Cmd {
 			m.shortcuts = m.shortcuts.Key(key.String(), m.width, m.height)
 		}
 		return nil
-	case m.cfgPrompt != nil:
+	case m.cfgPrompt != nil || m.leftovers != nil:
 		return nil
 	// A full-screen view takes the wheel wherever the pointer is: it is all
 	// one area, and a terminal being typed into gets the arrows, as before.
@@ -172,7 +172,7 @@ func (m *AppModel) wheel(msg tea.MouseWheelMsg) []tea.Cmd {
 func (m *AppModel) selectArea(x, y int) components.Rect {
 	row := components.Rect{X0: 0, Y0: y, X1: m.width, Y1: y + 1}
 	switch {
-	case m.shortcuts.Open() || m.cfgPrompt != nil:
+	case m.popUp():
 		return components.Rect{}
 	case m.showRunbook || m.showDetail:
 		box := m.detailModel.TextArea()

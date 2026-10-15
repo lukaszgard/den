@@ -69,6 +69,9 @@ const (
 var (
 	_ service.Reconnectable   = (*Service)(nil)
 	_ service.HealthCheckable = (*Service)(nil)
+	// The TUI checks for leftovers before a connect and after a stop only
+	// through this.
+	_ service.LeftoverAware = (*Service)(nil)
 )
 
 // Service implements service.Service for openfortivpn-based VPN connections.
@@ -272,6 +275,22 @@ func (s *Service) ToggleHealthCheck() bool {
 
 func (s *Service) RefreshToken(ctx context.Context) error { return nil }
 
+// Leftovers reports the openfortivpn and orphaned pppd processes that keep this
+// VPN from connecting, nil when none runs, with the commands that end them.
+func (s *Service) Leftovers(ctx context.Context) *service.Leftovers {
+	procs := leftoverProcs()
+	if len(procs) == 0 {
+		return nil
+	}
+	helper, _ := Available(ctx)
+	l := &service.Leftovers{AdminPrompt: !helper}
+	for _, p := range procs {
+		l.Processes = append(l.Processes, service.Leftover{Name: p.name, PID: p.pid, Age: p.age})
+	}
+	l.KillCommand, l.StopCommand = manualCommands(runtime.GOOS, s.slug, leftoverPIDs(procs), helper)
+	return l
+}
+
 func (s *Service) Start(ctx context.Context) (<-chan service.StatusUpdate, error) {
 	s.mu.Lock()
 	// New() found a tunnel already up; adopt it (monitor for drops) rather than
@@ -307,7 +326,8 @@ func (s *Service) monitorAdopted(ctx context.Context) {
 	defer s.clearMonitoring()
 	// New saw only the process and ppp0, which a dead tunnel leaves behind too.
 	// A dead one is reported, not killed or reconnected: without the helper a
-	// kill raises an admin dialog, which must not pop up unasked at startup.
+	// kill raises an admin dialog, which must not pop up unasked at startup. A
+	// c then offers to stop it, since the TUI finds it among the leftovers.
 	if target := s.activeHealthCheck(); target != "" {
 		s.log(fmt.Sprintf("found a running openfortivpn — checking %s", target))
 		alive := s.dataPathAlive()
@@ -318,7 +338,7 @@ func (s *Service) monitorAdopted(ctx context.Context) {
 			s.setState(service.RuntimeState{
 				Status: service.StatusError,
 				Error: fmt.Errorf("openfortivpn and ppp0 are present but %s is unreachable — "+
-					"the tunnel data path appears dead; press d to disconnect, then c to reconnect", target),
+					"the tunnel data path appears dead; press c to stop it and reconnect", target),
 			})
 			return
 		}
@@ -505,7 +525,7 @@ func (s *Service) runOnce(ctx context.Context) {
 		kill, _ := manualCommands(runtime.GOOS, s.slug, leftoverPIDs(procs), false)
 		// The command goes in the log, which outlasts any message on screen.
 		s.log(fmt.Sprintf("not starting openfortivpn: %s — to stop it yourself: %s", what, kill))
-		s.markFatal(what + " — press d to stop it, then c")
+		s.markFatal(what + " — press c to stop it and connect")
 		return
 	}
 	s.setState(service.RuntimeState{Status: service.StatusConnecting})

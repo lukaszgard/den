@@ -83,8 +83,57 @@ Killing openfortivpn is not enough on its own: it spawns `pppd`, and a killed
 parent leaves that child reparented to init with its `ppp` interface still up,
 still holding a VPN-assigned address. den's stop now reaps those, matching on
 openfortivpn's fixed ppp peer address plus a parent of init so a live tunnel's
-pppd is never touched. Note that macOS hides root processes' command lines from
-non-root callers, so this sweep only sees them because it runs as root.
+pppd is never touched. pppd can ignore TERM too: it answers with an LCP
+terminate over a link that is gone and may never exit, keeping `ppp0` and the
+VPN's split DNS. So the reap also waits 5 seconds and then kills what is left,
+and the helper's stop fails with `pppd (pid N) did not stop` when one survives
+even that. Note that macOS hides root processes' command lines from non-root
+callers: `pgrep -f` as you sees nothing, so the sweep finds them because it runs
+as root, and den finds them with `ps`, which is setuid root there.
+
+### Something left running
+
+den does not start a second openfortivpn beside one that is still running, nor
+beside an orphaned pppd. Either holds `ppp0` and the DNS, so a new tunnel could
+only fail: its pppd would get `ppp1` while den watches `ppp0`, and its SAML login
+would hold another gateway session meanwhile. Press `c`, and den lists what is
+left instead of connecting:
+
+```
+╭────────────────────────────────────────────────────────────────────────╮
+│  Office VPN: a VPN from an earlier session is still running            │
+│  A new connect cannot run beside it: it holds ppp0 and the VPN's DNS.  │
+│                                                                        │
+│    pppd  pid 29035    running 3 days                                   │
+│                                                                        │
+│  To stop it yourself:                                                  │
+│    sudo /opt/den/libexec/den-vpn stop office-vpn                       │
+│    sudo kill 29035; sleep 5; sudo kill -9 29035 2>/dev/null            │
+│                                                                        │
+│  y: stop it and connect  s: copy stop  k: copy kill  n: cancel         │
+╰────────────────────────────────────────────────────────────────────────╯
+```
+
+| Key           | Action                                                                 |
+|---------------|------------------------------------------------------------------------|
+| `y`           | Run den's stop, then connect once nothing is left                      |
+| `s`           | Copy den's stop as you would run it (only with the helper installed)   |
+| `k`           | Copy the kill by pid: TERM, then KILL after 5 seconds                  |
+| `n` / `esc`   | Close it and connect nothing                                           |
+
+- The helper's stop (`sudo /opt/den/libexec/den-vpn stop <profile>`) is shown
+  only once [`den vpn install-helper`](#passwordless-setup) has run: its sudoers
+  rule is what lets it run as root. Without the helper, `y` raises the admin
+  password dialog, and the pop-up says so.
+- When den's stop leaves something running, the pop-up opens again, titled
+  `den's stop left this running`, and `y` tries again. A `d` whose stop left
+  something running opens the same pop-up.
+- It never opens on its own at startup: without the helper its stop raises an
+  admin dialog, which must not appear unasked.
+- While another of den's VPNs is up, `c` asks you to disconnect it first rather
+  than offering to kill its tunnel.
+- The log keeps the kill command after the pop-up has gone:
+  `not starting openfortivpn: pppd (pid 29035) is still running — to stop it yourself: sudo kill …`.
 
 The stop logic lives in the installed script, so a helper installed by an older
 den keeps its older stop. `den vpn status` shows `script: outdated` and `den
@@ -175,7 +224,7 @@ Windows: WSL's traffic is routed through Windows, so it normally uses the host's
 
 | Key       | Action                                  |
 |-----------|-----------------------------------------|
-| `c`       | Connect the selected VPN                |
+| `c`       | Connect the selected VPN; with a VPN [left running](#something-left-running), offer to stop it first |
 | `d`       | Disconnect the selected VPN             |
 | `r`       | Toggle `reconnect`                      |
 | `H`       | Toggle the `health_check` probe         |
@@ -359,8 +408,9 @@ bastion) and `den` will TCP-probe it:
   probe runs in the background, so den opens at once and shows the VPN as
   **connecting** until `health_check` answers (up to three 2 s tries). If the
   process and `ppp0` are present but the probe fails, the VPN is shown as
-  **error** ("data path appears dead") instead of a false *connected*. Press `d`
-  to tear down the zombie, then `c` to reconnect. Tunnels bound to the VPN
+  **error** ("data path appears dead") instead of a false *connected*. Press `c`:
+  den offers to tear down the zombie and reconnect (see
+  [Something left running](#something-left-running)). Tunnels bound to the VPN
   auto-connect only once the probe passes.
 - **While connected** — every 15 s. Two consecutive failures flag the tunnel as
   dropped (→ error), even if `ppp0` is still present.

@@ -115,6 +115,10 @@ type AppModel struct {
 	// cfgPrompt is the pop-up a reload opened, nil when none is; while it is
 	// open it gets every key.
 	cfgPrompt *configPrompt
+	// leftovers is the pop-up offering to stop what keeps a VPN from
+	// connecting, nil when none is open; it gets every key too. See
+	// leftovers.go.
+	leftovers *leftoverPrompt
 	// startEditor opens den.yaml in the user's editor.
 	startEditor editorStarter
 
@@ -592,6 +596,11 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.runAction(actDisconnect, svc)...)
 		}
 
+	// What keeps a VPN from connecting, checked after a c or a stop; see
+	// leftovers.go.
+	case leftoversMsg:
+		cmds = append(cmds, m.leftoversFound(msg)...)
+
 	// A runbook source fetched in the background: the Runbooks pane shows
 	// what it did, in its pop-up or the status bar.
 	case msgs.RunbookSourceDoneMsg:
@@ -763,9 +772,13 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.shortcuts = m.shortcuts.Key(msg.String(), m.width, m.height)
 			break
 		}
-		// So does the pop-up of a reload.
+		// So do the pop-up of a reload and the one about leftovers.
 		if m.cfgPrompt != nil && msg.String() != "ctrl+c" {
 			cmds = append(cmds, m.configPromptKey(msg.String()))
+			break
+		}
+		if m.leftovers != nil && msg.String() != "ctrl+c" {
+			cmds = append(cmds, m.leftoverPromptKey(msg.String()))
 			break
 		}
 
@@ -880,7 +893,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// box, a form. Anywhere else it is dropped, as it never matched a key.
 	case tea.PasteMsg:
 		switch {
-		case m.shortcuts.Open() || m.cfgPrompt != nil:
+		case m.popUp():
 		case m.showRunbook:
 			if m.runbookView.CapturingKeys() {
 				var c tea.Cmd
@@ -1098,7 +1111,16 @@ func (m *AppModel) screen() (string, *tea.Cursor) {
 	if m.cfgPrompt != nil {
 		return components.Overlay(frame, m.cfgPrompt.view(m.width, m.height, m.cfg != nil), m.width, m.height), nil
 	}
+	if m.leftovers != nil {
+		return components.Overlay(frame, m.leftovers.view(m.width), m.width, m.height), nil
+	}
 	return frame, cursor
+}
+
+// popUp reports whether a pop-up is open. It takes every key, and no click,
+// paste or wheel may answer it or reach what it covers.
+func (m *AppModel) popUp() bool {
+	return m.shortcuts.Open() || m.cfgPrompt != nil || m.leftovers != nil
 }
 
 // mouseShortcut is M, which hands the mouse to the terminal from any pane or
@@ -1427,7 +1449,25 @@ func startService(ctx context.Context, mgr *service.Manager, svc service.Service
 // connectCmds starts svc, or briefly warns when it is already up. Checking here
 // rather than relying on Start's error avoids racing the "connecting..." flash,
 // and stops a second tunnel being launched while one waits to reconnect.
+//
+// A service that cannot connect beside processes left from an earlier session
+// looks for them first, and starts only when there are none.
 func (m *AppModel) connectCmds(svc service.Service) []tea.Cmd {
+	if isRunning(svc) {
+		return []tea.Cmd{func() tea.Msg { return warnFlash("already running") }}
+	}
+	if la, ok := svc.(service.LeftoverAware); ok {
+		if other := m.otherRunning(svc); other != "" {
+			text := other + " — den runs one VPN at a time; disconnect it first"
+			return []tea.Cmd{func() tea.Msg { return warnFlash(text) }}
+		}
+		return []tea.Cmd{checkLeftovers(m.ctx, svc, la)}
+	}
+	return m.startCmds(svc)
+}
+
+// startCmds starts svc unless it is already up.
+func (m *AppModel) startCmds(svc service.Service) []tea.Cmd {
 	if isRunning(svc) {
 		return []tea.Cmd{func() tea.Msg { return warnFlash("already running") }}
 	}

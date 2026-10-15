@@ -39,6 +39,11 @@ func (m *AppModel) runAction(act serviceAction, svc service.Service) []tea.Cmd {
 	case actStart:
 		return []tea.Cmd{startService(m.ctx, m.manager, svc), flash("starting...")}
 	case actDisconnect:
+		// A stop that leaves something running opens the pop-up that says so,
+		// unless what it finds may belong to another VPN of den's.
+		if la, ok := svc.(service.LeftoverAware); ok && m.otherRunning(svc) == "" {
+			return []tea.Cmd{stopThenCheck(m.ctx, svc, la, false), flash("disconnecting...")}
+		}
 		return []tea.Cmd{stopService(m.ctx, svc), flash("disconnecting...")}
 	case actCancelLogin:
 		return []tea.Cmd{stopService(m.ctx, svc), flash("cancelling SSO login...")}
