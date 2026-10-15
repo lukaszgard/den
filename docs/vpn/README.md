@@ -355,10 +355,13 @@ Set `health_check` to an internal `host:port` (something always-on and reachable
 only over the VPN — e.g. an intranet site on `:443`, an internal DB host, a
 bastion) and `den` will TCP-probe it:
 
-- **On adopt** — at startup, before adopting a tunnel from a previous session. If
-  the process and `ppp0` are present but the probe fails, the VPN is shown as
+- **On adopt** — at startup, before adopting a tunnel from a previous session. The
+  probe runs in the background, so den opens at once and shows the VPN as
+  **connecting** until `health_check` answers (up to three 2 s tries). If the
+  process and `ppp0` are present but the probe fails, the VPN is shown as
   **error** ("data path appears dead") instead of a false *connected*. Press `d`
-  to tear down the zombie, then `c` to reconnect.
+  to tear down the zombie, then `c` to reconnect. Tunnels bound to the VPN
+  auto-connect only once the probe passes.
 - **While connected** — every 15 s. Two consecutive failures flag the tunnel as
   dropped (→ error), even if `ppp0` is still present.
 
@@ -368,6 +371,6 @@ previous behavior).
 
 ## Session persistence
 
-openfortivpn runs as a detached root process (reparented to `launchd` on macOS, launched via `pkexec` on Linux, or detached by the privilege helper), so **the tunnel keeps running after you quit `den`**. On the next launch `den` detects the live tunnel — it checks for both a running `openfortivpn` process and the `ppp0` interface (and, when `health_check` is set, that the internal host is reachable — see [Verifying connectivity](#verifying-connectivity-split-tunnel)) — and shows the VPN as **connected** straight away, with no second admin prompt and no duplicate process. The adopted tunnel is monitored for drops and can be disconnected from the dashboard with `d` exactly like one `den` started itself.
+openfortivpn runs as a detached root process (reparented to `launchd` on macOS, launched via `pkexec` on Linux, or detached by the privilege helper), so **the tunnel keeps running after you quit `den`**. On the next launch `den` detects the live tunnel — it checks for both a running `openfortivpn` process and the `ppp0` interface (and, when `health_check` is set, that the internal host is reachable — see [Verifying connectivity](#verifying-connectivity-split-tunnel)) — and shows the VPN as **connected** straight away (or **connecting** while that check runs in the background), with no second admin prompt and no duplicate process. `den list` and `den mcp` show such a VPN as `connecting`: they do not wait for the check. The adopted tunnel is monitored for drops and can be disconnected from the dashboard with `d` exactly like one `den` started itself.
 
 A tunnel that is still mid-SAML (process up but `ppp0` not yet established) is intentionally not adopted; finish or cancel the login and it resolves on the next launch.

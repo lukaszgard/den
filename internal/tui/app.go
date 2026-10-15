@@ -1465,15 +1465,26 @@ func refreshesToken(svc service.Service) bool {
 
 // reconcileRunningVPNs adopts any VPN tunnel that survived a previous den
 // session. vpn.New seeds StatusConnected when it detects a live tunnel at
-// startup; StartOne here drains the service's updates channel and runs its
-// drop-detection goroutine so the live tunnel is monitored and disconnectable.
+// startup, or StatusConnecting when its health_check has yet to confirm it;
+// nothing has started a VPN yet, so either can only be that. StartOne here
+// drains the service's updates channel and runs its check and drop-detection
+// goroutine so the tunnel is monitored and disconnectable.
+//
+// Only the confirmed ones are reported as up. The others send Connected
+// through their updates once the check passes, and auto-connect follows that.
 func reconcileRunningVPNs(ctx context.Context, mgr *service.Manager) tea.Cmd {
 	return func() tea.Msg {
 		var adopted []string
 		for _, svc := range mgr.Services() {
-			if svc.Info().Type == service.TypeVPN && svc.State().Status == service.StatusConnected {
+			if svc.Info().Type != service.TypeVPN {
+				continue
+			}
+			switch svc.State().Status {
+			case service.StatusConnected:
 				_ = mgr.StartOne(ctx, svc)
 				adopted = append(adopted, svc.Info().Name)
+			case service.StatusConnecting:
+				_ = mgr.StartOne(ctx, svc)
 			}
 		}
 		if len(adopted) == 0 {

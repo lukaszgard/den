@@ -92,6 +92,11 @@ type Service struct {
 
 	outcome attemptOutcome // how the current connect attempt ended; guarded by mu
 
+	// found is set by New when a tunnel from an earlier session is up, and
+	// taken by the first Start, which adopts it rather than starting another.
+	// Guarded by mu.
+	found bool
+
 	// stopTunnel is killTunnel; tests replace it, since the real one stops
 	// whatever openfortivpn runs on this machine.
 	stopTunnel func(context.Context)
@@ -123,22 +128,20 @@ func New(name string, spec *config.VPNSpec) (*Service, error) {
 			Error:  fmt.Errorf("openfortivpn not found — install via `brew install openfortivpn` or `apt install openfortivpn`"),
 		}
 	} else if vpnIsRunning() {
-		// A tunnel from a previous den session (or a manual launch) is still up.
-		// Process + ppp0 alone don't prove the data path carries traffic — a dead
-		// tunnel can leave both lingering as zombies. When a health_check is set,
-		// confirm an internal host is actually reachable before adopting.
-		if spec.HealthCheck == "" || svc.dataPathAlive() {
-			// Seed Connected so the pane snapshot reflects it immediately; the TUI
-			// kicks StartOne on startup, which adopts and monitors it (see Start).
+		// A tunnel from a previous den session (or a manual launch) is still up;
+		// the TUI kicks StartOne on startup, which adopts and monitors it (see
+		// Start). Process + ppp0 alone don't prove the data path carries traffic —
+		// a dead tunnel can leave both lingering as zombies — but the health_check
+		// that would tell is not probed here: New runs on den's main goroutine, and
+		// a dead tunnel's split DNS made every probe wait out its timeout, holding
+		// den's start for about 7 s. monitorAdopted probes it in the background,
+		// and until then the VPN shows connecting.
+		svc.found = true
+		svc.state = service.RuntimeState{Status: service.StatusConnecting}
+		if spec.HealthCheck == "" {
 			svc.state = service.RuntimeState{
 				Status:     service.StatusConnected,
 				ConnectCmd: svc.ConnectCommand(),
-			}
-		} else {
-			svc.state = service.RuntimeState{
-				Status: service.StatusError,
-				Error: fmt.Errorf("openfortivpn and ppp0 are present but %s is unreachable — "+
-					"the tunnel data path appears dead; press d to disconnect, then c to reconnect", spec.HealthCheck),
 			}
 		}
 	}
@@ -270,15 +273,18 @@ func (s *Service) RefreshToken(ctx context.Context) error { return nil }
 
 func (s *Service) Start(ctx context.Context) (<-chan service.StatusUpdate, error) {
 	s.mu.Lock()
+	// New() found a tunnel already up; adopt it (monitor for drops) rather than
+	// launching a second openfortivpn. Its Connecting is New's, not a connect in
+	// progress.
+	adopt := s.found
 	// monitoring means a management goroutine (run or monitorAdopted) is already
 	// active for this service — refuse a second one.
-	if s.monitoring || s.state.Status == service.StatusConnecting {
+	if s.monitoring || (s.state.Status == service.StatusConnecting && !adopt) {
 		s.mu.Unlock()
 		return s.updates, service.ErrAlreadyRunning
 	}
-	// New() seeds StatusConnected when it detects a tunnel already up; adopt it
-	// (monitor for drops) rather than launching a second openfortivpn.
-	adopt := s.state.Status == service.StatusConnected
+	// Only the first Start adopts: after a Stop the tunnel is gone.
+	s.found = false
 	runCtx, cancel := context.WithCancel(ctx)
 	s.cancel = cancel
 	s.monitoring = true
@@ -298,7 +304,28 @@ func (s *Service) Start(ctx context.Context) (<-chan service.StatusUpdate, error
 // to StatusError via waitAfterConnected/failFromLastLine.
 func (s *Service) monitorAdopted(ctx context.Context) {
 	defer s.clearMonitoring()
+	// New saw only the process and ppp0, which a dead tunnel leaves behind too.
+	// A dead one is reported, not killed or reconnected: without the helper a
+	// kill raises an admin dialog, which must not pop up unasked at startup.
+	if target := s.activeHealthCheck(); target != "" {
+		s.log(fmt.Sprintf("found a running openfortivpn — checking %s", target))
+		alive := s.dataPathAlive()
+		if ctx.Err() != nil {
+			return
+		}
+		if !alive {
+			s.setState(service.RuntimeState{
+				Status: service.StatusError,
+				Error: fmt.Errorf("openfortivpn and ppp0 are present but %s is unreachable — "+
+					"the tunnel data path appears dead; press d to disconnect, then c to reconnect", target),
+			})
+			return
+		}
+	}
 	s.log("adopted an already-running openfortivpn tunnel from a previous session")
+	if s.State().Status != service.StatusConnected {
+		s.setState(service.RuntimeState{Status: service.StatusConnected, ConnectCmd: s.ConnectCommand()})
+	}
 	// The tunnel is up, so a drop from here is retry-eligible just like one from a
 	// session den started itself. Nothing called markConnected on this path.
 	s.setOutcome(outcomeConnected)
@@ -324,6 +351,7 @@ func (s *Service) Stop(ctx context.Context) error {
 	cancel := s.cancel
 	logPath := s.logFilePath
 	s.monitoring = false
+	s.found = false // a Start after this must not adopt the tunnel it kills
 	s.mu.Unlock()
 
 	s.setState(service.RuntimeState{Status: service.StatusStopping})
