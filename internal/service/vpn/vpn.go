@@ -170,11 +170,17 @@ func vpnIsRunning() bool {
 	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
 		return false
 	}
-	out, _ := exec.Command("pgrep", "-x", "openfortivpn").Output()
-	if len(strings.TrimSpace(string(out))) == 0 {
+	if len(openfortivpnPIDs()) == 0 {
 		return false
 	}
 	return interfaceExists("ppp0")
+}
+
+// openfortivpnPIDs lists the openfortivpn processes on this machine, whoever
+// started them, by process name (watchProcess says why not -f).
+func openfortivpnPIDs() []string {
+	out, _ := exec.Command("pgrep", "-x", "openfortivpn").Output()
+	return strings.Fields(string(out))
 }
 
 func (s *Service) Info() service.ServiceInfo {
@@ -458,6 +464,17 @@ func (s *Service) nextRetry(ctx context.Context, attempt int) (time.Duration, bo
 }
 
 func (s *Service) runOnce(ctx context.Context) {
+	// A second openfortivpn over one still running costs a SAML login and a
+	// gateway session slot, and cannot come up: the first one holds ppp0 and the
+	// DNS. Start adopts a tunnel it found, so one here is a process den could not
+	// take over or stop, such as one hung in its logout after a stop. That is
+	// fatal, so a reconnect stops here too rather than retrying.
+	if pids := openfortivpnPIDs(); len(pids) > 0 {
+		pid := strings.Join(pids, ", ")
+		s.log(fmt.Sprintf("not starting openfortivpn: one is already running (pid %s)", pid))
+		s.markFatal(fmt.Sprintf("openfortivpn is still running (pid %s) — press d to stop it, then c", pid))
+		return
+	}
 	s.setState(service.RuntimeState{Status: service.StatusConnecting})
 
 	helper, why := Available(ctx)
@@ -874,8 +891,7 @@ func (s *Service) watchProcess(ctx context.Context, signalExit func(exitReason))
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			pgrepOut, _ := exec.Command("pgrep", "-x", "openfortivpn").Output()
-			processOk := len(strings.TrimSpace(string(pgrepOut))) > 0
+			processOk := len(openfortivpnPIDs()) > 0
 			interfaceOk := interfaceExists("ppp0")
 			if !processOk || !interfaceOk {
 				misses++
