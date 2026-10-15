@@ -5,13 +5,16 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lukaszgard/den/internal/config"
 	"github.com/lukaszgard/den/internal/service"
 	"github.com/lukaszgard/den/internal/tui/components"
+	"github.com/lukaszgard/den/internal/tui/msgs"
 	"github.com/lukaszgard/den/internal/tui/testkeys"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // panelX is a column inside the panel, right of the menu and its separator.
@@ -453,5 +456,84 @@ func TestADragUnderAPopUpSelectsNothing(t *testing.T) {
 	h.dragOver(panelX, 3, panelX+20, 10)
 	if *copied != "" || strings.Contains(h.m.View().Content, reverse) || !h.m.shortcuts.Open() {
 		t.Fatalf("a drag under the shortcuts copied %q", *copied)
+	}
+}
+
+// ── M: the mouse to the terminal ─────────────────────────────────────────────
+
+// mouseIsDens reports whether den asks the terminal for the mouse.
+func mouseIsDens(m *AppModel) bool { return m.View().MouseMode == tea.MouseModeCellMotion }
+
+// M gives the mouse to the terminal, whose own selection then works, and
+// takes it back, from the menu, the panel, the detail view and the runbook
+// view. While the terminal has it, the status bar says how to get it back.
+func TestMGivesTheMouseToTheTerminal(t *testing.T) {
+	h := newHarness(t, managerWith(newSvc(service.TypeRDS, "orders-db")), nil)
+	h.press("M")
+	if mouseIsDens(h.m) || !strings.Contains(plain(h.m), "M: mouse to den") {
+		t.Fatalf("M from the menu should give the mouse away and say so:\n%s", plain(h.m))
+	}
+	h.press("M")
+	if !mouseIsDens(h.m) || strings.Contains(plain(h.m), "mouse to den") {
+		t.Fatal("M again should take the mouse back")
+	}
+
+	h.press("tab", "M")
+	if mouseIsDens(h.m) {
+		t.Fatal("M from the panel should give the mouse away")
+	}
+	h.press("enter", "M")
+	if !h.m.showDetail || !mouseIsDens(h.m) {
+		t.Fatal("M in the detail view should take the mouse back")
+	}
+
+	f := runbookHarness(t)
+	f.selectRow("Greet")
+	f.press("enter", "M")
+	if !f.m.showRunbook || mouseIsDens(f.m) {
+		t.Fatal("M in the runbook view should give the mouse away")
+	}
+}
+
+// The marker fits the status bar however narrow the terminal, cutting what
+// the bar said rather than wrapping, which would push den's header off.
+func TestTheMouseMarkerFitsTheStatusBar(t *testing.T) {
+	h := newHarness(t, managerWith(newSvc(service.TypeRDS, "orders-db")), nil)
+	h.send(tea.WindowSizeMsg{Width: 90, Height: 20})
+	h.press("M")
+	h.send(msgs.StatusFlashMsg{Text: strings.Repeat("a long status ", 10), Hold: time.Minute})
+	lines := strings.Split(plain(h.m), "\n")
+	bar := lines[len(lines)-2]
+	if !strings.HasSuffix(strings.TrimRight(bar, " "), "…  M: mouse to den") || ansi.StringWidth(bar) > 90 {
+		t.Fatalf("status bar %q: want the status cut and the marker at its end, in 90 cells", bar)
+	}
+	if len(lines) != 20 {
+		t.Fatalf("the frame is %d lines, want 20", len(lines))
+	}
+}
+
+// M typed into a search box, a terminal or a question is text, not den's.
+func TestMIsTextWhereTextIsTyped(t *testing.T) {
+	h := newHarness(t, managerWith(newSvc(service.TypeRDS, "orders-db")), nil)
+	h.press("tab", "/", "M")
+	if !mouseIsDens(h.m) || !h.m.connectPane.Searching() || strings.Contains(plain(h.m), "○ orders-db") {
+		t.Fatal("M in the search box should filter the list, not give the mouse away")
+	}
+
+	d, _, starts := terminalHarness(t)
+	d.press("t", "M")
+	if !mouseIsDens(d.m) || starts.terms[0].typed() != "M" {
+		t.Fatalf("the client got %q: M should reach it", starts.terms[0].typed())
+	}
+	d.press("ctrl+t", "M")
+	if mouseIsDens(d.m) {
+		t.Fatal("with den's keys back, M should give the mouse away")
+	}
+
+	f := runbookHarness(t)
+	f.selectRow("Ask")
+	f.press("enter", "r", "M")
+	if !mouseIsDens(f.m) {
+		t.Fatal("M typed as a parameter should not give the mouse away")
 	}
 }

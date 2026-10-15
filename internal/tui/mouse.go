@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/lukaszgard/den/internal/tui/components"
+	"github.com/lukaszgard/den/internal/tui/msgs"
 )
 
 // den captures the mouse: a click selects what it lands on, a double-click
@@ -240,4 +241,18 @@ func (m *AppModel) release() tea.Cmd {
 		return nil
 	}
 	return components.Copy(text, "copied "+count(strings.Count(text, "\n")+1, "line", "lines"))
+}
+
+// toggleMouse gives the mouse to the terminal, or takes it back. With it the
+// terminal selects as it always did, which den's own selection cannot match:
+// a line cut short with …, a wrapped line as one, the scrollback. View asks
+// for the mouse again, or stops asking, on the next frame.
+func (m *AppModel) toggleMouse() tea.Cmd {
+	m.mouseOff = !m.mouseOff
+	m.sel = selection{}
+	text := "den has the mouse again"
+	if m.mouseOff {
+		text = "mouse given to the terminal — M takes it back"
+	}
+	return func() tea.Msg { return msgs.StatusFlashMsg{Text: text, Hold: 3 * time.Second} }
 }

@@ -195,9 +195,11 @@ type AppModel struct {
 		at time.Time
 	}
 	// sel is the text a drag selects, and screenText the last frame without
-	// its highlight: what a drag copies is what was on screen.
+	// its highlight: what a drag copies is what was on screen. mouseOff is set
+	// while M has given the mouse back to the terminal.
 	sel        selection
 	screenText string
+	mouseOff   bool
 
 	// terminals are the terminal tabs of each service that has any, and
 	// startTerminal runs a client for one. See terminals.go.
@@ -785,7 +787,11 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				break
 			}
 			if k := msg.String(); k == "h" || k == "?" {
-				m.shortcuts = components.OpenShortcuts(m.detailModel.Service().Info().Name, m.detailModel.Shortcuts())
+				m.shortcuts = components.OpenShortcuts(m.detailModel.Service().Info().Name, append(m.detailModel.Shortcuts(), viewShortcuts))
+				break
+			}
+			if msg.String() == "M" {
+				cmds = append(cmds, m.toggleMouse())
 				break
 			}
 			if key.Matches(msg, km.Back) || msg.String() == "esc" {
@@ -828,6 +834,10 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// still drawn, and what is typed next would move the menu instead.
 		case msg.String() == "tab" && (m.leftFocused || !m.paneModal()):
 			m.leftFocused = !m.leftFocused
+
+		// M, as R, unless it is being typed or a pop-up has the keys.
+		case msg.String() == "M" && !m.paneModal() && (m.leftFocused || !m.inSearch()):
+			cmds = append(cmds, m.toggleMouse())
 
 		case m.leftFocused:
 			cmds = append(cmds, m.handleLeftKey(msg)...)
@@ -1028,9 +1038,9 @@ func (m *AppModel) handleRightKey(msg tea.KeyPressMsg) []tea.Cmd {
 
 // View is the root model's screen. den runs on the terminal's alternate screen,
 // which a view asks for itself; the panes and components below it draw plain
-// strings. It also asks for the clicks and the wheel, takes out of the frame
-// the zones the panes marked, remembering where they landed, and draws the
-// selection of a drag over it.
+// strings. It also asks for the clicks and the wheel, unless M gave the mouse
+// to the terminal, takes out of the frame the zones the panes marked,
+// remembering where they landed, and draws the selection of a drag over it.
 func (m *AppModel) View() tea.View {
 	content, cursor := m.screen()
 	content, m.zones = components.ScanZones(content)
@@ -1040,7 +1050,9 @@ func (m *AppModel) View() tea.View {
 	}
 	v := tea.NewView(content)
 	v.AltScreen = true
-	v.MouseMode = tea.MouseModeCellMotion
+	if !m.mouseOff {
+		v.MouseMode = tea.MouseModeCellMotion
+	}
 	v.Cursor = cursor
 	v.WindowTitle = m.windowTitle()
 	v.ProgressBar = m.progressBar()
@@ -1089,15 +1101,24 @@ func (m *AppModel) screen() (string, *tea.Cursor) {
 	return frame, cursor
 }
 
+// mouseShortcut is M, which hands the mouse to the terminal from any pane or
+// view.
+var mouseShortcut = components.Shortcut{Keys: "M", Text: "Give the mouse to the terminal, to select as it does; M takes it back"}
+
 // paneShortcuts are the keys every pane has from the root model; they close
 // the pop-up of a pane that lists its own.
 var paneShortcuts = components.ShortcutGroup{Title: "den", Keys: []components.Shortcut{
 	{Keys: "tab", Text: "Switch between the menu and the panel (not while a pop-up is open)"},
 	{Keys: "R", Text: "Reload den.yaml"},
+	mouseShortcut,
 	{Keys: "h ?", Text: "Open or close this help"},
 	{Keys: "esc", Text: "Back to the menu (or ←)"},
 	{Keys: "q", Text: "Quit den"},
 }}
+
+// viewShortcuts are the keys the detail and runbook views have from the root
+// model; they close those views' pop-ups.
+var viewShortcuts = components.ShortcutGroup{Title: "den", Keys: []components.Shortcut{mouseShortcut}}
 
 // frame is the screen without a pop-up over it, and the cursor of the terminal
 // tab on it, which only the two full-screen views can have.
@@ -1258,7 +1279,23 @@ func fitHeight(s string, height int) string {
 	return strings.Join(lines[:height], "\n")
 }
 
+// renderStatusBar is the status line, with a reminder at its right end while
+// the terminal has the mouse: den's clicks do nothing then, which would
+// otherwise look like a fault.
 func (m *AppModel) renderStatusBar() string {
+	line := m.statusLine()
+	if !m.mouseOff {
+		return line
+	}
+	marker := "  " + components.Hints(components.HelpKey{Key: "M", Text: "mouse to den"}) + "  "
+	room := max(m.width-lipgloss.Width(marker), 0)
+	line = ansi.Truncate(line, room, "…")
+	return ansi.Truncate(line+strings.Repeat(" ", room-lipgloss.Width(line))+marker, m.width, "")
+}
+
+// statusLine is what the status bar says: a flash, what keeps den.yaml from
+// running, an error, or what is selected.
+func (m *AppModel) statusLine() string {
 	if m.flashMsg != "" && m.flashWarn {
 		return lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#F5A623")).
