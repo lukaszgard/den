@@ -1,5 +1,45 @@
 # Changelog
 
+## [1.6.0] - 2026-10-15
+
+**A VPN left running no longer blocks you.** When den's stop could not clear an openfortivpn hung
+in its gateway logout, or the pppd it left behind, den started a second VPN on top of it that
+could only fail, and took about 7 s to open because of the dead tunnel. den now kills what ignores
+its stop, refuses to connect beside what is left, and on `c` shows what is still running with an
+offer to stop it.
+
+### 🖥 The dashboard
+
+- `c` on a VPN that an openfortivpn or an orphaned pppd from an earlier session keeps from
+  connecting opens a pop-up naming each process, its pid and how long it has run. `y` stops it
+  and connects; `n` connects nothing.
+- The pop-up shows the commands to stop it by hand: the kill by pid, and
+  `sudo /opt/den/libexec/den-vpn stop <profile>` when the VPN helper is installed. `k` and `s`
+  copy them. Without the helper it says that stopping asks for your admin password.
+- When den's stop leaves something running, after `y` or after `d`, the pop-up says so and `y`
+  tries again. While another VPN in den is up, `c` asks you to disconnect it first.
+- A VPN left up by an earlier session is checked in the background: den opens at once and shows
+  it as connecting until its `health_check` answers, instead of waiting about 7 s on a dead
+  tunnel. A dead one reads "data path appears dead", and `c` offers to stop it and reconnect.
+
+### 🔌 Data stores and tunnels
+
+- den's VPN stop gives openfortivpn 5 seconds to log out of the gateway, then kills it: over a
+  dead connection that logout never returns, and the process kept `ppp0` and the VPN's DNS. The
+  pppd an openfortivpn leaves behind gets the same 5 seconds, then the same kill. With a
+  `gateway` set, the stop behind the admin prompt no longer matches its own shell.
+- den no longer starts a second openfortivpn beside one still running, or beside an orphaned
+  pppd: it could only time out its login while holding another gateway session. The VPN log
+  gives the command to stop what is left yourself.
+- The helper's stop fails and names the pid when an openfortivpn or a pppd survives it, instead
+  of printing `stopped`.
+
+### 🔧 Configuration and checks
+
+- `den vpn status` says whether the installed VPN helper script is current, and `den doctor`
+  warns when it is outdated: an older helper's stop cannot clear a hung openfortivpn or pppd. Run
+  `den vpn install-helper` again after updating den.
+
 ## [1.5.0] - 2026-10-15
 
 **Copy text from den again.** Since den took the mouse in 1.3.0 a drag selected nothing, and the
