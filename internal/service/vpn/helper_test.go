@@ -3,7 +3,9 @@ package vpn
 import (
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -326,12 +328,52 @@ func TestStopEscalatesToKill(t *testing.T) {
 		t.Error("the -f pattern matches the stop's own shell; write it as [o]penfortivpn")
 	}
 
+	// pppd answers TERM with an LCP terminate over a dead link and may never
+	// exit, so the reap escalates the way the openfortivpn stop does.
+	for where, body := range paths {
+		t.Run(where+" pppd reap", func(t *testing.T) {
+			reap := body[strings.Index(body, "169.254.2.1"):]
+			term := strings.Index(reap, "kill -TERM")
+			kill := strings.Index(reap, "kill -KILL")
+			if term < 0 || kill < term {
+				t.Fatalf("pppd TERM at %d, KILL at %d; want TERM, then KILL", term, kill)
+			}
+			if wait := strings.Index(reap[term:], "sleep 0.1"); wait < 0 || term+wait > kill {
+				t.Error("KILLs pppd without waiting for TERM first")
+			}
+		})
+	}
+
 	// "stopped" is only true when nothing is left; den logs a failing stop.
 	tail := stop[strings.Index(stop, "169.254.2.1"):]
 	check := strings.Index(tail, "pgrep -x openfortivpn")
 	fail := strings.Index(tail, "did not stop")
 	if check < 0 || fail < check || !strings.Contains(tail[fail:], "exit 1") {
 		t.Error("cmd_stop does not fail when openfortivpn survives the KILL")
+	}
+	pppd := strings.Index(tail, "pppd (pid")
+	if pppd < 0 || !strings.Contains(tail[pppd:], "did not stop") || !strings.Contains(tail[pppd:], "exit 1") {
+		t.Error("cmd_stop does not fail when an orphaned pppd survives the KILL")
+	}
+}
+
+// The stop scripts are only ever run as root, by the helper or behind an admin
+// prompt, so a syntax error would first show as a stop that did nothing.
+func TestStopScriptsParse(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("needs sh")
+	}
+	script := filepath.Join(t.TempDir(), "den-vpn")
+	if err := os.WriteFile(script, []byte(Script("/usr/bin/openfortivpn")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command("sh", "-n", script).CombinedOutput(); err != nil {
+		t.Errorf("helper script: %v\n%s", err, out)
+	}
+	for _, gateway := range []string{"", "vpn.example.com"} {
+		if out, err := exec.Command("sh", "-n", "-c", stopShell(gateway)).CombinedOutput(); err != nil {
+			t.Errorf("stopShell(%q): %v\n%s", gateway, err, out)
+		}
 	}
 }
 

@@ -249,11 +249,12 @@ func Script(openfortivpnPath string) string {
 		"@OPENFORTIVPN@", openfortivpnPath,
 		"@PREFIX@", HelperPrefix,
 		"@KILL_HUNG@", killHung("-x openfortivpn"),
+		"@REAP_PPPD@", reapOrphanedPPPD,
 	).Replace(helperScript)
 }
 
 // OutdatedScriptFix is what den says wherever it finds an outdated helper.
-const OutdatedScriptFix = "re-run: den vpn install-helper (its stop cannot clear a hung openfortivpn)"
+const OutdatedScriptFix = "re-run: den vpn install-helper (its stop cannot clear a hung openfortivpn or pppd)"
 
 // ScriptOutdated reports whether installed, the text of an installed wrapper,
 // differs from the one this den would install. The protocol line does not
@@ -391,25 +392,32 @@ cmd_stop() {
 
 	# openfortivpn normally stops its own pppd child. When it is killed instead of
 	# shutting down cleanly, pppd reparents to init and keeps its ppp interface up,
-	# still holding a VPN-assigned address. Those never go away on their own.
+	# still holding a VPN-assigned address. Those never go away on their own, and
+	# TERM does not always end one either: pppd answers it with an LCP terminate
+	# over a link that is gone, so whatever outlives 5 s is KILLed.
 	#
 	# Matched narrowly — openfortivpn's fixed ppp peer address, and a parent of
 	# init — so a pppd under a running openfortivpn, or another VPN's, is untouched.
 	sleep 1
-	for p in $(pgrep -f ':169.254.2.1 noipdefault' 2>/dev/null); do
-		[ "$(ps -o comm= -p "$p" 2>/dev/null | sed 's|.*/||')" = "pppd" ] || continue
-		if [ "$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')" = "1" ]; then
-			kill -TERM "$p" 2>/dev/null && stopped=1
-		fi
-	done
+	@REAP_PPPD@
+	if [ -n "$orphans" ]; then
+		stopped=1
+	fi
 
 	# den logs a failing stop, and refuses to start a tunnel over one still
-	# running; a "stopped" here would hide both.
+	# running; a "stopped" here would hide both. A pppd left over counts as
+	# much as openfortivpn: it holds ppp0 and the DNS just the same.
 	left=$(pgrep -x openfortivpn 2>/dev/null | tr '\n' ' ')
 	if [ -n "$left" ]; then
 		echo "den-vpn: openfortivpn (pid ${left% }) did not stop" >&2
 		exit 1
 	fi
+	for p in $orphans; do
+		if kill -0 "$p" 2>/dev/null; then
+			echo "den-vpn: pppd (pid $p) did not stop" >&2
+			exit 1
+		fi
+	done
 
 	if [ "$stopped" = "1" ]; then
 		echo "den-vpn: stopped"

@@ -85,15 +85,41 @@ func killHung(match string) string {
 // The match is deliberately narrow: openfortivpn's fixed ppp peer address, and
 // a parent of init. A pppd belonging to a running openfortivpn has that process
 // as its parent, so a live tunnel — or another VPN's pppd — is never touched.
-const reapOrphanedPPPD = `for p in $(pgrep -f ':169.254.2.1 noipdefault' 2>/dev/null); do ` +
-	`[ "$(ps -o comm= -p $p 2>/dev/null | sed 's|.*/||')" = pppd ] || continue; ` +
-	`if [ "$(ps -o ppid= -p $p 2>/dev/null | tr -d ' ')" = "1" ]; then kill -TERM $p 2>/dev/null; fi; done`
+//
+// TERM alone is not enough, for the reason it is not for openfortivpn: pppd
+// answers it with an LCP terminate over a link that is gone, and may never
+// exit, keeping ppp0 and the VPN's split DNS. One survived a stop that way for
+// days. So whatever still answers kill -0 after 5 s is KILLed. The pids stay in
+// $orphans, for the helper's final check.
+const reapOrphanedPPPD = `orphans=; for p in $(pgrep -f ':169.254.2.1 noipdefault' 2>/dev/null); do ` +
+	`[ "$(ps -o comm= -p "$p" 2>/dev/null | sed 's|.*/||')" = pppd ] || continue; ` +
+	`if [ "$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')" = 1 ]; then orphans="$orphans $p"; fi; done; ` +
+	`if [ -n "$orphans" ]; then kill -TERM $orphans 2>/dev/null || true; ` +
+	`i=0; while [ "$i" -lt 50 ]; do alive=; ` +
+	`for p in $orphans; do if kill -0 "$p" 2>/dev/null; then alive="$alive $p"; fi; done; ` +
+	`[ -n "$alive" ] || break; sleep 0.1; i=$((i + 1)); done; ` +
+	// The second wait lets init reap what the KILL ended, so a check that
+	// follows does not mistake a zombie for a survivor.
+	`if [ -n "$alive" ]; then kill -KILL $alive 2>/dev/null || true; sleep 1; fi; fi`
 
 // stopCommand returns the OS-appropriate command to terminate the running
 // openfortivpn process. On macOS a second osascript prompt appears.
-// When gateway is set it matches on the full command pattern; otherwise it
-// falls back to process-name match (-x) which is safe when only one instance runs.
 func stopCommand(gateway, configFile string) (string, []string, error) {
+	inner := stopShell(gateway)
+	switch runtime.GOOS {
+	case "darwin":
+		return "osascript", []string{"-e", fmt.Sprintf(`do shell script %q with administrator privileges`, inner)}, nil
+	case "linux":
+		return "pkexec", []string{"sh", "-c", inner}, nil
+	default:
+		return "", nil, fmt.Errorf("VPN stop not supported on %s", runtime.GOOS)
+	}
+}
+
+// stopShell is the shell command stopCommand runs as root. When gateway is set
+// it matches on the full command pattern; otherwise it falls back to
+// process-name match (-x) which is safe when only one instance runs.
+func stopShell(gateway string) string {
 	match := "-x openfortivpn"
 	if gateway != "" {
 		// The bracket keeps the pattern from matching the `sh -c` running this
@@ -103,15 +129,7 @@ func stopCommand(gateway, configFile string) (string, []string, error) {
 	}
 	// Reap after the pkill so openfortivpn gets its chance to stop pppd
 	// itself; only what it leaves behind is swept.
-	inner := "pkill -TERM " + match + "; " + killHung(match) + "; sleep 1; " + reapOrphanedPPPD
-	switch runtime.GOOS {
-	case "darwin":
-		return "osascript", []string{"-e", fmt.Sprintf(`do shell script %q with administrator privileges`, inner)}, nil
-	case "linux":
-		return "pkexec", []string{"sh", "-c", inner}, nil
-	default:
-		return "", nil, fmt.Errorf("VPN stop not supported on %s", runtime.GOOS)
-	}
+	return "pkill -TERM " + match + "; " + killHung(match) + "; sleep 1; " + reapOrphanedPPPD
 }
 
 // shellJoin joins arguments into a single shell-safe string for embedding in

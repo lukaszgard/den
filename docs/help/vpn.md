@@ -98,7 +98,7 @@ den vpn status
 - `Could not authenticate to gateway` every few seconds after a failed tunnel: the config file sets `persistent`, so openfortivpn retries with a login the gateway already closed. Fix the first error, then connect again.
 - The SAML page says `Forbidden … /remote/saml/start`: the gateway counts too many sessions for you, often stray openfortivpn processes. `sudo pkill -x openfortivpn` and `sudo pkill -x pppd` clear them, the live one included.
 - `openfortivpn is still running (pid N)`: an openfortivpn den could not take over or stop is still up, often one hung after a dropped tunnel, and a second one would only cost another login. Press `d` to stop it, then `c`.
-- `den vpn status` shows `script: outdated`, or doctor warns about the VPN helper: the installed helper is older than den, and its stop cannot clear a hung openfortivpn. Run `den vpn install-helper` again.
+- `den vpn status` shows `script: outdated`, or doctor warns about the VPN helper: the installed helper is older than den, and its stop cannot clear a hung openfortivpn or pppd. Run `den vpn install-helper` again.
 - `not reconnecting: needs the passwordless VPN helper`: reconnect needs `den vpn install-helper`.
 - `not reconnecting: the SAML login never completed`: a login timed out, and den does not retry those on purpose; connect again and finish the login in the browser.
 
