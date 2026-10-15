@@ -1056,3 +1056,76 @@ func TestCopyFallsBackToTheTerminalAndClearsItThere(t *testing.T) {
 		t.Fatal("the pane should be told the clipboard was cleared")
 	}
 }
+
+// zoneOf is the zone under the first cell of text in the pane's view, which is
+// what a click there would land on.
+func zoneOf(t *testing.T, m Model, text string) string {
+	t.Helper()
+	clean, zones := components.ScanZones(m.View(100, 30, true))
+	for y, line := range strings.Split(ansi.Strip(clean), "\n") {
+		if i := strings.Index(line, text); i >= 0 {
+			id, _ := zones.At(ansi.StringWidth(line[:i]), y)
+			return id
+		}
+	}
+	t.Fatalf("%q is not in the pane:\n%s", text, ansi.Strip(clean))
+	return ""
+}
+
+// A click on a value selects it, in the flat view and in the tree, and hides
+// the one revealed before; a heading of the tree is nothing to click.
+func TestClickSelectsAValue(t *testing.T) {
+	path := func(keys ...string) []secrets.PathSeg {
+		segs := make([]secrets.PathSeg, len(keys))
+		for i, k := range keys {
+			segs[i] = secrets.PathSeg{Key: k}
+		}
+		return segs
+	}
+	m := openItem(t, fakeItem{name: "e2e", status: secrets.Status{Ready: true}, fields: []secrets.Field{
+		{Key: "db.password", Value: "hunter2", Path: path("db", "password")},
+		{Key: "db.user", Value: "app", Path: path("db", "user")},
+		{Key: "api.token", Value: "tok-123", Path: path("api", "token")},
+	}})
+	m, _ = m.Update(testkeys.Press("r"), true)
+	m = m.Click(zoneOf(t, m, "api.token"))
+	if f, ok := m.selectedField(); !ok || f.Key != "api.token" || m.revealed {
+		t.Fatalf("selected %+v, revealed %v: the click should select api.token, masked", f, m.revealed)
+	}
+	m, _ = m.Update(testkeys.Press("t"), true)
+	if id := zoneOf(t, m, "db:"); id != "" {
+		t.Fatalf("the heading db: is the zone %q", id)
+	}
+	m = m.Click(zoneOf(t, m, "user:"))
+	if f, ok := m.selectedField(); !ok || f.Key != "db.user" {
+		t.Fatalf("selected %+v in the tree, want db.user", f)
+	}
+}
+
+type browserItem struct{ fakeItem }
+
+func (browserItem) Browsing() bool { return true }
+func (browserItem) ListEntries(context.Context, []byte) ([]string, error) {
+	return []string{"prod/db", "prod/api", "stage/db"}, nil
+}
+func (b browserItem) ReadEntry(context.Context, string, []byte) ([]secrets.Field, error) {
+	return b.fields, nil
+}
+
+// In a database's entry list a click selects an entry; while it is being read
+// nothing can be clicked.
+func TestClickSelectsAnEntry(t *testing.T) {
+	m := openItem(t, browserItem{fakeItem{name: "team", status: secrets.Status{Ready: true}, fields: []secrets.Field{{Key: "password", Value: "x"}}}})
+	if !m.listing() {
+		t.Fatal("the database should open on its entry list")
+	}
+	m = m.Click(zoneOf(t, m, "stage/db"))
+	if m.entryCur != 2 {
+		t.Fatalf("entry cursor %d, want stage/db", m.entryCur)
+	}
+	id := zoneOf(t, m, "prod/api")
+	m.loading = true
+	if m = m.Click(id); m.entryCur != 2 {
+		t.Fatal("a click while an entry is read should do nothing")
+	}
+}

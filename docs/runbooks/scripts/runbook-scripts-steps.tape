@@ -33,7 +33,7 @@ Sleep 3.5s   # Look: the table, two scripts
 # Notice: the `den:param` line became a form, `den:env` the account it runs in.
 Sleep 1s     # Act: enter opens Check bastion health
 Enter
-Sleep 3.5s   # Look: the view, on Logs
+Sleep 3.5s   # Look: the view, on Run
 Sleep 1s     # Act: r runs it
 Type "r"
 Sleep 3s     # Read: the form, with the tier it asks for

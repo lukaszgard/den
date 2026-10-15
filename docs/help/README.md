@@ -9,6 +9,7 @@ The Help panel in den shows these topics, one per feature. Each says what the fe
 - [Command line](command-line.md)
 - [Editing den.yaml](config-reload.md)
 - [Checking den.yaml](config-check.md)
+- [Mouse](mouse.md)
 
 ## Connecting
 

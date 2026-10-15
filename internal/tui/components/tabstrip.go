@@ -271,6 +271,48 @@ func (s *TabStrip) Key(msg tea.KeyPressMsg) (handled bool, cmd tea.Cmd) {
 	return true, nil
 }
 
+// Click handles a click on the bar, or on the screen of the terminal shown
+// (the zone "body", which the view finds), and reports whether id was the
+// strip's. A click on a tab selects it and takes the keyboard back from a
+// terminal: picking a tab is an act of its own, not a key for the program. A
+// double-click on a terminal's tab does what enter does there, and a click on
+// a live terminal's body hands it the keyboard; an exited one is restarted
+// with a key, never by a stray click. While a tab is renamed or its close
+// confirmed, every click is swallowed: none of them is an answer.
+func (s *TabStrip) Click(id string, double bool) (handled bool, cmd tea.Cmd) {
+	if s.tabs == nil {
+		return false, nil
+	}
+	if s.renaming || s.confirmClose {
+		return true, nil
+	}
+	switch id {
+	case "tab:prev":
+		s.typing = false
+		s.tabs.Prev()
+		return true, nil
+	case "tab:next":
+		s.typing = false
+		s.tabs.Next()
+		return true, nil
+	case "body":
+		if term := s.Current(); term != nil && term.Alive() {
+			s.StartTyping()
+		}
+		return true, nil
+	}
+	p, ok := ZoneIndex(id, "tab")
+	if !ok || p >= s.tabs.count() {
+		return false, nil
+	}
+	s.typing = false
+	s.tabs.Select(p)
+	if double && s.tabs.Term(p) != nil {
+		return s.Key(tea.KeyPressMsg{Code: tea.KeyEnter})
+	}
+	return true, nil
+}
+
 func (s *TabStrip) startRename(p int) {
 	in := textinput.New()
 	in.Prompt = ""
@@ -297,9 +339,18 @@ var (
 
 const tabSeparator = " │ "
 
-// Bar is the line between a view's header and its body, at most width cells:
-// "─ Logs" for a view without terminals, and the tabs otherwise.
+// TabBarLines is how many rows Bar takes: the tabs, and the rule under them.
+const TabBarLines = 2
+
+// Bar is what sits between a view's header and its body, at most width cells:
+// "─ Logs" for a view without terminals, and the tabs otherwise, then a rule
+// under them like the one closing the header above, so the tabs read as a
+// row of their own rather than the body's first line.
 func (s TabStrip) Bar(width int) string {
+	return s.tabsLine(width) + "\n" + tabDim.Render(strings.Repeat("─", max(width, 1)))
+}
+
+func (s TabStrip) tabsLine(width int) string {
 	if s.tabs == nil {
 		return tabRule.Render("─ Logs ")
 	}
@@ -314,12 +365,15 @@ func (s TabStrip) Bar(width int) string {
 	const prefix = "─ "
 	budget := width - lipgloss.Width(prefix)
 	from, to := visibleTabs(widths, sel, budget)
+	for p := from; p < to; p++ {
+		labels[p] = Zone(ZoneID("tab", p), labels[p])
+	}
 	line := strings.Join(labels[from:to], tabDim.Render(tabSeparator))
 	if from > 0 {
-		line = tabDim.Render("‹ ") + line
+		line = Zone("tab:prev", tabDim.Render("‹ ")) + line
 	}
 	if to < len(labels) {
-		line += tabDim.Render(" ›")
+		line += Zone("tab:next", tabDim.Render(" ›"))
 	}
 	return lipgloss.NewStyle().MaxWidth(width).Render(tabRule.Render(prefix) + line)
 }

@@ -83,7 +83,7 @@ func (m Model) bodySize() (cols, rows int) {
 // those sections and the tab bar.
 func (m Model) bodyArea(upperSection string) (cols, rows, top int) {
 	upper := lipgloss.Height(lipgloss.NewStyle().Width(m.width - 2).Render(upperSection))
-	return m.width - 4, max(m.boxInnerHeight()-upper-1, 1), 1 + upper + 1 // -1: the tab bar
+	return m.width - 4, max(m.boxInnerHeight()-upper-components.TabBarLines, 1), 1 + upper + components.TabBarLines
 }
 
 // fitBody sizes the log view and the terminal on screen to that area. A
@@ -275,6 +275,46 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		cmds = append(cmds, m.logView.Update(msg))
 	}
 	return m, tea.Batch(cmds...)
+}
+
+// TerminalAt reports whether the cell x, y of the screen is on the screen of
+// the terminal the view shows, if one is: the zone "body" of Click. It is not
+// marked as the other zones are, since a mark on each of its lines cost more
+// to draw than the rest of the frame; bodyArea, which draws it and places its
+// cursor, says where it is, and the view starts at the top of the screen.
+func (m Model) TerminalAt(x, y int) bool {
+	if m.terminal() == nil {
+		return false
+	}
+	cols, rows, top := m.bodyArea(m.upperSection())
+	return x >= 1 && x < 1+cols && y >= top && y < top+rows // 1: the box's left border
+}
+
+// Click handles a click on the zone id, a second one in a row on it being a
+// double-click: a tab, or the screen of the terminal on it. Not while a
+// disconnect waits for its answer: a stray click is none.
+func (m Model) Click(id string, double bool) (Model, tea.Cmd) {
+	if m.confirmDisconnect {
+		return m, nil
+	}
+	_, cmd := m.strip.Click(id, double)
+	m.fitBody()
+	return m, cmd
+}
+
+// Wheel handles a notch of the wheel as the arrow it stands for: it scrolls
+// the logs, and reaches the program of a terminal being typed into. While the
+// view asks something it is dropped, since any other key keeps what is asked
+// about. Update keeps an arrow off the logs while a terminal hides them.
+func (m Model) Wheel(up bool) (Model, tea.Cmd) {
+	if m.confirmDisconnect || m.strip.Renaming() || m.strip.ConfirmingClose() {
+		return m, nil
+	}
+	key := tea.KeyPressMsg{Code: tea.KeyDown}
+	if up {
+		key = tea.KeyPressMsg{Code: tea.KeyUp}
+	}
+	return m.Update(key)
 }
 
 // tabKey handles the keys of the terminal tabs, and the answer to a

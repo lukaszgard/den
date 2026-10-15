@@ -135,6 +135,60 @@ func (h *harness) press(keys ...string) {
 	}
 }
 
+// click clicks the cell at column x, row y of den's screen. A frame is drawn
+// first, as one always is before a click can land on it.
+func (h *harness) click(x, y int) {
+	h.t.Helper()
+	h.m.View()
+	h.send(testkeys.Click(x, y))
+}
+
+// clickText clicks the first cell of text where den's screen shows it, which
+// goes through the zones of the frame that was really drawn.
+func (h *harness) clickText(text string) {
+	h.t.Helper()
+	x, y := screenPos(h.t, h.m, text)
+	h.send(testkeys.Click(x, y))
+}
+
+// doubleClickText clicks text twice in a row.
+func (h *harness) doubleClickText(text string) {
+	h.t.Helper()
+	h.clickText(text)
+	h.clickText(text)
+}
+
+// clickTab clicks the tab name in a full-screen view's tab bar.
+func (h *harness) clickTab(name string) {
+	h.t.Helper()
+	h.send(testkeys.Click(tabPos(h.t, h.m, name)))
+}
+
+// tabPos is where the tab name starts in a full-screen view's tab bar, where
+// each label follows "─ " or "│ ". The name may be on screen above the bar as
+// well: the runbook view shows its folder, which t.TempDir names after the
+// test (TestClickingHistory…), in full where the temporary folder is short.
+func tabPos(t testing.TB, m *AppModel, name string) (x, y int) {
+	t.Helper()
+	for row, line := range strings.Split(plain(m), "\n") {
+		for _, before := range []string{"─ ", "│ "} {
+			if col := strings.Index(line, before+name+" "); col >= 0 {
+				return len([]rune(line[:col+len(before)])), row
+			}
+		}
+	}
+	t.Fatalf("no tab %q on screen:\n%s", name, plain(m))
+	return 0, 0
+}
+
+// wheel turns the wheel one notch, up or down, with the pointer on the cell
+// at column x, row y.
+func (h *harness) wheel(x, y int, up bool) {
+	h.t.Helper()
+	h.m.View()
+	h.send(testkeys.Wheel(x, y, up))
+}
+
 // send delivers msg, then runs the commands it returned and feeds back the
 // messages they produce. Commands that block — the tick and the service event
 // waiter — are abandoned after a short wait; nothing here depends on them.
@@ -1109,7 +1163,7 @@ func TestKeyboardEnhancementsDecideWhatAltEscMeans(t *testing.T) {
 
 // screenPos is where text starts on den's screen, as the column and row a
 // terminal cursor is placed by.
-func screenPos(t *testing.T, m *AppModel, text string) (x, y int) {
+func screenPos(t testing.TB, m *AppModel, text string) (x, y int) {
 	t.Helper()
 	for row, line := range strings.Split(plain(m), "\n") {
 		if col := strings.Index(line, text); col >= 0 {

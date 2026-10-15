@@ -120,6 +120,14 @@ func (m Model) SelectedService() (service.Service, bool) {
 	return m.vpns[m.cursor], true
 }
 
+// Click moves the cursor to the row the zone id marks.
+func (m Model) Click(id string) Model {
+	if i, ok := components.ZoneIndex(id, "row"); ok && i < len(m.vpns) {
+		m.cursor = i
+	}
+	return m
+}
+
 // boxHeight leaves innerH = boxHeight-2 lines for the left column, which must fit
 // the tallest case: status + uptime + name + the two toggle rows (connected), or
 // status + name + error + the toggles (failed). Too small and renderStatusBox
@@ -174,7 +182,7 @@ func (m Model) renderList(width, height int, focused bool) string {
 					Width(width - 2).
 					Render(line)
 			}
-			rows = append(rows, line)
+			rows = append(rows, components.Zone(components.ZoneID("row", i), line))
 		}
 	}
 

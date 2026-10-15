@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/lukaszgard/den/internal/config"
+	"github.com/lukaszgard/den/internal/tui/components"
 	"github.com/lukaszgard/den/internal/tui/testkeys"
 )
 
@@ -299,5 +300,38 @@ func TestEveryKeyOfTheHintLineIsInTheShortcuts(t *testing.T) {
 		if !strings.Contains(shortcuts.String(), k) {
 			t.Errorf("the shortcuts lack %q: %s", k, shortcuts.String())
 		}
+	}
+}
+
+// zoneOf is the zone under the first cell of text in the pane, which is what a
+// click there would land on.
+func zoneOf(t *testing.T, m Model, text string) string {
+	t.Helper()
+	clean, zones := components.ScanZones(m.View(paneWidth, paneHeight, true))
+	for y, line := range strings.Split(ansi.Strip(clean), "\n") {
+		if i := strings.Index(line, text); i >= 0 {
+			id, _ := zones.At(ansi.StringWidth(line[:i]), y)
+			return id
+		}
+	}
+	t.Fatalf("%q is not in the pane:\n%s", text, ansi.Strip(clean))
+	return ""
+}
+
+// In the list, a click on any line of a problem, its hint too, selects it;
+// the summary above the file is not the list and takes no click.
+func TestClickSelectsAProblemInTheList(t *testing.T) {
+	m := newPane(t, 3, 9)
+	if id := zoneOf(t, m, "problem 2"); id != "" {
+		t.Fatalf("the summary has the zone %q", id)
+	}
+	m = press(m, "p")
+	m = m.Click(zoneOf(t, m, "fix 2"))
+	if !strings.Contains(screen(m), "2 of 2") {
+		t.Fatalf("a click on the second problem's hint should select it:\n%s", screen(m))
+	}
+	m = press(m, "esc")
+	if m = m.Click(components.ZoneID("problem", 0)); m.cursor != 1 {
+		t.Fatal("a click with the list closed should do nothing")
 	}
 }

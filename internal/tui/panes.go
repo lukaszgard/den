@@ -59,6 +59,13 @@ type darkAware interface {
 	setDark(isDark bool)
 }
 
+// mouseAware is implemented by the panes whose rows can be clicked. They mark
+// each row with components.Zone as they draw it; click moves the cursor to
+// the row the zone id names, and ignores one the pane cannot act on now.
+type mouseAware interface {
+	click(id string) tea.Cmd
+}
+
 type helpEntry struct{ key, desc string }
 
 // setDark hands the terminal's background to everything whose palette depends
@@ -158,6 +165,7 @@ func (p connectAdapter) help() []helpEntry {
 }
 func (p connectAdapter) shortcuts() []components.ShortcutGroup         { return p.m.Shortcuts() }
 func (p connectAdapter) serviceEvent(msg msgs.ServiceEventMsg) tea.Cmd { return p.update(msg, false) }
+func (p connectAdapter) click(id string) tea.Cmd                       { *p.m = p.m.Click(id); return nil }
 
 // ── Tunnel ───────────────────────────────────────────────────────────────────
 
@@ -186,6 +194,7 @@ func (p tunnelAdapter) help() []helpEntry {
 }
 func (p tunnelAdapter) shortcuts() []components.ShortcutGroup         { return p.m.Shortcuts() }
 func (p tunnelAdapter) serviceEvent(msg msgs.ServiceEventMsg) tea.Cmd { return p.update(msg, false) }
+func (p tunnelAdapter) click(id string) tea.Cmd                       { *p.m = p.m.Click(id); return nil }
 
 // ── VPN ──────────────────────────────────────────────────────────────────────
 
@@ -212,6 +221,7 @@ func (p vpnAdapter) help() []helpEntry {
 }
 func (p vpnAdapter) shortcuts() []components.ShortcutGroup         { return p.m.Shortcuts() }
 func (p vpnAdapter) serviceEvent(msg msgs.ServiceEventMsg) tea.Cmd { return p.update(msg, false) }
+func (p vpnAdapter) click(id string) tea.Cmd                       { *p.m = p.m.Click(id); return nil }
 
 // ── AWS ──────────────────────────────────────────────────────────────────────
 
@@ -240,6 +250,7 @@ func (p awsAdapter) help() []helpEntry {
 }
 func (p awsAdapter) shortcuts() []components.ShortcutGroup         { return p.m.Shortcuts() }
 func (p awsAdapter) serviceEvent(msg msgs.ServiceEventMsg) tea.Cmd { return p.update(msg, false) }
+func (p awsAdapter) click(id string) tea.Cmd                       { *p.m = p.m.Click(id); return nil }
 
 // ── Create Env ───────────────────────────────────────────────────────────────
 
@@ -261,6 +272,7 @@ func (p createEnvAdapter) keys() map[string]serviceAction {
 func (p createEnvAdapter) help() []helpEntry                             { return nil }
 func (createEnvAdapter) shortcuts() []components.ShortcutGroup           { return nil }
 func (p createEnvAdapter) serviceEvent(msg msgs.ServiceEventMsg) tea.Cmd { return p.update(msg, false) }
+func (p createEnvAdapter) click(id string) tea.Cmd                       { *p.m = p.m.Click(id); return nil }
 
 // ── Runbooks ─────────────────────────────────────────────────────────────────
 
@@ -289,6 +301,7 @@ func (runbooksAdapter) keys() map[string]serviceAction            { return nil }
 func (runbooksAdapter) help() []helpEntry                         { return nil }
 func (p runbooksAdapter) shortcuts() []components.ShortcutGroup   { return p.m.Shortcuts() }
 func (runbooksAdapter) serviceEvent(msgs.ServiceEventMsg) tea.Cmd { return nil }
+func (p runbooksAdapter) click(id string) tea.Cmd                 { *p.m = p.m.Click(id); return nil }
 
 // ── Secrets ──────────────────────────────────────────────────────────────────
 
@@ -308,6 +321,7 @@ func (p secretsAdapter) ownsBack(msg tea.KeyPressMsg) bool     { return isBack(m
 func (secretsAdapter) selected() (service.Service, bool)       { return nil, false }
 func (secretsAdapter) keys() map[string]serviceAction          { return nil }
 func (p secretsAdapter) shortcuts() []components.ShortcutGroup { return p.m.Shortcuts() }
+func (p secretsAdapter) click(id string) tea.Cmd               { *p.m = p.m.Click(id); return nil }
 func (secretsAdapter) help() []helpEntry {
 	return []helpEntry{{"tab", "switch panel"}, {"↑↓", "navigate"}, {"enter", "view"}, {"/", "filter"},
 		{"r", "reveal"}, {"a", "reveal all"}, {"t", "tree"}, {"y", "copy"}, {"e", "edit"}, {"l", "lock"}, {"L", "login"},
@@ -339,6 +353,7 @@ func (p configAdapter) setSize(w, h int)                      { *p.m = p.m.SetSi
 func (p configAdapter) searching() bool                       { return p.m.Searching() }
 func (p configAdapter) ownsBack(msg tea.KeyPressMsg) bool     { return p.m.OwnsBack(msg) }
 func (p configAdapter) shortcuts() []components.ShortcutGroup { return p.m.Shortcuts() }
+func (p configAdapter) click(id string) tea.Cmd               { *p.m = p.m.Click(id); return nil }
 
 // ── Logs ─────────────────────────────────────────────────────────────────────
 
@@ -383,6 +398,7 @@ func (p helpAdapter) ownsBack(msg tea.KeyPressMsg) bool {
 	return (isBack(msg) || msg.String() == "left") && p.m.Busy()
 }
 func (p helpAdapter) shortcuts() []components.ShortcutGroup { return p.m.Shortcuts() }
+func (p helpAdapter) click(id string) tea.Cmd               { *p.m = p.m.Click(id); return nil }
 
 // ── Updates ──────────────────────────────────────────────────────────────────
 

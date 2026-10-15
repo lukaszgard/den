@@ -8,6 +8,7 @@ import (
 	"github.com/lukaszgard/den/internal/tui/testkeys"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 type stubTerm struct {
@@ -307,5 +308,119 @@ func TestTabStripCursor(t *testing.T) {
 		if got := s.Cursor(1, 5, 80, 20); got != nil {
 			t.Fatalf("cursor %+v is outside the 80x20 area but %+v was shown", off, got)
 		}
+	}
+}
+
+// The tabs sit between two rules: the one closing the header above them, and
+// one of the bar's own under them, as wide as the bar.
+func TestTabStripBarHasARuleUnderTheTabs(t *testing.T) {
+	tabs := NewTabs("Run", "History")
+	tabs.Add("zsh", &stubTerm{})
+	for name, s := range map[string]TabStrip{"tabs": NewTabStrip(tabs, nil), "no tabs": NewTabStrip(nil, nil)} {
+		lines := strings.Split(ansi.Strip(s.Bar(40)), "\n")
+		if len(lines) != TabBarLines {
+			t.Fatalf("%s: the bar has %d lines, want %d:\n%s", name, len(lines), TabBarLines, strings.Join(lines, "\n"))
+		}
+		if lines[1] != strings.Repeat("─", 40) {
+			t.Errorf("%s: under the tabs %q, want a rule 40 cells wide", name, lines[1])
+		}
+	}
+}
+
+// barZone is the zone under the first cell of text in the strip's bar.
+func barZone(t *testing.T, s TabStrip, width int, text string) string {
+	t.Helper()
+	clean, zones := ScanZones(s.Bar(width))
+	for y, line := range strings.Split(ansi.Strip(clean), "\n") {
+		if i := strings.Index(line, text); i >= 0 {
+			id, _ := zones.At(ansi.StringWidth(line[:i]), y)
+			return id
+		}
+	}
+	t.Fatalf("%q is not in the bar:\n%s", text, ansi.Strip(clean))
+	return ""
+}
+
+// A click on a tab selects it, and takes the keyboard back from a terminal:
+// picking a tab is an act of its own. A double-click on a terminal's tab does
+// what enter does, and a click on a live terminal's body hands it the keys.
+func TestTabStripClicks(t *testing.T) {
+	tabs := NewTabs("Run", "History")
+	zsh, dead := &stubTerm{}, &stubTerm{dead: true}
+	tabs.Add("zsh", zsh)
+	tabs.Add("vim", dead)
+	opened := -1
+	s := NewTabStrip(tabs, func(id int) tea.Cmd { opened = id; return nil })
+	tabs.Select(2)
+	s.StartTyping()
+
+	if handled, _ := s.Click(barZone(t, s, 80, "History"), false); !handled || tabs.Selected() != 1 || s.Typing() {
+		t.Fatalf("a click on History: selected %d, typing %v", tabs.Selected(), s.Typing())
+	}
+	zshTab := barZone(t, s, 80, "1 zsh")
+	s.Click(zshTab, false)
+	if tabs.Selected() != 2 || s.Typing() {
+		t.Fatal("one click on a terminal's tab selects it without typing")
+	}
+	s.Click(zshTab, true)
+	if !s.Typing() {
+		t.Fatal("a double-click on a live terminal's tab should type into it")
+	}
+	s.Leave()
+	s.Click("body", false)
+	if !s.Typing() {
+		t.Fatal("a click on a live terminal's body should type into it")
+	}
+
+	s.Click(barZone(t, s, 80, "2 vim"), false)
+	s.Click("body", false)
+	if s.Typing() || opened != -1 {
+		t.Fatal("a click on an exited terminal does nothing: restarting it is a key")
+	}
+	s.Click(barZone(t, s, 80, "2 vim"), true)
+	if opened != tabs.ID(3) {
+		t.Fatal("a double-click on an exited terminal's tab restarts it, as enter does")
+	}
+
+	if handled, _ := s.Click("run:1", false); handled {
+		t.Fatal("a zone that is not the strip's is the view's")
+	}
+}
+
+// ‹ and › stand for the tabs the bar has no room for.
+func TestTabStripClickOnTheMarks(t *testing.T) {
+	tabs := NewTabs("Run", "History", "About")
+	for range 6 {
+		tabs.Add("a-long-terminal-name", &stubTerm{})
+	}
+	tabs.Select(0)
+	s := NewTabStrip(tabs, nil)
+	s.Click(barZone(t, s, 40, "›"), false)
+	if tabs.Selected() != 1 {
+		t.Fatalf("› selected %d, want the next tab", tabs.Selected())
+	}
+	tabs.Select(8)
+	s.Click(barZone(t, s, 40, "‹"), false)
+	if tabs.Selected() != 7 {
+		t.Fatalf("‹ selected %d, want the previous tab", tabs.Selected())
+	}
+}
+
+// While a tab is renamed or its close confirmed, a stray click answers
+// nothing.
+func TestTabStripIgnoresClicksWhileAsking(t *testing.T) {
+	tabs := NewTabs("Run", "History")
+	tabs.Add("zsh", &stubTerm{})
+	s := NewTabStrip(tabs, nil)
+	history := barZone(t, s, 80, "History")
+	tabs.Select(2)
+	s.Key(testkeys.Press("n"))
+	if handled, _ := s.Click(history, false); !handled || tabs.Selected() != 2 || !s.Renaming() {
+		t.Fatal("a click while renaming should do nothing")
+	}
+	s.Leave()
+	s.Key(testkeys.Press("x"))
+	if s.Click(history, false); tabs.Selected() != 2 || !s.ConfirmingClose() {
+		t.Fatal("a click while a close is confirmed should do nothing")
 	}
 }

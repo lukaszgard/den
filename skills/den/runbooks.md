@@ -75,7 +75,7 @@ history: 20                        # finished runs den keeps in logs/ in the fol
 | `DEN_RUNBOOK`, `DEN_CONFIG` | the runbook's name, den.yaml's path |
 | `DEN_RUNBOOK_STATE` | a folder of the runbook's own that outlives its runs: keep caches, virtualenvs and build output there |
 | `DEN_PARAM_<NAME>` | each param, upper-cased |
-| `FORCE_COLOR`, `CLICOLOR_FORCE` | `1` in a run, so output keeps its colours in the Logs and History tabs; not set when `NO_COLOR` is |
+| `FORCE_COLOR`, `CLICOLOR_FORCE` | `1` in a run, so output keeps its colours in the Run and History tabs; not set when `NO_COLOR` is |
 | `DEN_PORT_<TYPE>_<NAME>` | the local port of a connection that is up — only when run from den's TUI, or from a `den mcp` session that connected it |
 
 A script that needs a tunnel must fail with a clear message when its `DEN_PORT_*` variable

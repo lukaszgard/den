@@ -27,11 +27,11 @@ Type "l"
 Sleep 3.5s   # Look: the table, with focus
 
 # ── Open one and run it ───────────────────────────────────────────────────────
-# Notice: logs, history, about, files and terminals are tabs of its view.
+# Notice: run, history, about, files and terminals are tabs of its view.
 Down@200ms 4 # past Bastion status, CloudWatch alarms and Disk usage
 Sleep 1s     # Act: enter opens Env report
 Enter
-Sleep 3.5s   # Look: the view, on Logs
+Sleep 3.5s   # Look: the view, on Run
 Sleep 1s     # Act: r runs it
 Type "r"
 Sleep 2s     # Read: the parameter form
@@ -81,7 +81,7 @@ Sleep 1s     # Back: Files again
 
 # ── A shell where it lives ────────────────────────────────────────────────────
 # Notice: the shell starts in the runbook's folder with its environment.
-Left@200ms 3 # Transit: back on Logs
+Left@200ms 3 # Transit: back on Run
 Sleep 1s     # Act: t opens a terminal
 Type "t"
 Sleep 2.5s   # Arrive: the shell

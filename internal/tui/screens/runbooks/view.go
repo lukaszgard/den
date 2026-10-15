@@ -23,16 +23,17 @@ import (
 
 // The fixed tabs of the runbook view, before its terminals.
 const (
-	tabLogs    = "Logs"
+	tabRun     = "Run"
 	tabHistory = "History"
 	tabAbout   = "About"
 	tabFiles   = "Files"
 )
 
 // FixedTabs are the tabs the view of the runbook or sequence called name has
-// before its terminals. The root model makes the Tabs it owns with them.
+// before its terminals: Run, the current or last run, then History, About and
+// Files. The root model makes the Tabs it owns with them.
 func FixedTabs(reg *runbook.Registry, name string) []string {
-	tabs := []string{tabLogs, tabHistory}
+	tabs := []string{tabRun, tabHistory}
 	e, ok := lookup(reg, name)
 	if !ok || e.isSeq() || e.runner.Runbook().Settings.About {
 		tabs = append(tabs, tabAbout)
@@ -47,7 +48,7 @@ func FixedTabs(reg *runbook.Registry, name string) []string {
 
 // View is the full-screen view of one runbook or sequence. It is built like
 // the service detail view, and behaves like it: a header, then tabs — the
-// logs of the current or last run, the runs kept on disk each with its own
+// output of the current or last run, the runs kept on disk each with its own
 // log, what the runbook is and what den hands it, the files in its folder —
 // and the terminals opened in the runbook's folder, which the root model owns
 // so they outlive the view.
@@ -212,7 +213,7 @@ func (v View) bodySize() (cols, rows int) {
 // those sections and the tab bar.
 func (v View) bodyArea(upperSection string) (cols, rows, top int) {
 	upper := lipgloss.Height(lipgloss.NewStyle().Width(v.width - 2).Render(upperSection))
-	return v.width - 4, max(v.boxInnerHeight()-upper-1, 1), 1 + upper + 1
+	return v.width - 4, max(v.boxInnerHeight()-upper-components.TabBarLines, 1), 1 + upper + components.TabBarLines
 }
 
 // fit sizes the body's views, and the terminal on screen, to the box.
@@ -234,7 +235,7 @@ func (v *View) fit() {
 func (v View) tab() string {
 	tabs := v.strip.Tabs()
 	if tabs == nil {
-		return tabLogs
+		return tabRun
 	}
 	return tabs.FixedName(tabs.Selected())
 }
@@ -266,6 +267,78 @@ func (v View) Update(msg tea.Msg) (View, tea.Cmd) {
 	v = v.refresh()
 	v.fit()
 	return v, cmd
+}
+
+// TerminalAt reports whether the cell x, y of the screen is on the screen of
+// the terminal the view shows, if one is: the zone "body" of Click. It is not
+// marked as the other zones are, since a mark on each of its lines cost more
+// to draw than the rest of the frame; bodyArea, which draws it and places its
+// cursor, says where it is, and the view starts at the top of the screen.
+func (v View) TerminalAt(x, y int) bool {
+	if v.strip.Current() == nil {
+		return false
+	}
+	cols, rows, top := v.bodyArea(v.upperSection())
+	return x >= 1 && x < 1+cols && y >= top && y < top+rows // 1: the box's left border
+}
+
+// asking reports that a pop-up or a question has the keyboard: a run's
+// parameters or confirmation, a move, a fork, a delete, a resend, E's request,
+// a tab's new name or its close. The mouse answers none of them.
+func (v View) asking() bool {
+	return v.flow.active() || v.mig.active() || v.fork.active() || v.del.active() || v.resend.active() || v.ask != nil ||
+		v.strip.Renaming() || v.strip.ConfirmingClose()
+}
+
+// Click handles a click on the zone id, a second one in a row on it being a
+// double-click: a tab, a terminal's screen, a run in History or a file in
+// Files. A click selects; a double-click does what enter does.
+func (v View) Click(id string, double bool) (View, tea.Cmd) {
+	if v.asking() {
+		return v, nil
+	}
+	if handled, cmd := v.strip.Click(id, double); handled {
+		v = v.refresh()
+		v.fit()
+		return v, cmd
+	}
+	switch tab := v.tab(); {
+	case tab == tabHistory && !v.histOpen:
+		i, ok := components.ZoneIndex(id, "run")
+		if !ok || i >= len(v.history) {
+			return v, nil
+		}
+		v.histCursor = i
+	case tab == tabFiles && !v.previewOpen:
+		i, ok := components.ZoneIndex(id, "file")
+		if !ok || i >= len(v.files.rows) {
+			return v, nil
+		}
+		v.filesCursor = i
+	default:
+		return v, nil
+	}
+	if double {
+		return v.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	}
+	v = v.refresh()
+	v.fit()
+	return v, nil
+}
+
+// Wheel handles a notch of the wheel as the arrow it stands for: it scrolls
+// Run, About or a file, moves through the runs and the files, and reaches the
+// program of a terminal being typed into. While the view asks something it is
+// dropped, since "any other key" would read it as an answer.
+func (v View) Wheel(up bool) (View, tea.Cmd) {
+	if v.asking() {
+		return v, nil
+	}
+	key := tea.KeyPressMsg{Code: tea.KeyDown}
+	if up {
+		key = tea.KeyPressMsg{Code: tea.KeyUp}
+	}
+	return v.Update(key)
 }
 
 func (v View) key(msg tea.KeyPressMsg) (View, tea.Cmd) {
@@ -346,7 +419,7 @@ func (v View) key(msg tea.KeyPressMsg) (View, tea.Cmd) {
 		name := v.name
 		return v, func() tea.Msg { return msgs.OpenRunbookTerminalMsg{Name: name, Edit: true} }
 	case "o":
-		if tab := v.tab(); tab == tabLogs || tab == tabHistory {
+		if tab := v.tab(); tab == tabRun || tab == tabHistory {
 			return v, v.openLog(e)
 		}
 		if v.tab() == tabFiles {
@@ -358,7 +431,7 @@ func (v View) key(msg tea.KeyPressMsg) (View, tea.Cmd) {
 	}
 
 	switch v.tab() {
-	case tabLogs:
+	case tabRun:
 		return v, v.logs.Update(msg)
 	case tabHistory:
 		if v.histOpen {
@@ -387,14 +460,14 @@ func (v View) key(msg tea.KeyPressMsg) (View, tea.Cmd) {
 }
 
 // openLog opens the log file of the run on screen in the editor, in a terminal
-// tab of the view: the run Logs shows, or the one picked in History.
+// tab of the view: the run on the Run tab, or the one picked in History.
 func (v View) openLog(e entry) tea.Cmd {
 	st := e.state()
 	path := ""
 	switch {
 	case v.tab() == tabHistory && v.histCursor < len(v.history):
 		path = v.history[v.histCursor].LogPath()
-	case v.tab() == tabLogs:
+	case v.tab() == tabRun:
 		path = st.LogPath
 	}
 	switch {
@@ -457,7 +530,7 @@ func (v View) refresh() View {
 	v.lastTab = tab
 	st := e.state()
 	switch tab {
-	case tabLogs:
+	case tabRun:
 		v.refreshLogs(st)
 	case tabHistory:
 		if entered {
@@ -709,7 +782,7 @@ func (v View) historyBody(rows int) string {
 			h.StartedAt.Local().Format("Mon 2 Jan 15:04"),
 			muted.Render(pad(orDash(h.Origin), 8)),
 			dim.Render(strings.Join(params, " ")))
-		lines = append(lines, lipgloss.NewStyle().MaxWidth(v.width-4).Render(line))
+		lines = append(lines, components.Zone(components.ZoneID("run", i), lipgloss.NewStyle().MaxWidth(v.width-4).Render(line)))
 	}
 	if end < len(v.history) {
 		lines = append(lines, dim.Render(fmt.Sprintf("   ↓ %d more · %s", len(v.history)-end, v.histKept(e, ok))))
@@ -918,7 +991,7 @@ func (v View) helpLine() string {
 		keys = append(keys, key("D", "delete"))
 	}
 	switch v.tab() {
-	case tabLogs:
+	case tabRun:
 		keys = append(keys, key("o", "log in editor"))
 	case tabHistory:
 		if v.histOpen {
@@ -942,9 +1015,9 @@ func (v View) Shortcuts() []components.ShortcutGroup {
 	e, _ := lookup(v.reg, v.name)
 	run := []components.Shortcut{
 		{Keys: "r", Text: "Run it (parameters and confirmation first)"},
-		{Keys: "x", Text: "Cancel the run (on Logs, History, About, Files)"},
+		{Keys: "x", Text: "Cancel the run (on Run, History, About, Files)"},
 		{Keys: "y", Text: "Copy the den run command for it"},
-		{Keys: "o", Text: "Open the run's log in the editor (Logs, History)"},
+		{Keys: "o", Text: "Open the run's log in the editor (Run, History)"},
 	}
 	if e.seq == nil {
 		run = append(run,
@@ -965,7 +1038,7 @@ func (v View) Shortcuts() []components.ShortcutGroup {
 			{Keys: "esc ctrl+t", Text: "Give den the keys back (esc twice in an editor)"},
 		}},
 		{Title: "View", Keys: []components.Shortcut{
-			{Keys: "↑ ↓", Text: "Scroll the logs, About or a file shown; pick a run or a file"},
+			{Keys: "↑ ↓", Text: "Scroll Run, About or a file shown; pick a run or a file"},
 			{Keys: "enter", Text: "On Files: show the file picked; esc goes back to the tree"},
 			{Keys: "esc", Text: "Back to the list (from a run's whole log or a file: to the runs or files)"},
 		}},

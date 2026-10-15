@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lukaszgard/den/internal/service"
+	"github.com/lukaszgard/den/internal/tui/components"
 	"github.com/lukaszgard/den/internal/tui/msgs"
 	"github.com/lukaszgard/den/internal/tui/testkeys"
 
@@ -592,5 +593,89 @@ func TestHelpLineNamesTheTerminalKeyOnANarrowTerminal(t *testing.T) {
 		if !strings.Contains(help, want) {
 			t.Errorf("an 80-column help line does not name %q:\n%s", want, help)
 		}
+	}
+}
+
+// The tab bar is two lines, the tabs and a rule under them, and a terminal's
+// body starts under both: its first line is the row after the rule.
+func TestBodyStartsUnderTheRuleBelowTheTabs(t *testing.T) {
+	m, tabs, terms := rdsView(1, 120, 30)
+	tabs.Select(1)
+	terms[0].screen = "first line of the client"
+	m, _ = m.Update(msgs.TickMsg{})
+	lines := strings.Split(ansi.Strip(m.View()), "\n")
+	_, _, top := m.bodyArea(m.upperSection())
+	if !strings.Contains(lines[top-1], strings.Repeat("─", 100)) || !strings.Contains(lines[top-2], "Logs │ 1 ") {
+		t.Fatalf("rows %d and %d should be the tabs and the rule under them:\n%s", top-2, top-1, strings.Join(lines, "\n"))
+	}
+	if !strings.Contains(lines[top], "first line of the client") {
+		t.Fatalf("row %d should be the terminal's first line:\n%s", top, strings.Join(lines, "\n"))
+	}
+}
+
+// cellOf is the cell where text starts in the view.
+func cellOf(t *testing.T, m Model, text string) (x, y int) {
+	t.Helper()
+	clean, _ := components.ScanZones(m.View())
+	for y, line := range strings.Split(ansi.Strip(clean), "\n") {
+		if i := strings.Index(line, text); i >= 0 {
+			return ansi.StringWidth(line[:i]), y
+		}
+	}
+	t.Fatalf("%q is not in the view:\n%s", text, ansi.Strip(clean))
+	return 0, 0
+}
+
+// zoneOf is the zone under the first cell of text in the view, which is what
+// a click there would land on.
+func zoneOf(t *testing.T, m Model, text string) string {
+	t.Helper()
+	x, y := cellOf(t, m, text)
+	_, zones := components.ScanZones(m.View())
+	id, _ := zones.At(x, y)
+	return id
+}
+
+// A click on a tab selects it, a click on a client's screen types into it,
+// and while a disconnect waits for its answer no click is one.
+func TestClickingTheTabs(t *testing.T) {
+	m, tabs, _ := rdsView(2, 120, 30)
+	m, _ = m.Click(zoneOf(t, m, "2 psql"), false)
+	if tabs.Selected() != 2 || m.CapturingKeys() {
+		t.Fatalf("selected %d: a click on 2 psql should select it, den keeping the keys", tabs.Selected())
+	}
+	x, y := cellOf(t, m, "terminal 2")
+	if !m.TerminalAt(x, y) || m.TerminalAt(x, 0) || m.TerminalAt(0, y) {
+		t.Fatal("TerminalAt should cover the client's screen and nothing else")
+	}
+	m, _ = m.Click("body", false)
+	if !m.CapturingKeys() {
+		t.Fatal("a click on the client's screen should type into it")
+	}
+	m, _ = m.Click(zoneOf(t, m, "Logs"), false)
+	if tabs.Selected() != 0 || m.CapturingKeys() {
+		t.Fatal("a click on Logs should go back to the logs, den having the keys")
+	}
+	logs := zoneOf(t, m, "1 psql")
+	m = m.AskDisconnect()
+	if m, _ = m.Click(logs, false); tabs.Selected() != 0 || !m.CapturingKeys() {
+		t.Fatal("a click while a disconnect is asked should do nothing")
+	}
+}
+
+// The wheel scrolls the logs, but not while a client's screen hides them.
+func TestTheWheelScrollsTheLogs(t *testing.T) {
+	m, tabs, _ := rdsView(1, 120, 30)
+	bottom := ansi.Strip(m.View())
+	m, _ = m.Wheel(true)
+	if ansi.Strip(m.View()) == bottom {
+		t.Fatal("the wheel up should scroll the logs")
+	}
+	m, _ = m.Wheel(false)
+	tabs.Select(1)
+	m, _ = m.Wheel(true)
+	tabs.Select(0)
+	if ansi.Strip(m.View()) != bottom {
+		t.Fatal("the wheel over a client's screen scrolled the logs under it")
 	}
 }

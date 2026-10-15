@@ -186,7 +186,7 @@ func TestEnterOpensTheRunbookViewAndEscLeavesIt(t *testing.T) {
 		t.Fatal("enter on a runbook did not open its view")
 	}
 	view := plain(f.m)
-	for _, want := range []string{"runbook", "Greet", "Logs", "History", "About", "./run.sh", "env dev"} {
+	for _, want := range []string{"runbook", "Greet", "Run │ History │ About", "./run.sh", "env dev"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("the view lacks %q:\n%s", want, view)
 		}
@@ -197,13 +197,31 @@ func TestEnterOpensTheRunbookViewAndEscLeavesIt(t *testing.T) {
 	}
 }
 
-func TestRunFromTheViewShowsItsOutputInLogs(t *testing.T) {
+// The tabs sit between two rules: the header's above them and the bar's own
+// under them.
+func TestTheRunbookViewHasARuleUnderItsTabs(t *testing.T) {
+	f := runbookHarness(t)
+	f.selectRow("Greet")
+	f.press("enter")
+	lines := strings.Split(plain(f.m), "\n")
+	for i, line := range lines {
+		if strings.Contains(line, "Run │ History") {
+			if i+1 == len(lines) || !strings.Contains(lines[i+1], strings.Repeat("─", 60)) {
+				t.Fatalf("no rule under the tabs:\n%s", strings.Join(lines, "\n"))
+			}
+			return
+		}
+	}
+	t.Fatalf("no tab bar:\n%s", strings.Join(lines, "\n"))
+}
+
+func TestRunFromTheViewShowsItsOutputInRun(t *testing.T) {
 	f := runbookHarness(t)
 	f.selectRow("Greet")
 	f.press("enter", "r")
 	f.waitRun("Greet")
 	if view := plain(f.m); !strings.Contains(view, "hello from greet as dev-profile") || !strings.Contains(view, "EXIT 0") {
-		t.Fatalf("the run's output is not in Logs, run in its folder with its env:\n%s", view)
+		t.Fatalf("the run's output is not in Run, run in its folder with its env:\n%s", view)
 	}
 }
 
@@ -308,7 +326,7 @@ func TestEOpensTheScriptInTheEditor(t *testing.T) {
 }
 
 // o opens the log of the run on screen in the editor, in a tab named after
-// the run: on History the run picked, on Logs the last one.
+// the run: on History the run picked, on Run the last one.
 func TestOOpensTheRunsLogInTheEditor(t *testing.T) {
 	t.Setenv("VISUAL", "nvim -R")
 	f := runbookHarness(t)
@@ -338,9 +356,9 @@ func TestOOpensTheRunsLogInTheEditor(t *testing.T) {
 		t.Fatalf("the editor's tab is not named after the run:\n%s", plain(f.m))
 	}
 
-	f.press("ctrl+t", "left", "left", "left", "left", "o") // back to Logs
+	f.press("ctrl+t", "left", "left", "left", "left", "o") // back to Run
 	if len(f.starts.cmds) != 2 || f.starts.cmds[1].Args[len(f.starts.cmds[1].Args)-1] != filepath.Join(logs, "log-02.log") {
-		t.Fatalf("o on Logs did not open the last run's log: %d programs", len(f.starts.cmds))
+		t.Fatalf("o on Run did not open the last run's log: %d programs", len(f.starts.cmds))
 	}
 }
 
@@ -356,7 +374,7 @@ func TestOOnASequenceNamesItsLog(t *testing.T) {
 	}
 }
 
-// Each run has a log of its own: Logs shows the last run alone, and History
+// Each run has a log of its own: Run shows the last run alone, and History
 // lists the runs with the selected one's log under them, enter showing that
 // log full height and esc going back to the list before leaving the view.
 func TestHistoryShowsEachRunsOwnLog(t *testing.T) {
@@ -370,7 +388,7 @@ func TestHistoryShowsEachRunsOwnLog(t *testing.T) {
 	f.press("r")
 	f.waitRun("Greet")
 	if view := plain(f.m); strings.Contains(view, "hello from") || !strings.Contains(view, "second run") {
-		t.Fatalf("Logs shows more than the last run:\n%s", view)
+		t.Fatalf("Run shows more than the last run:\n%s", view)
 	}
 
 	f.press("right") // History
@@ -631,7 +649,7 @@ func TestFilesShowsAFileAndEOpensItInTheEditor(t *testing.T) {
 }
 
 // An editor that exits takes its tab with it and hands the screen back to the
-// tab it was opened from: Files, still showing the file, or Logs for the
+// tab it was opened from: Files, still showing the file, or Run for the
 // script. A shell keeps its tab, to be restarted; an editor that exits behind
 // another tab leaves the selection where it is.
 func TestAnEditorClosesItsTabAndGoesBackWhenItExits(t *testing.T) {
@@ -659,13 +677,13 @@ func TestAnEditorClosesItsTabAndGoesBackWhenItExits(t *testing.T) {
 		t.Fatalf("Files should be back, showing run.sh, with den's keys:\n%s", view)
 	}
 
-	f.press("esc", "left", "left", "left", "e") // the script, from Logs
+	f.press("esc", "left", "left", "left", "e") // the script, from Run
 	if len(f.starts.cmds) != 2 || !strings.Contains(plain(f.m), "1 vi") {
-		t.Fatalf("e on Logs should open the script in the editor:\n%s", plain(f.m))
+		t.Fatalf("e on Run should open the script in the editor:\n%s", plain(f.m))
 	}
 	exited(1)
-	if tabs.Len() != 0 || tabs.FixedName(tabs.Selected()) != "Logs" {
-		t.Fatalf("the editor should hand the screen back to Logs, not %q", tabs.FixedName(tabs.Selected()))
+	if tabs.Len() != 0 || tabs.FixedName(tabs.Selected()) != "Run" {
+		t.Fatalf("the editor should hand the screen back to Run, not %q", tabs.FixedName(tabs.Selected()))
 	}
 
 	f.press("t")
@@ -674,7 +692,7 @@ func TestAnEditorClosesItsTabAndGoesBackWhenItExits(t *testing.T) {
 		t.Fatalf("a shell that exits keeps its tab:\n%s", plain(f.m))
 	}
 
-	f.press("ctrl+t", "right", "e", "ctrl+t", "left") // from Logs, then back on the shell
+	f.press("ctrl+t", "right", "e", "ctrl+t", "left") // from Run, then back on the shell
 	exited(3)
 	if tabs.Len() != 1 || tabs.Current() != components.Terminal(f.starts.terms[2]) {
 		t.Fatalf("an editor exiting behind the shell should close and leave the shell on screen, %d tabs", tabs.Len())
@@ -1885,5 +1903,116 @@ func TestBackgroundColorReachesTheRunbookView(t *testing.T) {
 	f.press("esc", "enter")
 	if !f.m.showRunbook || f.m.runbookView.Dark() {
 		t.Fatal("a view opened after the reply should start in its palette")
+	}
+}
+
+// ── the mouse in the runbook view ────────────────────────────────────────────
+
+// twoRuns opens Greet's view and runs it twice, the second run printing
+// something else.
+func (f runbookFixture) twoRuns() {
+	f.t.Helper()
+	f.selectRow("Greet")
+	f.press("enter", "r")
+	f.waitRun("Greet")
+	if err := os.WriteFile(filepath.Join(f.greet, "run.sh"), []byte("#!/bin/sh\necho second run\n"), 0o700); err != nil {
+		f.t.Fatal(err)
+	}
+	f.press("r")
+	f.waitRun("Greet")
+}
+
+// selectedTab is the name of the fixed tab the view of name is on.
+func (f runbookFixture) selectedTab(name string) string {
+	tabs := f.m.runbookTabs[name]
+	return tabs.FixedName(tabs.Selected())
+}
+
+// A click on a tab selects it; on History a click picks a run, whose log the
+// divider then names, and a double-click shows that log full height.
+func TestClickingHistoryAndItsRuns(t *testing.T) {
+	f := runbookHarness(t)
+	f.twoRuns()
+	f.clickTab("History")
+	if f.selectedTab("Greet") != "History" {
+		t.Fatalf("a click on History selected %q:\n%s", f.selectedTab("Greet"), plain(f.m))
+	}
+	if !strings.Contains(plain(f.m), "log-02.log") {
+		t.Fatalf("History should start on the newest run:\n%s", plain(f.m))
+	}
+	x, y := screenPos(t, f.m, "▸ ")
+	f.click(x+4, y+1) // the older run, the row under the cursor
+	if view := plain(f.m); !strings.Contains(view, "log-01.log") {
+		t.Fatalf("a click on the older run should select it:\n%s", view)
+	}
+	f.click(x+4, y+1)
+	if view := plain(f.m); strings.Contains(view, "▸ ") || !strings.Contains(view, "esc: runs") {
+		t.Fatalf("a double-click on a run should show its whole log:\n%s", view)
+	}
+}
+
+// The wheel moves through History as ↑ and ↓ do.
+func TestTheWheelInTheRunbookView(t *testing.T) {
+	f := runbookHarness(t)
+	f.twoRuns()
+	f.press("right")
+	_, y := screenPos(t, f.m, "▸ ")
+	f.wheel(10, y, false)
+	if view := plain(f.m); !strings.Contains(view, "log-01.log") {
+		t.Fatalf("the wheel down should select the older run:\n%s", view)
+	}
+}
+
+// On Files a click picks a file and a double-click shows it.
+func TestClickingAFile(t *testing.T) {
+	f := runbookHarness(t)
+	f.selectRow("Greet")
+	f.press("enter")
+	f.clickTab("Files")
+	f.clickText("README.md")
+	if strings.Contains(plain(f.m), "The friendliest runbook.") {
+		t.Fatal("one click should only pick the file")
+	}
+	f.clickText("README.md")
+	if view := plain(f.m); !strings.Contains(view, "The friendliest runbook.") {
+		t.Fatalf("a double-click on README.md should show it:\n%s", view)
+	}
+}
+
+// A click on a terminal's screen hands it the keyboard, and a click on a tab
+// takes it back.
+func TestClickingATerminalsBody(t *testing.T) {
+	t.Setenv("SHELL", "/bin/zsh")
+	f := runbookHarness(t)
+	f.selectRow("Greet")
+	f.press("enter", "t", "ctrl+t")
+	if f.m.runbookView.CapturingKeys() {
+		t.Fatal("ctrl+t should give den the keyboard")
+	}
+	f.clickText("fake client screen")
+	if !f.m.runbookView.CapturingKeys() {
+		t.Fatal("a click on the terminal should type into it")
+	}
+	f.clickTab("History")
+	if f.m.runbookView.CapturingKeys() || f.selectedTab("Greet") != "History" {
+		t.Fatal("a click on History should leave the terminal for History")
+	}
+}
+
+// While the view asks something, here a run's parameter, a click or the wheel
+// answers nothing.
+func TestTheRunbookViewIgnoresTheMouseWhileItAsks(t *testing.T) {
+	f := runbookHarness(t)
+	f.selectRow("Ask")
+	f.press("enter")
+	x, y := tabPos(t, f.m, "History")
+	f.press("r")
+	if !f.m.runbookView.CapturingKeys() {
+		t.Fatal("r on Ask should ask for its parameter")
+	}
+	f.click(x, y)
+	f.wheel(x, y+3, false)
+	if !f.m.runbookView.CapturingKeys() || f.selectedTab("Ask") != "Run" {
+		t.Fatal("the mouse should not reach a view that asks something")
 	}
 }

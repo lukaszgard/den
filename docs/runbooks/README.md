@@ -272,7 +272,7 @@ flyway -url="jdbc:postgresql://127.0.0.1:${DEN_PORT_RDS_ORDERS}/orders" info
 ### Colours
 
 A run's output goes through pipes, not a terminal, and a tool that sees no terminal
-prints plain text. So that Logs and History can show what you see in a shell, den sets
+prints plain text. So that Run and History can show what you see in a shell, den sets
 `FORCE_COLOR=1` and `CLICOLOR_FORCE=1` for every run. Most tools and libraries honour one
 of them (Node's chalk, Python's rich, BSD `ls`, …). A script that decides for itself with
 `isatty()` should look at them too:
@@ -287,7 +287,7 @@ use_colour = not os.environ.get("NO_COLOR") and (
   neither variable. `env_vars` always wins, so `FORCE_COLOR: "0"` there is kept.
 - **A tool that ignores both** needs its own flag in the command: `grep --color=always`,
   `ls --color=always` (GNU), `git -c color.ui=always`, `aws … --color on`.
-- **Shown in** the Logs tab and, for a past run, in History, grey text with the script's
+- **Shown in** the Run tab and, for a past run, in History, grey text with the script's
   colours on top; a colour that is reset goes back to grey, not to the terminal's default.
 - **Also in the Logs panel**: every run started from the dashboard (a runbook, or a
   sequence and its steps) writes its lines there too, among den's own, each tagged with the
@@ -686,14 +686,15 @@ that the name and the account stay readable.
 │ ~/.config/den/runbooks/rotate-app-db-password   ./run.sh                     │
 │ ! asks before running · bash · timeout 10m · keeps 50 runs · y: copy den run │
 │ ──────────────────────────────────────────────────────────────────────────── │
-│─ Logs │ History │ About │ Files │ 1 zsh ● │ 2 nvim ○                         │
+│─ Run │ History │ About │ Files │ 1 zsh ● │ 2 nvim ○                          │
+│ ──────────────────────────────────────────────────────────────────────────── │
 │[12:04:29] rotating app_rw in prod                                            │
 │[12:04:31] ✓ new password stored                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
   h: help  r: run  t: shell here  e: edit  E: edit with claude opus  o: log in editor  ←→: tabs  esc: back
 ```
 
-- **Logs** — the current or last run's output, full height, following the tail.
+- **Run** — the current or last run's output, full height, following the tail.
 - **History** — the runs kept on disk, newest first, with the selected run's own log
   under them and the file it is in; a run in flight is there from its first line. The
   runs take up to two thirds of the tab; when there are more, `↓ 9 more · 26 of 30 runs
@@ -703,7 +704,8 @@ that the name and the account stay readable.
   it (`log-07`): search it, copy from it, save part of it. The editor is the one `e` uses.
 
 ```
-│─ Logs │ History │ About │ Files                                               │
+│─ Run │ History │ About │ Files                                                │
+│ ──────────────────────────────────────────────────────────────────────────── │
 │▸ ✓ exit 0      2.1s     Fri 3 Oct 12:04  tui       tier=prod                 │
 │  ✗ exit 1      0.8s     Fri 3 Oct 11:52  den run   tier=prod                 │
 │  ✗ interrupted –        Thu 2 Oct 17:10  mcp       tier=stage                │
@@ -731,7 +733,8 @@ that the name and the account stay readable.
   before its next run: see [Runbook sources](../runbook-sources/README.md).
 
 ```
-│─ Logs │ History │ About │ Files │ 1 run.sh ●                                  │
+│─ Run │ History │ About │ Files │ 1 run.sh ●                                   │
+│ ──────────────────────────────────────────────────────────────────────────── │
 │  .                                                                           │
 │  ├── logs/  7 runs · History                                                 │
 │  ├── README.md                                                               │
@@ -755,21 +758,21 @@ that the name and the account stay readable.
 | Key          | Action                                                               |
 |--------------|----------------------------------------------------------------------|
 | `r`          | Run it (parameters and confirmation first, as a pop-up)              |
-| `x`          | On Logs, History, About or Files: cancel the run. On a terminal: close it |
+| `x`          | On Run, History, About or Files: cancel the run. On a terminal: close it |
 | `t`          | New terminal: your shell in the runbook's folder                     |
 | `e`          | Open its script in the editor, in a terminal tab; on Files, the file picked or shown |
 | `E`          | [Change it with its agent](#change-one-with-an-agent): asks what to change, then starts the agent in a terminal tab |
-| `o`          | On Logs or History: open the run's log file in the editor, in a terminal tab |
+| `o`          | On Run or History: open the run's log file in the editor, in a terminal tab |
 | `m`          | Move a single-script runbook into its own folder (asks first)        |
 | `D`          | [Delete it for good](#delete-one), after a question listing what goes |
 | `y`          | Copy the `den run` command for it                                    |
 | `←` `→`      | Previous / next tab (or `tab`, `shift+tab`)                          |
 | `1`–`9`      | Jump to a terminal and type into it                                  |
 | `enter`      | Type into a terminal; restart an exited one; on History, a run's whole log; on Files, show the file picked |
-| `↑` `↓`      | Scroll Logs and About; pick a run in History, or scroll its whole log; pick a file in Files, or scroll the one shown |
+| `↑` `↓`      | Scroll Run and About; pick a run in History, or scroll its whole log; pick a file in Files, or scroll the one shown |
 | `esc`        | Back to the list (from a terminal: back to den's keys first; from a run's whole log: back to the runs; from a file shown: back to the tree) |
 
-A sequence's view has Logs, History and an About that lists its steps; it has no folder of
+A sequence's view has Run, History and an About that lists its steps; it has no folder of
 its own, so no Files and no terminals. A runbook declared in `den.yaml` or by a single script
 has no Files either: it runs in a directory it shares.
 

@@ -49,7 +49,7 @@ func TestHelperDenRunbooks(t *testing.T) {
 	}
 }
 
-// The runbook view on a real terminal: a run's output in Logs, its folder and
+// The runbook view on a real terminal: a run's output in Run, its folder and
 // a file of it in Files, an editor whose tab closes with it, and a real shell
 // opened in the runbook's folder with what den sets for it, which den stops
 // when it quits.
@@ -105,7 +105,7 @@ func TestRunbookViewEndToEnd(t *testing.T) {
 	den.waitText("NEVER RUN")
 	den.assertFrame(36)
 
-	// r runs it in its folder; Logs shows the output.
+	// r runs it in its folder; Run shows the output.
 	den.typeText("r")
 	den.waitText("hello from greet")
 	den.waitText("EXIT 0")

@@ -368,7 +368,19 @@ func (m Model) listEntry(i int) []string {
 			out = append(out, "  "+strings.Repeat(" ", indent)+dimStyle.Render(arrow+l))
 		}
 	}
+	// Every line of the entry is the problem's, its hint too.
+	for j := range out {
+		out[j] = components.Zone(components.ZoneID("problem", i), out[j])
+	}
 	return out
+}
+
+// Click moves the list's cursor to the problem the zone id marks.
+func (m Model) Click(id string) Model {
+	if i, ok := components.ZoneIndex(id, "problem"); ok && m.list && i < len(m.problems) {
+		m = m.moveCursor(i)
+	}
+	return m
 }
 
 // listLines is the whole list, and where each problem starts in it.
