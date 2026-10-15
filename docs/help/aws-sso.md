@@ -8,7 +8,7 @@ The AWS panel lists the SSO sessions of your AWS config, how long each login has
 
 ## What you can do
 
-- See every SSO session and its remaining time, here and in the Connect list next to the services that will fail without it.
+- See every SSO session with its remaining time and the local time its login ends, and the remaining time again in the Connect list next to the services that will fail without it.
 - Log in to a session, from its row or from any profile that uses it; cancel a login that hangs.
 - Open the session's SSO start page in your browser.
 - Filter the profiles; the sessions stay visible.

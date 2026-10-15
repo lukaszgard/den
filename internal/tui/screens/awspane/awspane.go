@@ -404,6 +404,19 @@ var (
 	detailValStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFDF5"))
 )
 
+// untilClock is when a login ends on the local clock. The zone is named
+// because the caches den reads from write UTC; an end on another day gets
+// its weekday.
+func untilClock(expires, now time.Time) string {
+	expires = expires.Local()
+	ey, em, ed := expires.Date()
+	ny, nm, nd := now.Local().Date()
+	if ey == ny && em == nm && ed == nd {
+		return "until " + expires.Format("15:04:05 MST")
+	}
+	return "until " + expires.Format("Mon 15:04:05 MST")
+}
+
 func (m Model) View(width, height int, focused bool) string {
 	// ── Header ──────────────────────────────────────────────────────────────
 	header := "  " + awsLogoStyle.Render("\ue7ad  AWS") + "  " + cfgPathStyle.Render(m.cfgPath)
@@ -430,6 +443,10 @@ func (m Model) View(width, height int, focused bool) string {
 			if !ok {
 				st = sess.State()
 			}
+			label := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFFDF5")).Render(name)
+			if focused && m.cursor == i {
+				label = selectedRowStyle.Render("► " + name)
+			}
 			var tokenPart string
 			if st.TokenExpires == nil || time.Until(*st.TokenExpires) <= 0 {
 				tokenPart = noTokenStyle.Render("No active token") + "  " +
@@ -439,12 +456,16 @@ func (m Model) View(width, height int, focused bool) string {
 				if total <= 0 {
 					total = 12 * time.Hour
 				}
-				bar := components.TokenBarWithTotal(st.TokenExpires, total, ssoBoxInnerWidth-len(name)-6)
-				tokenPart = bar + "  " + dimStyle.Render("↵ login")
-			}
-			label := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFFDF5")).Render(name)
-			if focused && m.cursor == i {
-				label = selectedRowStyle.Render("► " + name)
+				clock := " · " + untilClock(*st.TokenExpires, time.Now())
+				budget := ssoBoxInnerWidth - len(name) - 6
+				bar := components.TokenBarWithTotal(st.TokenExpires, total, budget-lipgloss.Width(clock))
+				tokenPart = bar + clock + "  " + dimStyle.Render("↵ login")
+				// A wrapped row would push the profile list down a line, so a
+				// box too narrow for the clock keeps the row it had without it.
+				if lipgloss.Width(label+"  "+tokenPart) > ssoBoxInnerWidth {
+					bar = components.TokenBarWithTotal(st.TokenExpires, total, budget)
+					tokenPart = bar + "  " + dimStyle.Render("↵ login")
+				}
 			}
 			ssoRows = append(ssoRows, components.Zone(components.ZoneID("row", i), label+"  "+tokenPart))
 		}
