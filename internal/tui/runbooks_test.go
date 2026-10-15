@@ -1933,9 +1933,9 @@ func (f runbookFixture) selectedTab(name string) string {
 func TestClickingHistoryAndItsRuns(t *testing.T) {
 	f := runbookHarness(t)
 	f.twoRuns()
-	f.clickText("History")
+	f.clickTab("History")
 	if f.selectedTab("Greet") != "History" {
-		t.Fatalf("a click on History selected %q", f.selectedTab("Greet"))
+		t.Fatalf("a click on History selected %q:\n%s", f.selectedTab("Greet"), plain(f.m))
 	}
 	if !strings.Contains(plain(f.m), "log-02.log") {
 		t.Fatalf("History should start on the newest run:\n%s", plain(f.m))
@@ -1968,7 +1968,7 @@ func TestClickingAFile(t *testing.T) {
 	f := runbookHarness(t)
 	f.selectRow("Greet")
 	f.press("enter")
-	f.clickText("Files")
+	f.clickTab("Files")
 	f.clickText("README.md")
 	if strings.Contains(plain(f.m), "The friendliest runbook.") {
 		t.Fatal("one click should only pick the file")
@@ -1993,7 +1993,7 @@ func TestClickingATerminalsBody(t *testing.T) {
 	if !f.m.runbookView.CapturingKeys() {
 		t.Fatal("a click on the terminal should type into it")
 	}
-	f.clickText("History")
+	f.clickTab("History")
 	if f.m.runbookView.CapturingKeys() || f.selectedTab("Greet") != "History" {
 		t.Fatal("a click on History should leave the terminal for History")
 	}
@@ -2005,7 +2005,7 @@ func TestTheRunbookViewIgnoresTheMouseWhileItAsks(t *testing.T) {
 	f := runbookHarness(t)
 	f.selectRow("Ask")
 	f.press("enter")
-	x, y := screenPos(t, f.m, "History")
+	x, y := tabPos(t, f.m, "History")
 	f.press("r")
 	if !f.m.runbookView.CapturingKeys() {
 		t.Fatal("r on Ask should ask for its parameter")

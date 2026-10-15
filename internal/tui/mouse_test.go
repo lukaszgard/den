@@ -295,7 +295,7 @@ func TestTheMouseInTheDetailView(t *testing.T) {
 	if got := starts.terms[0].typed(); got != "up" {
 		t.Fatalf("the client got %q, want the wheel as ↑", got)
 	}
-	h.clickText("Logs")
+	h.clickTab("Logs")
 	if h.m.detailModel.CapturingKeys() || h.m.detailModel.View() == "" || strings.Contains(plain(h.m), "fake client screen") {
 		t.Fatal("a click on Logs should show the logs, den having the keys")
 	}

@@ -158,6 +158,29 @@ func (h *harness) doubleClickText(text string) {
 	h.clickText(text)
 }
 
+// clickTab clicks the tab name in a full-screen view's tab bar.
+func (h *harness) clickTab(name string) {
+	h.t.Helper()
+	h.send(testkeys.Click(tabPos(h.t, h.m, name)))
+}
+
+// tabPos is where the tab name starts in a full-screen view's tab bar, where
+// each label follows "─ " or "│ ". The name may be on screen above the bar as
+// well: the runbook view shows its folder, which t.TempDir names after the
+// test (TestClickingHistory…), in full where the temporary folder is short.
+func tabPos(t testing.TB, m *AppModel, name string) (x, y int) {
+	t.Helper()
+	for row, line := range strings.Split(plain(m), "\n") {
+		for _, before := range []string{"─ ", "│ "} {
+			if col := strings.Index(line, before+name+" "); col >= 0 {
+				return len([]rune(line[:col+len(before)])), row
+			}
+		}
+	}
+	t.Fatalf("no tab %q on screen:\n%s", name, plain(m))
+	return 0, 0
+}
+
 // wheel turns the wheel one notch, up or down, with the pointer on the cell
 // at column x, row y.
 func (h *harness) wheel(x, y int, up bool) {
