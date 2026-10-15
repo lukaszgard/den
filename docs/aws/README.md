@@ -115,6 +115,25 @@ After a den login it is den's record; after a login den did not start, it is the
 current access token's expiry, which moves on at each renewal.
 When the pane is too narrow for the clock, the row keeps only the countdown.
 
+### Staying logged in
+
+With an `[sso-session]`, the access token in the AWS CLI's cache lasts one hour.
+The CLI and the SDKs swap in a new one from the refresh token, without a prompt,
+until the IAM Identity Center session ends. den does the same: every minute, and
+on `r` in the Connect list, it renews a session's access token that has run out.
+The file then stays valid for every reader (the Secrets pane, `den doctor`, tools
+outside den), even when nothing used AWS during that hour. A renewal never opens a
+browser. When one fails, because the IAM Identity Center session has ended, the
+session's log says why and the session reads as expired until you log in again.
+
+The Secrets pane and `den doctor` count a login as live while it can still be
+refreshed, not only while its access token is unexpired. After a den login, they
+follow the expiry den recorded, as the AWS pane does.
+
+No file records when the IAM Identity Center session ends. After a login made
+outside den, the token bar therefore shows the current access token's hour, and
+starts over at each renewal.
+
 From the command line, the session is an ordinary service:
 
 ```bash

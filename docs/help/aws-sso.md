@@ -15,6 +15,7 @@ The AWS panel lists the SSO sessions of your AWS config, how long each login has
 - Edit your AWS config and credentials files in `$EDITOR`.
 - Choose which sessions den shows, in which order and under which names, with `aws.sessions`.
 - Watch secrets and other panels follow a login by themselves: those waiting for it turn ready without a reload.
+- Stay logged in for as long as your IAM Identity Center session lasts: den renews a session's one-hour access token once it runs out, without a browser, so secrets, `den doctor` and tools outside den keep finding a valid login.
 - Keys: press `h` in the AWS panel.
 
 ## Before you start
@@ -68,6 +69,8 @@ aws:
 - A profile without `sso_session` (static keys, `credential_process`) is listed, but there is nothing to log in to.
 - A login needs a browser; it cannot happen in `den mcp` or a headless shell.
 - An entry naming a session that is not in the AWS config is skipped, with a warning in the Logs panel.
+- den cannot see when the IAM Identity Center session ends. Secrets count a login as live while it can be refreshed; when a renewal fails, the session's log says why and the session reads as expired.
+- After a login made outside den, the token bar shows the current access token's hour and starts over at each renewal.
 
 ## When it goes wrong
 

@@ -1,7 +1,9 @@
 package secrets
 
 import (
+	"maps"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -25,7 +27,8 @@ type AWSLogins struct {
 	readable bool
 	profiles map[string]ssoLogin
 	tokens   []config.SSOToken
-	loads    int // how often the files were read
+	den      *config.DenCache // den's record of its own logins (den.json)
+	loads    int              // how often the files were read
 }
 
 // ssoLogin is the SSO login a profile needs. The zero value is a profile
@@ -39,10 +42,11 @@ func NewAWSLogins(awsConfig string) *AWSLogins {
 }
 
 // Check returns why the named AWS profile cannot work, or "" when it looks
-// usable: it must exist in the AWS config and, for an SSO profile, have an
-// unexpired cached login. Nothing is checked for an empty name, and an
-// unreadable AWS config is not reported: the SDK or CLI may still find
-// credentials elsewhere (AWS_CONFIG_FILE, environment variables).
+// usable: it must exist in the AWS config and, for an SSO profile, have a
+// cached login the CLI and SDKs can still use. Nothing is checked for an
+// empty name, and an unreadable AWS config is not reported: the SDK or CLI
+// may still find credentials elsewhere (AWS_CONFIG_FILE, environment
+// variables).
 func (a *AWSLogins) Check(profile string, now time.Time) string {
 	if a == nil || a.path == "" || profile == "" {
 		return ""
@@ -60,21 +64,21 @@ func (a *AWSLogins) Check(profile string, now time.Time) string {
 	if login == (ssoLogin{}) {
 		return ""
 	}
-	// The cache keeps one file per session name and one per start URL, and
-	// old ones stay after a rename, so several tokens can match: any one that
-	// is still valid is a login, whatever order the files sort in.
-	for _, tok := range a.tokens {
-		if tok.Matches(login.session, login.startURL) && tok.ExpiresAt.After(now) {
-			return ""
-		}
+	// An expired access token is not the end of the login: the SDK renews it
+	// from the refresh token on the provider's next read, and den renews it
+	// too. Reading it as a logout blocked every read whenever the hour-long
+	// token ran out with nothing using AWS.
+	if !config.FindSSOLogin(login.session, login.startURL, a.tokens, a.den, now).Live {
+		return "SSO login expired — log in from the AWS pane"
 	}
-	return "SSO login expired — log in from the AWS pane"
+	return ""
 }
 
 // Stamp changes whenever an answer of Check may have: a login or logout, an
-// edit of the AWS config, a token running out. Comparing two stamps costs the
-// same however many items there are, so a caller can ask often and probe its
-// items only when the stamp moved.
+// edit of the AWS config, a token, a refresh token or one of den's logins
+// running out. Comparing two stamps costs the same however many items there
+// are, so a caller can ask often and probe its items only when the stamp
+// moved.
 func (a *AWSLogins) Stamp(now time.Time) string {
 	if a == nil || a.path == "" {
 		return ""
@@ -82,21 +86,29 @@ func (a *AWSLogins) Stamp(now time.Time) string {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.refresh()
-	b := make([]byte, 0, len(a.sig)+len(a.tokens))
+	b := make([]byte, 0, len(a.sig)+2*len(a.tokens)+len(a.den.Sessions)+1)
 	b = append(b, a.sig...)
-	for _, tok := range a.tokens {
-		if tok.ExpiresAt.After(now) {
+	flag := func(t time.Time) {
+		if t.After(now) {
 			b = append(b, '+')
 		} else {
 			b = append(b, '-')
 		}
+	}
+	for _, tok := range a.tokens {
+		flag(tok.ExpiresAt)
+		flag(tok.RefreshableUntil)
+	}
+	b = append(b, '|')
+	for _, session := range slices.Sorted(maps.Keys(a.den.Sessions)) {
+		flag(a.den.Sessions[session].ExpiresAt)
 	}
 	return string(b)
 }
 
 // refresh reads the files again if they changed since the last read. Only
 // what Check needs is kept: which login each profile uses and when each
-// cached login runs out.
+// cached login, and each of den's, runs out.
 func (a *AWSLogins) refresh() {
 	sig := a.signature()
 	if a.loaded && string(sig) == a.sig {
@@ -104,7 +116,8 @@ func (a *AWSLogins) refresh() {
 	}
 	a.loaded, a.sig = true, string(sig)
 	a.loads++
-	a.profiles, a.tokens = nil, config.ListSSOTokens(config.SSOCacheDir(a.path))
+	cache := config.SSOCacheDir(a.path)
+	a.profiles, a.tokens, a.den = nil, config.ListSSOTokens(cache), config.ReadDenCache(cache)
 
 	all, err := config.LoadAWSProfiles(a.path)
 	a.readable = err == nil

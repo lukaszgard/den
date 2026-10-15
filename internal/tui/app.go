@@ -444,6 +444,9 @@ func (m *AppModel) Init() tea.Cmd {
 		tea.RequestBackgroundColor,
 		waitForUpdate(m.manager),
 		reconcileRunningVPNs(m.ctx, m.manager),
+		// The first renewal at once: a login whose access token ran out while
+		// den was closed would otherwise read as expired for a minute.
+		func() tea.Msg { return ssoRenewMsg{} },
 		func() tea.Msg { return msgs.UpdateCheckStartedMsg{} },
 		updates.CheckForUpdates(cfg, m.logger),
 	}
@@ -530,6 +533,9 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for _, name := range msg.names {
 			cmds = append(cmds, m.vpnChanged(name, service.StatusConnected)...)
 		}
+
+	case ssoRenewMsg:
+		cmds = append(cmds, renewSSO(m.ctx, filterByType(m.manager.Services(), service.TypeAWS)), ssoRenewTick())
 
 	// ── tick ───────────────────────────────────────────────────────────────
 	case msgs.TickMsg:
@@ -1458,6 +1464,34 @@ func tickCmd(every time.Duration) tea.Cmd {
 	})
 }
 
+// ssoRenewEvery is how often the AWS SSO sessions' access tokens are renewed.
+// They last an hour; a minute keeps a token that ran out unused from staying
+// expired for long. A variable so tests can shorten it.
+var ssoRenewEvery = time.Minute
+
+// ssoRenewMsg asks for a renewal of every AWS SSO session's access token.
+type ssoRenewMsg struct{}
+
+func ssoRenewTick() tea.Cmd {
+	return tea.Tick(ssoRenewEvery, func(time.Time) tea.Msg { return ssoRenewMsg{} })
+}
+
+// renewSSO renews the access token of each AWS SSO session. A login made
+// before den started has no login of den's watching it, and starting one would
+// open the browser, so the TUI drives the renewal: RefreshToken renews a token
+// that ran out and never logs in. The Cmd ends, so no goroutine outlives den.
+func renewSSO(ctx context.Context, sessions []service.Service) tea.Cmd {
+	if len(sessions) == 0 {
+		return nil
+	}
+	return func() tea.Msg {
+		for _, svc := range sessions {
+			_ = svc.RefreshToken(ctx) // a failure is in the session's log
+		}
+		return nil
+	}
+}
+
 // waitForUpdate blocks until the manager has a service event and delivers it.
 // It replaced polling one event per tick, which let events queue up behind a
 // 100 ms tick and dropped them once the services' buffers filled.
@@ -1535,8 +1569,8 @@ func isRunning(svc service.Service) bool {
 
 // refreshesToken reports whether r (refresh token) means anything for svc: only
 // services holding an expiring IAM credential, plus AWS SSO sessions (whose
-// refresh re-reads the token cache). For the rest RefreshToken is a no-op, so
-// offering it would only mislead.
+// refresh renews an expired access token and re-reads the token cache). For
+// the rest RefreshToken is a no-op, so offering it would only mislead.
 func refreshesToken(svc service.Service) bool {
 	return svc.Info().Type == service.TypeAWS || service.HoldsToken(svc)
 }

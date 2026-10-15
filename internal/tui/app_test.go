@@ -521,6 +521,35 @@ func TestConnectPaneServiceActions(t *testing.T) {
 	}
 }
 
+// A login made before den started has no login of den's watching it, and
+// starting one would open the browser, so the TUI renews the SSO sessions'
+// access tokens itself, every minute. Only AWS sessions: on a tunnel,
+// RefreshToken mints a new credential.
+func TestSSORenewTickRefreshesAWSSessionsOnly(t *testing.T) {
+	sso := newSvc(service.TypeAWS, "corp")
+	db := fakeTokenSvc{newSvc(service.TypeRDS, "db")}
+	h := newHarness(t, managerWith(sso, db), nil)
+	defer func(every time.Duration) { ssoRenewEvery = every }(ssoRenewEvery)
+	ssoRenewEvery = time.Millisecond
+
+	_, cmd := h.m.Update(ssoRenewMsg{})
+	next := false
+	for _, msg := range runCmd(cmd) {
+		if _, ok := msg.(ssoRenewMsg); ok {
+			next = true
+		}
+	}
+	if _, _, n := sso.counts(); n != 1 {
+		t.Errorf("the SSO session was renewed %d times, want once", n)
+	}
+	if _, _, n := db.counts(); n != 0 {
+		t.Errorf("a database's credential was refreshed %d times by the SSO renewal", n)
+	}
+	if !next {
+		t.Error("no next renewal was scheduled")
+	}
+}
+
 // a on the Connect pane is the toggle the detail view calls auto-reconnect; a
 // flash saying only "reconnect" read as if it stopped the token refresh too.
 func TestConnectPaneAutoReconnect(t *testing.T) {

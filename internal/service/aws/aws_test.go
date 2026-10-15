@@ -2,12 +2,18 @@ package aws
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/aws/aws-sdk-go-v2/credentials/ssocreds"
+	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 
 	"github.com/lukaszgard/den/internal/config"
 	"github.com/lukaszgard/den/internal/service"
@@ -171,5 +177,201 @@ func TestLoginFailureShowsTheCLIMessage(t *testing.T) {
 	err := svc.State().Error
 	if err == nil || !strings.Contains(err.Error(), "cannot read /den/config-den") {
 		t.Errorf("error = %v, want the CLI's last line with the config path", err)
+	}
+}
+
+// fakeOIDC stands in for IAM Identity Center's CreateToken: it swaps refresh
+// token r1 for access token a2 and refresh token r2, valid an hour.
+type fakeOIDC struct {
+	mu    sync.Mutex
+	calls int
+	err   error
+}
+
+func (f *fakeOIDC) CreateToken(_ context.Context, in *ssooidc.CreateTokenInput, _ ...func(*ssooidc.Options)) (*ssooidc.CreateTokenOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls++
+	if f.err != nil {
+		return nil, f.err
+	}
+	if in.RefreshToken == nil || *in.RefreshToken != "r1" {
+		return nil, errors.New("InvalidGrantException: the refresh token was spent")
+	}
+	access, refresh := "a2", "r2"
+	return &ssooidc.CreateTokenOutput{AccessToken: &access, RefreshToken: &refresh, ExpiresIn: 3600}, nil
+}
+
+func (f *fakeOIDC) count() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.calls
+}
+
+// cachedLogin writes the session's token file as the AWS CLI does, its access
+// token running out at expires. refresh is the refresh token, "" for none.
+func cachedLogin(t *testing.T, dir, session string, expires time.Time, refresh string) string {
+	t.Helper()
+	tok := map[string]string{
+		"startUrl": "https://alpha.example/start", "region": "eu-central-1",
+		"accessToken": "a1", "expiresAt": expires.UTC().Format(time.RFC3339),
+		"clientId": "c", "clientSecret": "s",
+		"registrationExpiresAt": time.Now().AddDate(0, 3, 0).UTC().Format(time.RFC3339),
+	}
+	if refresh != "" {
+		tok["refreshToken"] = refresh
+	}
+	data, err := json.Marshal(tok)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := config.SSOTokenPath(dir, session)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// renewing is an SSO session whose token renewals go to oidc.
+func renewing(t *testing.T, dir string, oidc *fakeOIDC) *Service {
+	t.Helper()
+	svc := New("", "alpha", "", "https://alpha.example/start", "eu-central-1", "", dir, "")
+	svc.newOIDC = func(region string) ssocreds.CreateTokenAPIClient {
+		if region != "eu-central-1" {
+			t.Errorf("CreateToken in %q, want the session's sso_region", region)
+		}
+		return oidc
+	}
+	return svc
+}
+
+// The access token lasts an hour; without a renewal the file stays expired
+// for as long as nothing else uses AWS, and every reader of it — the Secrets
+// pane, den doctor, tools outside den — takes the login for over.
+func TestRefreshTokenRenewsAnExpiredToken(t *testing.T) {
+	dir := t.TempDir()
+	path := cachedLogin(t, dir, "alpha", time.Now().Add(-10*time.Minute), "r1")
+	oidc := &fakeOIDC{}
+	svc := renewing(t, dir, oidc)
+	if st := svc.State(); st.Status != service.StatusIdle {
+		t.Fatalf("status = %v before the renewal, want idle", st.Status)
+	}
+
+	if err := svc.RefreshToken(context.Background()); err != nil {
+		t.Fatalf("RefreshToken: %v", err)
+	}
+	if oidc.count() != 1 {
+		t.Fatalf("CreateToken called %d times, want once", oidc.count())
+	}
+	tok, ok := config.LoadSSOToken(path)
+	if !ok || time.Until(tok.ExpiresAt) < 50*time.Minute || !tok.Matches("", "https://alpha.example/start") {
+		t.Fatalf("token file after the renewal = %+v, %v; want an hour more, still the session's", tok, ok)
+	}
+	data, _ := os.ReadFile(path)
+	if !strings.Contains(string(data), `"a2"`) || !strings.Contains(string(data), `"r2"`) {
+		t.Errorf("the file does not hold the new tokens: %s", data)
+	}
+	if st := svc.State(); st.Status != service.StatusConnected {
+		t.Errorf("status = %v after the renewal, want connected", st.Status)
+	}
+	logs := strings.Join(svc.Logs(), "\n")
+	if !strings.Contains(logs, "renewed the SSO token, valid until") {
+		t.Errorf("the log does not say the token was renewed:\n%s", logs)
+	}
+	if strings.Contains(logs, "a2") || strings.Contains(logs, "r2") {
+		t.Errorf("a token reached the log:\n%s", logs)
+	}
+
+	// Valid again: nothing to renew.
+	if err := svc.RefreshToken(context.Background()); err != nil {
+		t.Fatalf("RefreshToken: %v", err)
+	}
+	if oidc.count() != 1 {
+		t.Errorf("CreateToken called for a valid token (%d calls)", oidc.count())
+	}
+}
+
+// A refresh token can be spent once: two renewals at the same moment (the
+// minute tick and r) must not both send it.
+func TestConcurrentRenewalsSpendTheRefreshTokenOnce(t *testing.T) {
+	dir := t.TempDir()
+	cachedLogin(t, dir, "alpha", time.Now().Add(-time.Minute), "r1")
+	oidc := &fakeOIDC{}
+	svc := renewing(t, dir, oidc)
+
+	var wg sync.WaitGroup
+	for range 4 {
+		wg.Go(func() { _ = svc.RefreshToken(context.Background()) })
+	}
+	wg.Wait()
+	if oidc.count() != 1 {
+		t.Errorf("CreateToken called %d times, want once", oidc.count())
+	}
+	if strings.Contains(strings.Join(svc.Logs(), "\n"), "could not renew") {
+		t.Errorf("a renewal failed:\n%s", strings.Join(svc.Logs(), "\n"))
+	}
+}
+
+func TestRefreshTokenWithoutARefreshTokenDoesNotRenew(t *testing.T) {
+	dir := t.TempDir()
+	cachedLogin(t, dir, "alpha", time.Now().Add(-10*time.Minute), "")
+	oidc := &fakeOIDC{}
+	svc := renewing(t, dir, oidc)
+
+	if err := svc.RefreshToken(context.Background()); err != nil {
+		t.Fatalf("RefreshToken: %v", err)
+	}
+	if oidc.count() != 0 {
+		t.Errorf("CreateToken called %d times without a refresh token", oidc.count())
+	}
+	if st := svc.State(); st.Status != service.StatusIdle {
+		t.Errorf("status = %v, want idle", st.Status)
+	}
+}
+
+// A renewal that fails — the IAM Identity Center session ended — leaves the
+// state to the files, and says so once rather than on every minute's try.
+func TestFailedRenewalIsLoggedOnce(t *testing.T) {
+	dir := t.TempDir()
+	cachedLogin(t, dir, "alpha", time.Now().Add(-10*time.Minute), "r1")
+	oidc := &fakeOIDC{err: errors.New("InvalidGrantException: the session ended")}
+	svc := renewing(t, dir, oidc)
+
+	for range 3 {
+		if err := svc.RefreshToken(context.Background()); err != nil {
+			t.Fatalf("RefreshToken: %v", err)
+		}
+	}
+	if oidc.count() != 3 {
+		t.Errorf("CreateToken called %d times, want every try", oidc.count())
+	}
+	if st := svc.State(); st.Status != service.StatusIdle {
+		t.Errorf("status = %v, want idle", st.Status)
+	}
+	logs := strings.Join(svc.Logs(), "\n")
+	if n := strings.Count(logs, "could not renew the SSO token"); n != 1 || !strings.Contains(logs, "the session ended") {
+		t.Errorf("want the failure logged once with its reason, got %d:\n%s", n, logs)
+	}
+}
+
+// The TUI renews every minute, and a login in progress must not be read as
+// idle (the browser is still open) nor have its file renewed under it.
+func TestRefreshTokenLeavesALoginInProgress(t *testing.T) {
+	dir := t.TempDir()
+	cachedLogin(t, dir, "alpha", time.Now().Add(-10*time.Minute), "r1")
+	oidc := &fakeOIDC{}
+	svc := renewing(t, dir, oidc)
+	svc.mu.Lock()
+	svc.state = service.RuntimeState{Status: service.StatusConnecting}
+	svc.mu.Unlock()
+
+	if err := svc.RefreshToken(context.Background()); err != nil {
+		t.Fatalf("RefreshToken: %v", err)
+	}
+	if st := svc.State(); st.Status != service.StatusConnecting {
+		t.Errorf("status = %v, want the login still connecting", st.Status)
+	}
+	if oidc.count() != 0 {
+		t.Errorf("CreateToken called %d times during a login", oidc.count())
 	}
 }
