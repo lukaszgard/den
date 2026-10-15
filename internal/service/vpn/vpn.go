@@ -50,15 +50,16 @@ var (
 // attemptOutcome records how one connect attempt ended, which decides whether a
 // retry is safe. outcomeLoginTimeout is disqualifying: it means the login
 // never finished, and repeating that is what exhausts the gateway's session
-// slots until it 403s every new login. outcomeFatal is too: the machine itself
-// cannot run the tunnel, so every retry would only cost another SAML login.
+// slots until it 403s every new login. outcomeFatal is too: something on the
+// machine stops the tunnel from coming up (no PPP in the kernel, or a VPN left
+// running), so every retry would only cost another SAML login.
 type attemptOutcome int
 
 const (
 	outcomeFailed       attemptOutcome = iota // never came up, but the login did not hang
 	outcomeConnected                          // reached connected, then dropped
 	outcomeLoginTimeout                       // SAML login never completed — never retry this
-	outcomeFatal                              // no PPP in the kernel, no SAML in openfortivpn — never retry this
+	outcomeFatal                              // no PPP in the kernel, no SAML in openfortivpn, a VPN left running — never retry this
 )
 
 // The TUI discovers the r/H key bindings by type-asserting to these, so losing
@@ -475,7 +476,7 @@ func (s *Service) nextRetry(ctx context.Context, attempt int) (time.Duration, bo
 		return 0, false
 	}
 	if outcome == outcomeFatal {
-		s.log("not reconnecting: this machine cannot run the tunnel until the error above is fixed")
+		s.log("not reconnecting until the error above is fixed")
 		return 0, false
 	}
 	if attempt >= len(reconnectDelays) {
@@ -494,13 +495,17 @@ func (s *Service) nextRetry(ctx context.Context, attempt int) (time.Duration, bo
 func (s *Service) runOnce(ctx context.Context) {
 	// A second openfortivpn over one still running costs a SAML login and a
 	// gateway session slot, and cannot come up: the first one holds ppp0 and the
-	// DNS. Start adopts a tunnel it found, so one here is a process den could not
-	// take over or stop, such as one hung in its logout after a stop. That is
-	// fatal, so a reconnect stops here too rather than retrying.
-	if pids := openfortivpnPIDs(); len(pids) > 0 {
-		pid := strings.Join(pids, ", ")
-		s.log(fmt.Sprintf("not starting openfortivpn: one is already running (pid %s)", pid))
-		s.markFatal(fmt.Sprintf("openfortivpn is still running (pid %s) — press d to stop it, then c", pid))
+	// DNS. So does a pppd one left behind, whose ppp0 would push the new tunnel
+	// onto ppp1 while den watches ppp0. Start adopts a tunnel it found, so either
+	// is a process den could not take over or stop, such as one hung in its
+	// logout after a stop. That is fatal, so a reconnect stops here too rather
+	// than retrying.
+	if procs := leftoverProcs(); len(procs) > 0 {
+		what := describeLeftovers(procs)
+		kill, _ := manualCommands(runtime.GOOS, s.slug, leftoverPIDs(procs), false)
+		// The command goes in the log, which outlasts any message on screen.
+		s.log(fmt.Sprintf("not starting openfortivpn: %s — to stop it yourself: %s", what, kill))
+		s.markFatal(what + " — press d to stop it, then c")
 		return
 	}
 	s.setState(service.RuntimeState{Status: service.StatusConnecting})

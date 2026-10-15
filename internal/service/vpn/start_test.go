@@ -127,28 +127,43 @@ func TestStartAdoptsOnlyOnce(t *testing.T) {
 
 // A stop that left openfortivpn hung in its logout used to be followed by a
 // second openfortivpn on top of it, whose SAML login could only time out while
-// holding a gateway session slot. Whatever is running when a connect starts is
-// a process den could not take over or stop, so the connect refuses, and a
-// reconnect gives up instead of retrying it.
+// holding a gateway session slot. An orphaned pppd does the same harm: it keeps
+// ppp0, so the new tunnel's pppd gets ppp1 while den watches ppp0. Whatever is
+// running when a connect starts is a process den could not take over or stop,
+// so the connect refuses, and a reconnect gives up instead of retrying it.
 func TestRunOnceRefusesASecondOpenfortivpn(t *testing.T) {
-	s := newSvc(t, &config.VPNSpec{Reconnect: true})
-	// No sudo, osascript or pkexec on PATH: an attempt past the check fails
-	// with their error, not this one.
-	fakePATH(t, map[string]string{"pgrep": "echo 4242"})
+	for _, c := range []struct {
+		name, ps, want string
+	}{
+		{"openfortivpn", "4242 1 01:00 /usr/local/bin/openfortivpn -c /opt/den/etc/test.conf",
+			"openfortivpn (pid 4242) is still running"},
+		{"orphaned pppd", "29035 1 03-13:40:22 /usr/sbin/pppd 230400 :169.254.2.1 noipdefault",
+			"pppd (pid 29035) is still running"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			s := newSvc(t, &config.VPNSpec{Reconnect: true})
+			// No sudo, osascript or pkexec on PATH: an attempt past the check
+			// fails with their error, not this one.
+			fakePATH(t, map[string]string{"ps": psPrints(c.ps)})
 
-	s.runOnce(t.Context())
+			s.runOnce(t.Context())
 
-	st := s.State()
-	if st.Status != service.StatusError || st.Error == nil || !strings.Contains(st.Error.Error(), "openfortivpn is still running (pid 4242)") {
-		t.Fatalf("state = %+v, want an error naming pid 4242", st)
-	}
-	s.mu.RLock()
-	outcome := s.outcome
-	s.mu.RUnlock()
-	if outcome != outcomeFatal {
-		t.Errorf("outcome = %v, want outcomeFatal", outcome)
-	}
-	if _, retry := s.nextRetry(t.Context(), 0); retry {
-		t.Error("a reconnect would start a second openfortivpn")
+			st := s.State()
+			if st.Status != service.StatusError || st.Error == nil || !strings.Contains(st.Error.Error(), c.want) {
+				t.Fatalf("state = %+v, want an error saying %q", st, c.want)
+			}
+			if logs := strings.Join(s.Logs(), "\n"); !strings.Contains(logs, "to stop it yourself: sudo kill ") {
+				t.Errorf("the log does not say how to stop it by hand:\n%s", logs)
+			}
+			s.mu.RLock()
+			outcome := s.outcome
+			s.mu.RUnlock()
+			if outcome != outcomeFatal {
+				t.Errorf("outcome = %v, want outcomeFatal", outcome)
+			}
+			if _, retry := s.nextRetry(t.Context(), 0); retry {
+				t.Error("a reconnect would start a second openfortivpn")
+			}
+		})
 	}
 }

@@ -91,7 +91,7 @@ func killHung(match string) string {
 // exit, keeping ppp0 and the VPN's split DNS. One survived a stop that way for
 // days. So whatever still answers kill -0 after 5 s is KILLed. The pids stay in
 // $orphans, for the helper's final check.
-const reapOrphanedPPPD = `orphans=; for p in $(pgrep -f ':169.254.2.1 noipdefault' 2>/dev/null); do ` +
+const reapOrphanedPPPD = `orphans=; for p in $(pgrep -f '` + pppdMatch + `' 2>/dev/null); do ` +
 	`[ "$(ps -o comm= -p "$p" 2>/dev/null | sed 's|.*/||')" = pppd ] || continue; ` +
 	`if [ "$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')" = 1 ]; then orphans="$orphans $p"; fi; done; ` +
 	`if [ -n "$orphans" ]; then kill -TERM $orphans 2>/dev/null || true; ` +
