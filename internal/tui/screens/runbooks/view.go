@@ -282,6 +282,19 @@ func (v View) TerminalAt(x, y int) bool {
 	return x >= 1 && x < 1+cols && y >= top && y < top+rows // 1: the box's left border
 }
 
+// TextArea is the inside of the view's box, where a drag selects text: the
+// box starts on the first row of the screen, and its border is one cell.
+func (v View) TextArea() components.Rect {
+	return components.Rect{X0: 1, Y0: 1, X1: v.width - 1, Y1: 1 + v.boxInnerHeight()}
+}
+
+// PopUp reports that a pop-up covers the view, as Render draws it: a run's
+// parameters or confirmation, a move, a fork, a delete, a resend or E's
+// request. A drag selects nothing then, as a click answers none of them.
+func (v View) PopUp() bool {
+	return v.flow.active() || v.mig.active() || v.fork.active() || v.del.active() || v.resend.active() || v.ask != nil
+}
+
 // asking reports that a pop-up or a question has the keyboard: a run's
 // parameters or confirmation, a move, a fork, a delete, a resend, E's request,
 // a tab's new name or its close. The mouse answers none of them.

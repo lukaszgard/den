@@ -17,10 +17,15 @@ import (
 	"github.com/lukaszgard/den/internal/config"
 	"github.com/lukaszgard/den/internal/runbook"
 	"github.com/lukaszgard/den/internal/termsession"
+	"github.com/lukaszgard/den/internal/tui/components"
 )
 
-// runbookE2EEnv names the runbook folder TestHelperDenRunbooks shows.
-const runbookE2EEnv = "DEN_RUNBOOK_E2E_DIR"
+// runbookE2EEnv names the runbook folder TestHelperDenRunbooks shows, and
+// clipboardE2EEnv the file it copies to in place of the system clipboard.
+const (
+	runbookE2EEnv   = "DEN_RUNBOOK_E2E_DIR"
+	clipboardE2EEnv = "DEN_E2E_CLIPBOARD"
+)
 
 // TestHelperDenRunbooks is not a test: it is den with one runbook folder,
 // started by TestRunbookViewEndToEnd. Its terminals are real shells.
@@ -37,6 +42,11 @@ func TestHelperDenRunbooks(t *testing.T) {
 		AWS:          &config.AWSSpec{ConfigPath: awsCfg, CredentialsPath: awsCfg},
 		Environments: map[string]config.EnvSpec{"dev": {AWSProfile: "dev-profile"}},
 		Runbooks:     &config.RunbooksConfig{Dirs: []string{root}},
+	}
+	// What den copies goes to a file the test reads, never to the
+	// developer's clipboard; without one the copy falls back to OSC 52.
+	components.WriteClipboard = func(text string) error {
+		return os.WriteFile(os.Getenv(clipboardE2EEnv), []byte(text), 0o600)
 	}
 	m := New(managerWith(), Options{
 		ConfigPath:     filepath.Join(filepath.Dir(root), "den.yaml"),

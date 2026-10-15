@@ -194,6 +194,10 @@ type AppModel struct {
 		id string
 		at time.Time
 	}
+	// sel is the text a drag selects, and screenText the last frame without
+	// its highlight: what a drag copies is what was on screen.
+	sel        selection
+	screenText string
 
 	// terminals are the terminal tabs of each service that has any, and
 	// startTerminal runs a client for one. See terminals.go.
@@ -441,6 +445,8 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.logger.Trace(fmt.Sprintf("WindowSizeMsg: %dx%d", msg.Width, msg.Height))
 		m.width = msg.Width
 		m.height = msg.Height
+		// What a selection covered has moved.
+		m.sel = selection{}
 		// Panes keep their cursor, filter and scroll position across a resize.
 		rw := max(msg.Width-leftPaneWidth-1, 10)
 		for _, id := range allPanes {
@@ -745,6 +751,8 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			focus = "right/" + string(m.currentPane())
 		}
 		m.logger.Trace("key: " + msg.String() + " [" + focus + "]")
+		// A key ends a selection, as in a terminal; the key still counts.
+		m.sel = selection{}
 
 		// The shortcuts pop-up takes every key: esc closes it before what is
 		// under it, and a c or d pressed while reading what it does must not
@@ -833,16 +841,28 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// mouse.go.
 	case tea.MouseClickMsg:
 		if msg.Button == tea.MouseLeft {
+			m.sel = selection{}
 			cmds = append(cmds, m.click(msg.X, msg.Y)...)
+			m.press(msg.X, msg.Y)
 		}
 
+	case tea.MouseMotionMsg:
+		if msg.Button == tea.MouseLeft {
+			m.drag(msg.X, msg.Y)
+		}
+
+	// Not every terminal says which button was let go of.
+	case tea.MouseReleaseMsg:
+		cmds = append(cmds, m.release())
+
 	case tea.MouseWheelMsg:
+		m.sel = selection{}
 		if msg.Button == tea.MouseWheelUp || msg.Button == tea.MouseWheelDown {
 			cmds = append(cmds, m.wheel(msg)...)
 		}
 
-	// A release or a move of the mouse is nothing to den; without this case
-	// they would reach the Secrets pane below.
+	// A mouse message of a kind den does not know is nothing to it; without
+	// this case it would reach the Secrets pane below.
 	case tea.MouseMsg:
 
 	// ── paste ──────────────────────────────────────────────────────────────
@@ -1008,11 +1028,16 @@ func (m *AppModel) handleRightKey(msg tea.KeyPressMsg) []tea.Cmd {
 
 // View is the root model's screen. den runs on the terminal's alternate screen,
 // which a view asks for itself; the panes and components below it draw plain
-// strings. It also asks for the clicks and the wheel, and takes out of the
-// frame the zones the panes marked, remembering where they landed.
+// strings. It also asks for the clicks and the wheel, takes out of the frame
+// the zones the panes marked, remembering where they landed, and draws the
+// selection of a drag over it.
 func (m *AppModel) View() tea.View {
 	content, cursor := m.screen()
 	content, m.zones = components.ScanZones(content)
+	m.screenText = content
+	if m.sel.shown {
+		content = components.Highlight(content, m.sel.spans())
+	}
 	v := tea.NewView(content)
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeCellMotion

@@ -53,6 +53,18 @@ func (sc screen) doubleClick(text string) {
 	sc.clickAt(x, y)
 }
 
+// drag presses the left button on the first cell of from, moves to the last
+// cell of to and lets go there: 32 is the left button held while the pointer
+// moves.
+func (sc screen) drag(from, to string) {
+	x0, y0 := sc.at(from)
+	x1, y1 := sc.at(to)
+	x1 += ansi.StringWidth(to) - 1
+	sc.mouse(0, x0, y0, false)
+	sc.mouse(32, x1, y1, false)
+	sc.mouse(0, x1, y1, true)
+}
+
 // wheelDown is one notch of the wheel down with the pointer on text.
 func (sc screen) wheelDown(text string) {
 	x, y := sc.at(text)
@@ -83,10 +95,11 @@ func TestMouseEndToEnd(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	clip := filepath.Join(t.TempDir(), "clipboard")
 	s, err := termsession.Start(termsession.Command{
 		Path: os.Args[0],
 		Args: []string{"-test.run=^TestHelperDenRunbooks$"},
-		Env:  []string{runbookE2EEnv + "=" + root, "HOME=" + t.TempDir(), "SHELL=/bin/sh"},
+		Env:  []string{runbookE2EEnv + "=" + root, clipboardE2EEnv + "=" + clip, "HOME=" + t.TempDir(), "SHELL=/bin/sh"},
 	}, 120, 36)
 	if err != nil {
 		t.Fatal(err)
@@ -124,4 +137,20 @@ func TestMouseEndToEnd(t *testing.T) {
 	den.waitFor("Alpha's view", func(s string) bool {
 		return strings.Contains(s, "NEVER RUN") && strings.Contains(s, "runbook  Alpha")
 	})
+
+	// Back on the list, a drag from Alpha to Beta copies both rows of the
+	// panel, and nothing of the menu beside it.
+	den.esc()
+	den.waitGone("NEVER RUN")
+	den.drag("Alpha", "Beta")
+	den.waitText("copied 2 lines")
+	data, err := os.ReadFile(clip)
+	if err != nil {
+		t.Fatal(err)
+	}
+	copied := string(data)
+	if !strings.HasPrefix(copied, "Alpha") || !strings.HasSuffix(copied, "Beta") || strings.Count(copied, "\n") != 1 ||
+		strings.Contains(copied, "Runbooks") {
+		t.Fatalf("copied %q, want Alpha's row from its name and Beta's up to its name", copied)
+	}
 }
