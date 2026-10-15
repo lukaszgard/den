@@ -211,6 +211,30 @@ func TestScriptBakesInTheBinaryAndPrefix(t *testing.T) {
 	}
 }
 
+// The protocol line stays "den-vpn 1" when the script changes, so an old
+// wrapper keeps working with its old stop; only a comparison with the script
+// this den would install tells the user to reinstall it.
+func TestScriptOutdated(t *testing.T) {
+	current := Script("/x/openfortivpn")
+	if ScriptOutdated(current) {
+		t.Error("the script this den installs reads as outdated")
+	}
+	changed := strings.Replace(current, "sleep 1\n", "sleep 2\n", 1)
+	if changed == current {
+		t.Fatal("test setup: nothing replaced")
+	}
+	if !ScriptOutdated(changed) {
+		t.Error("a script with one line changed reads as current")
+	}
+	noBinary := strings.Replace(current, "OPENFORTIVPN='/x/openfortivpn'\n", "", 1)
+	if !ScriptOutdated(noBinary) {
+		t.Error("a script without an OPENFORTIVPN line reads as current")
+	}
+	if !ScriptOutdated("") {
+		t.Error("an empty file reads as current")
+	}
+}
+
 // The stop sweep used to be gated on the pidfile kill having failed, so a
 // session den had lost track of survived every later stop, kept its slot on the
 // gateway, and eventually made it refuse new SAML logins. Nothing about that is

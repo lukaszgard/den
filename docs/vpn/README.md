@@ -63,7 +63,11 @@ You don't have permission to access /remote/saml/start on this server.
 
 den now tears the process down whenever a tunnel drops, times out mid-login, or
 loses its interface, and `den vpn install-helper`'s stop sweeps for strays rather
-than only killing the pid it recorded. To check and clear by hand:
+than only killing the pid it recorded. openfortivpn logs out of the gateway when
+it is told to stop, and over a dead connection that logout never returns, so the
+stop gives it 5 seconds and then kills it outright. When one survives even that,
+the helper's stop fails and names its pid in the VPN log. To check and clear by
+hand:
 
 ```bash
 pgrep -x openfortivpn           # more than one pid means strays
@@ -82,9 +86,10 @@ openfortivpn's fixed ppp peer address plus a parent of init so a live tunnel's
 pppd is never touched. Note that macOS hides root processes' command lines from
 non-root callers, so this sweep only sees them because it runs as root.
 
-**If the privilege helper was installed before this change, reinstall it** —
-the stop logic lives in the installed script, so `den vpn install-helper` has to
-run again for the sweep to take effect.
+The stop logic lives in the installed script, so a helper installed by an older
+den keeps its older stop. `den vpn status` shows `script: outdated` and `den
+doctor` warns when the installed script is not the one this den would install;
+re-run `den vpn install-helper` then.
 
 ## Prerequisites
 
@@ -242,7 +247,7 @@ disconnect asks for anything**.
 
 ```bash
 den vpn install-helper      # prints everything it will write, then asks for your password once
-den vpn status              # usable / not usable, and per-profile state
+den vpn status              # usable / not usable, script current / outdated, per-profile state
 den vpn uninstall-helper    # back to the admin prompt
 ```
 

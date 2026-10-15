@@ -353,6 +353,7 @@ func (s *Service) killTunnel(ctx context.Context) {
 	if helper, _ := Available(ctx); helper {
 		name, args = helperCommand("stop", s.slug)
 		s.log("tearing down VPN via the privilege helper — no admin prompt")
+		s.logOutdatedHelper()
 	} else {
 		name, args, err = stopCommand(s.spec.Gateway, s.spec.ConfigFilePath())
 		if err == nil {
@@ -486,6 +487,7 @@ func (s *Service) logConnectionMode(helper bool, why string) {
 		s.log(fmt.Sprintf("privilege mode: passwordless helper (%s) — no admin prompt", HelperPath))
 		s.log(fmt.Sprintf("profile: %s (%s)", s.slug, HelperConfPath(s.slug)))
 		s.log(fmt.Sprintf("command: sudo -n %s start %s", HelperPath, s.slug))
+		s.logOutdatedHelper()
 		return
 	}
 	s.log("privilege mode: admin prompt — " + why)
@@ -514,6 +516,14 @@ func (s *Service) logConnectionMode(helper bool, why string) {
 	}
 	cmdParts = append(cmdParts, s.spec.ExtraArgs...)
 	s.log(fmt.Sprintf("command: %s", strings.Join(cmdParts, " ")))
+}
+
+// logOutdatedHelper says so when the installed wrapper is older than this den's,
+// so the log explains a stop that left openfortivpn running.
+func (s *Service) logOutdatedHelper() {
+	if outdated, _ := InstalledScriptOutdated(); outdated {
+		s.log("the installed helper script is outdated — " + OutdatedScriptFix)
+	}
 }
 
 // runHelper starts the tunnel through the privilege helper. The helper returns

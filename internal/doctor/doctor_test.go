@@ -16,6 +16,7 @@ import (
 	"github.com/lukaszgard/den/internal/prereq"
 	"github.com/lukaszgard/den/internal/secrets"
 	"github.com/lukaszgard/den/internal/service"
+	"github.com/lukaszgard/den/internal/service/vpn"
 )
 
 var now = time.Date(2026, 9, 26, 12, 0, 0, 0, time.UTC)
@@ -488,5 +489,48 @@ func TestForVPNShowsTheSettingsFileWarnings(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].Status != Warn || got[0].Fix != "run chmod 600 /f.conf" || !strings.Contains(got[0].Detail, "den.yaml:4:") {
 		t.Errorf("vpn results = %+v", got)
+	}
+}
+
+// An installed helper older than this den's still answers its protocol, so den
+// keeps using it, and its stop leaves a hung openfortivpn running. Only doctor
+// and `den vpn status` say so.
+func TestCheckVPNHelper(t *testing.T) {
+	cfg := &config.Config{VPNs: []config.VPNSpec{{Name: "office", Gateway: "vpn.example.com"}}}
+	current := vpn.Script("/opt/homebrew/bin/openfortivpn")
+	machine := func(installed string) Deps {
+		d := fakeMachine(macWithBrew, nil, nil, nil)
+		d.ReadFile = func(name string) ([]byte, error) {
+			if name == vpn.HelperPath && installed != "" {
+				return []byte(installed), nil
+			}
+			return nil, os.ErrNotExist
+		}
+		return d
+	}
+
+	for _, c := range []struct {
+		name, installed string
+		want            Status
+	}{
+		{"current", current, OK},
+		{"outdated", strings.Replace(current, "sleep 1\n", "sleep 2\n", 1), Warn},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			r := find(t, Run(context.Background(), Input{Config: cfg, For: []string{"openfortivpn"}}, machine(c.installed)), "vpn helper")
+			if r.Status != c.want {
+				t.Fatalf("status = %s, want %s: %+v", r.Status, c.want, r)
+			}
+			if c.want == Warn && !strings.Contains(r.Fix, "den vpn install-helper") {
+				t.Errorf("fix = %q, want it to say to reinstall", r.Fix)
+			}
+		})
+	}
+
+	// No helper: den uses the admin prompt, and there is nothing to update.
+	for _, r := range Run(context.Background(), Input{Config: cfg, For: []string{"openfortivpn"}}, machine("")) {
+		if r.Check == "vpn helper" {
+			t.Errorf("no helper installed, yet: %+v", r)
+		}
 	}
 }

@@ -252,6 +252,34 @@ func Script(openfortivpnPath string) string {
 	).Replace(helperScript)
 }
 
+// OutdatedScriptFix is what den says wherever it finds an outdated helper.
+const OutdatedScriptFix = "re-run: den vpn install-helper (its stop cannot clear a hung openfortivpn)"
+
+// ScriptOutdated reports whether installed, the text of an installed wrapper,
+// differs from the one this den would install. The protocol line does not
+// change when the script does, so an older wrapper keeps working — and keeps
+// its older stop — until someone tells the user to reinstall it.
+func ScriptOutdated(installed string) bool {
+	for line := range strings.SplitSeq(installed, "\n") {
+		if path, ok := strings.CutPrefix(line, "OPENFORTIVPN='"); ok {
+			path, ok = strings.CutSuffix(path, "'")
+			return !ok || Script(path) != installed
+		}
+	}
+	return true
+}
+
+// InstalledScriptOutdated reads the installed wrapper (0755, so the user can)
+// and reports whether it is outdated. The error is os.ReadFile's: one wrapping
+// fs.ErrNotExist means the helper is not installed.
+func InstalledScriptOutdated() (bool, error) {
+	data, err := os.ReadFile(HelperPath)
+	if err != nil {
+		return false, err
+	}
+	return ScriptOutdated(string(data)), nil
+}
+
 const helperScript = `#!/bin/sh
 # den VPN privilege helper — installed by ` + "`den vpn install-helper`" + `.
 #
