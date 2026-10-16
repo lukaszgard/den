@@ -50,15 +50,16 @@ var (
 // attemptOutcome records how one connect attempt ended, which decides whether a
 // retry is safe. outcomeLoginTimeout is disqualifying: it means the login
 // never finished, and repeating that is what exhausts the gateway's session
-// slots until it 403s every new login. outcomeFatal is too: the machine itself
-// cannot run the tunnel, so every retry would only cost another SAML login.
+// slots until it 403s every new login. outcomeFatal is too: something on the
+// machine stops the tunnel from coming up (no PPP in the kernel, or a VPN left
+// running), so every retry would only cost another SAML login.
 type attemptOutcome int
 
 const (
 	outcomeFailed       attemptOutcome = iota // never came up, but the login did not hang
 	outcomeConnected                          // reached connected, then dropped
 	outcomeLoginTimeout                       // SAML login never completed — never retry this
-	outcomeFatal                              // no PPP in the kernel, no SAML in openfortivpn — never retry this
+	outcomeFatal                              // no PPP in the kernel, no SAML in openfortivpn, a VPN left running — never retry this
 )
 
 // The TUI discovers the r/H key bindings by type-asserting to these, so losing
@@ -68,6 +69,9 @@ const (
 var (
 	_ service.Reconnectable   = (*Service)(nil)
 	_ service.HealthCheckable = (*Service)(nil)
+	// The TUI checks for leftovers before a connect and after a stop only
+	// through this.
+	_ service.LeftoverAware = (*Service)(nil)
 )
 
 // Service implements service.Service for openfortivpn-based VPN connections.
@@ -91,6 +95,11 @@ type Service struct {
 	healthCheck bool
 
 	outcome attemptOutcome // how the current connect attempt ended; guarded by mu
+
+	// found is set by New when a tunnel from an earlier session is up, and
+	// taken by the first Start, which adopts it rather than starting another.
+	// Guarded by mu.
+	found bool
 
 	// stopTunnel is killTunnel; tests replace it, since the real one stops
 	// whatever openfortivpn runs on this machine.
@@ -123,22 +132,20 @@ func New(name string, spec *config.VPNSpec) (*Service, error) {
 			Error:  fmt.Errorf("openfortivpn not found — install via `brew install openfortivpn` or `apt install openfortivpn`"),
 		}
 	} else if vpnIsRunning() {
-		// A tunnel from a previous den session (or a manual launch) is still up.
-		// Process + ppp0 alone don't prove the data path carries traffic — a dead
-		// tunnel can leave both lingering as zombies. When a health_check is set,
-		// confirm an internal host is actually reachable before adopting.
-		if spec.HealthCheck == "" || svc.dataPathAlive() {
-			// Seed Connected so the pane snapshot reflects it immediately; the TUI
-			// kicks StartOne on startup, which adopts and monitors it (see Start).
+		// A tunnel from a previous den session (or a manual launch) is still up;
+		// the TUI kicks StartOne on startup, which adopts and monitors it (see
+		// Start). Process + ppp0 alone don't prove the data path carries traffic —
+		// a dead tunnel can leave both lingering as zombies — but the health_check
+		// that would tell is not probed here: New runs on den's main goroutine, and
+		// a dead tunnel's split DNS made every probe wait out its timeout, holding
+		// den's start for about 7 s. monitorAdopted probes it in the background,
+		// and until then the VPN shows connecting.
+		svc.found = true
+		svc.state = service.RuntimeState{Status: service.StatusConnecting}
+		if spec.HealthCheck == "" {
 			svc.state = service.RuntimeState{
 				Status:     service.StatusConnected,
 				ConnectCmd: svc.ConnectCommand(),
-			}
-		} else {
-			svc.state = service.RuntimeState{
-				Status: service.StatusError,
-				Error: fmt.Errorf("openfortivpn and ppp0 are present but %s is unreachable — "+
-					"the tunnel data path appears dead; press d to disconnect, then c to reconnect", spec.HealthCheck),
 			}
 		}
 	}
@@ -170,11 +177,17 @@ func vpnIsRunning() bool {
 	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
 		return false
 	}
-	out, _ := exec.Command("pgrep", "-x", "openfortivpn").Output()
-	if len(strings.TrimSpace(string(out))) == 0 {
+	if len(openfortivpnPIDs()) == 0 {
 		return false
 	}
 	return interfaceExists("ppp0")
+}
+
+// openfortivpnPIDs lists the openfortivpn processes on this machine, whoever
+// started them, by process name (watchProcess says why not -f).
+func openfortivpnPIDs() []string {
+	out, _ := exec.Command("pgrep", "-x", "openfortivpn").Output()
+	return strings.Fields(string(out))
 }
 
 func (s *Service) Info() service.ServiceInfo {
@@ -262,17 +275,36 @@ func (s *Service) ToggleHealthCheck() bool {
 
 func (s *Service) RefreshToken(ctx context.Context) error { return nil }
 
+// Leftovers reports the openfortivpn and orphaned pppd processes that keep this
+// VPN from connecting, nil when none runs, with the commands that end them.
+func (s *Service) Leftovers(ctx context.Context) *service.Leftovers {
+	procs := leftoverProcs()
+	if len(procs) == 0 {
+		return nil
+	}
+	helper, _ := Available(ctx)
+	l := &service.Leftovers{AdminPrompt: !helper}
+	for _, p := range procs {
+		l.Processes = append(l.Processes, service.Leftover{Name: p.name, PID: p.pid, Age: p.age})
+	}
+	l.KillCommand, l.StopCommand = manualCommands(runtime.GOOS, s.slug, leftoverPIDs(procs), helper)
+	return l
+}
+
 func (s *Service) Start(ctx context.Context) (<-chan service.StatusUpdate, error) {
 	s.mu.Lock()
+	// New() found a tunnel already up; adopt it (monitor for drops) rather than
+	// launching a second openfortivpn. Its Connecting is New's, not a connect in
+	// progress.
+	adopt := s.found
 	// monitoring means a management goroutine (run or monitorAdopted) is already
 	// active for this service — refuse a second one.
-	if s.monitoring || s.state.Status == service.StatusConnecting {
+	if s.monitoring || (s.state.Status == service.StatusConnecting && !adopt) {
 		s.mu.Unlock()
 		return s.updates, service.ErrAlreadyRunning
 	}
-	// New() seeds StatusConnected when it detects a tunnel already up; adopt it
-	// (monitor for drops) rather than launching a second openfortivpn.
-	adopt := s.state.Status == service.StatusConnected
+	// Only the first Start adopts: after a Stop the tunnel is gone.
+	s.found = false
 	runCtx, cancel := context.WithCancel(ctx)
 	s.cancel = cancel
 	s.monitoring = true
@@ -292,7 +324,29 @@ func (s *Service) Start(ctx context.Context) (<-chan service.StatusUpdate, error
 // to StatusError via waitAfterConnected/failFromLastLine.
 func (s *Service) monitorAdopted(ctx context.Context) {
 	defer s.clearMonitoring()
+	// New saw only the process and ppp0, which a dead tunnel leaves behind too.
+	// A dead one is reported, not killed or reconnected: without the helper a
+	// kill raises an admin dialog, which must not pop up unasked at startup. A
+	// c then offers to stop it, since the TUI finds it among the leftovers.
+	if target := s.activeHealthCheck(); target != "" {
+		s.log(fmt.Sprintf("found a running openfortivpn — checking %s", target))
+		alive := s.dataPathAlive()
+		if ctx.Err() != nil {
+			return
+		}
+		if !alive {
+			s.setState(service.RuntimeState{
+				Status: service.StatusError,
+				Error: fmt.Errorf("openfortivpn and ppp0 are present but %s is unreachable — "+
+					"the tunnel data path appears dead; press c to stop it and reconnect", target),
+			})
+			return
+		}
+	}
 	s.log("adopted an already-running openfortivpn tunnel from a previous session")
+	if s.State().Status != service.StatusConnected {
+		s.setState(service.RuntimeState{Status: service.StatusConnected, ConnectCmd: s.ConnectCommand()})
+	}
 	// The tunnel is up, so a drop from here is retry-eligible just like one from a
 	// session den started itself. Nothing called markConnected on this path.
 	s.setOutcome(outcomeConnected)
@@ -318,6 +372,7 @@ func (s *Service) Stop(ctx context.Context) error {
 	cancel := s.cancel
 	logPath := s.logFilePath
 	s.monitoring = false
+	s.found = false // a Start after this must not adopt the tunnel it kills
 	s.mu.Unlock()
 
 	s.setState(service.RuntimeState{Status: service.StatusStopping})
@@ -353,6 +408,7 @@ func (s *Service) killTunnel(ctx context.Context) {
 	if helper, _ := Available(ctx); helper {
 		name, args = helperCommand("stop", s.slug)
 		s.log("tearing down VPN via the privilege helper — no admin prompt")
+		s.logOutdatedHelper()
 	} else {
 		name, args, err = stopCommand(s.spec.Gateway, s.spec.ConfigFilePath())
 		if err == nil {
@@ -440,7 +496,7 @@ func (s *Service) nextRetry(ctx context.Context, attempt int) (time.Duration, bo
 		return 0, false
 	}
 	if outcome == outcomeFatal {
-		s.log("not reconnecting: this machine cannot run the tunnel until the error above is fixed")
+		s.log("not reconnecting until the error above is fixed")
 		return 0, false
 	}
 	if attempt >= len(reconnectDelays) {
@@ -457,6 +513,21 @@ func (s *Service) nextRetry(ctx context.Context, attempt int) (time.Duration, bo
 }
 
 func (s *Service) runOnce(ctx context.Context) {
+	// A second openfortivpn over one still running costs a SAML login and a
+	// gateway session slot, and cannot come up: the first one holds ppp0 and the
+	// DNS. So does a pppd one left behind, whose ppp0 would push the new tunnel
+	// onto ppp1 while den watches ppp0. Start adopts a tunnel it found, so either
+	// is a process den could not take over or stop, such as one hung in its
+	// logout after a stop. That is fatal, so a reconnect stops here too rather
+	// than retrying.
+	if procs := leftoverProcs(); len(procs) > 0 {
+		what := describeLeftovers(procs)
+		kill, _ := manualCommands(runtime.GOOS, s.slug, leftoverPIDs(procs), false)
+		// The command goes in the log, which outlasts any message on screen.
+		s.log(fmt.Sprintf("not starting openfortivpn: %s — to stop it yourself: %s", what, kill))
+		s.markFatal(what + " — press c to stop it and connect")
+		return
+	}
 	s.setState(service.RuntimeState{Status: service.StatusConnecting})
 
 	helper, why := Available(ctx)
@@ -486,6 +557,7 @@ func (s *Service) logConnectionMode(helper bool, why string) {
 		s.log(fmt.Sprintf("privilege mode: passwordless helper (%s) — no admin prompt", HelperPath))
 		s.log(fmt.Sprintf("profile: %s (%s)", s.slug, HelperConfPath(s.slug)))
 		s.log(fmt.Sprintf("command: sudo -n %s start %s", HelperPath, s.slug))
+		s.logOutdatedHelper()
 		return
 	}
 	s.log("privilege mode: admin prompt — " + why)
@@ -514,6 +586,14 @@ func (s *Service) logConnectionMode(helper bool, why string) {
 	}
 	cmdParts = append(cmdParts, s.spec.ExtraArgs...)
 	s.log(fmt.Sprintf("command: %s", strings.Join(cmdParts, " ")))
+}
+
+// logOutdatedHelper says so when the installed wrapper is older than this den's,
+// so the log explains a stop that left openfortivpn running.
+func (s *Service) logOutdatedHelper() {
+	if outdated, _ := InstalledScriptOutdated(); outdated {
+		s.log("the installed helper script is outdated — " + OutdatedScriptFix)
+	}
 }
 
 // runHelper starts the tunnel through the privilege helper. The helper returns
@@ -864,8 +944,7 @@ func (s *Service) watchProcess(ctx context.Context, signalExit func(exitReason))
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			pgrepOut, _ := exec.Command("pgrep", "-x", "openfortivpn").Output()
-			processOk := len(strings.TrimSpace(string(pgrepOut))) > 0
+			processOk := len(openfortivpnPIDs()) > 0
 			interfaceOk := interfaceExists("ppp0")
 			if !processOk || !interfaceOk {
 				misses++

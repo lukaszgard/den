@@ -802,6 +802,31 @@ func TestAdoptedVPNStartsItsTunnel(t *testing.T) {
 	}
 }
 
+// A VPN left up whose health_check has not answered yet is still adopted (its
+// Start runs the check), but its tunnel waits for the check to pass.
+func TestUncheckedVPNIsAdoptedButNotUp(t *testing.T) {
+	vpn := newSvc(service.TypeVPN, "Office VPN")
+	vpn.status = service.StatusConnecting
+	jump := &fakeBound{fakeSvc: newSvc(service.TypeTunnel, "jump"), vpn: "Office VPN", auto: true}
+	mgr := managerWith(vpn, jump)
+	h := newHarness(t, mgr, nil)
+
+	if msg := reconcileRunningVPNs(context.Background(), mgr)(); msg != nil {
+		t.Fatalf("an unchecked VPN was reported as up: %#v", msg)
+	}
+	if s, _, _ := vpn.counts(); s != 1 {
+		t.Fatalf("the VPN should be started once so its check runs, got %d", s)
+	}
+	if s, _, _ := jump.counts(); s != 0 {
+		t.Fatalf("tunnel starts = %d before the check passed, want 0", s)
+	}
+
+	h.send(vpnNow(vpn, service.StatusConnected))
+	if s, _, _ := jump.counts(); s != 1 {
+		t.Fatalf("tunnel starts = %d once the check passed, want 1", s)
+	}
+}
+
 // installNow delivers a finished update check and install for v9.9.9.
 func (h *harness) installNow() {
 	h.t.Helper()

@@ -16,9 +16,9 @@ import (
 // down until the VPN next comes up, and one they connected by hand is left alone
 // until the VPN next goes down.
 
-// vpnsAdoptedMsg lists the VPNs reconcileRunningVPNs took over at startup.
-// Adopting one sends no status event — its connected state is seeded when the
-// service is built — so this message stands in for "came up".
+// vpnsAdoptedMsg lists the VPNs reconcileRunningVPNs took over at startup
+// already connected. Adopting one sends no status event — its connected state
+// is seeded when the service is built — so this message stands in for "came up".
 type vpnsAdoptedMsg struct{ names []string }
 
 // vpnChanged records VPN name's new status and returns the commands that bring

@@ -3,7 +3,9 @@ package vpn
 import (
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -211,6 +213,30 @@ func TestScriptBakesInTheBinaryAndPrefix(t *testing.T) {
 	}
 }
 
+// The protocol line stays "den-vpn 1" when the script changes, so an old
+// wrapper keeps working with its old stop; only a comparison with the script
+// this den would install tells the user to reinstall it.
+func TestScriptOutdated(t *testing.T) {
+	current := Script("/x/openfortivpn")
+	if ScriptOutdated(current) {
+		t.Error("the script this den installs reads as outdated")
+	}
+	changed := strings.Replace(current, "sleep 1\n", "sleep 2\n", 1)
+	if changed == current {
+		t.Fatal("test setup: nothing replaced")
+	}
+	if !ScriptOutdated(changed) {
+		t.Error("a script with one line changed reads as current")
+	}
+	noBinary := strings.Replace(current, "OPENFORTIVPN='/x/openfortivpn'\n", "", 1)
+	if !ScriptOutdated(noBinary) {
+		t.Error("a script without an OPENFORTIVPN line reads as current")
+	}
+	if !ScriptOutdated("") {
+		t.Error("an empty file reads as current")
+	}
+}
+
 // The stop sweep used to be gated on the pidfile kill having failed, so a
 // session den had lost track of survived every later stop, kept its slot on the
 // gateway, and eventually made it refuse new SAML logins. Nothing about that is
@@ -258,6 +284,96 @@ func TestStopReapsOrphanedPPPD(t *testing.T) {
 				t.Error("does not verify the target is actually pppd")
 			}
 		})
+	}
+}
+
+// openfortivpn logs out of the gateway on TERM, and over a dead connection that
+// logout never returns. A stop that only sent TERM left one such process running
+// with its ppp interface and split DNS, printed "stopped", and den started a
+// second openfortivpn on top of it. Asserted on the text, like the sweep above:
+// running it would kill the developer's VPN.
+func TestStopEscalatesToKill(t *testing.T) {
+	stop := Script("/usr/bin/openfortivpn")
+	stop = stop[strings.Index(stop, "cmd_stop()"):]
+	stop = stop[:strings.Index(stop, "\ncmd_")]
+	paths := map[string]string{"helper script": stop}
+	if name, args, err := stopCommand("", "/tmp/x.conf"); err == nil {
+		paths["stopCommand"] = name + " " + strings.Join(args, " ")
+	}
+	if name, args, err := stopCommand("vpn.example.com", ""); err == nil {
+		paths["stopCommand with a gateway"] = name + " " + strings.Join(args, " ")
+	}
+
+	for where, body := range paths {
+		t.Run(where, func(t *testing.T) {
+			term := strings.LastIndex(body, "pkill -TERM")
+			kill := strings.Index(body, "pkill -KILL")
+			reap := strings.Index(body, "169.254.2.1")
+			if term < 0 || kill < 0 || reap < 0 {
+				t.Fatalf("TERM at %d, KILL at %d, pppd reap at %d; want all three", term, kill, reap)
+			}
+			if term >= kill || kill >= reap {
+				t.Errorf("want TERM, then KILL, then the pppd reap (a KILLed openfortivpn leaves its pppd); got %d, %d, %d", term, kill, reap)
+			}
+			// openfortivpn needs its chance to log out before it is KILLed.
+			if wait := strings.Index(body[term:], "sleep 0.1"); wait < 0 || term+wait > kill {
+				t.Error("KILLs without waiting for TERM first")
+			}
+		})
+	}
+
+	// The stop runs as `sh -c <it>`, so a plain -f pattern matches that shell
+	// and KILLs it before the pppd reap.
+	if body, ok := paths["stopCommand with a gateway"]; ok && strings.Contains(body, "'openfortivpn ") {
+		t.Error("the -f pattern matches the stop's own shell; write it as [o]penfortivpn")
+	}
+
+	// pppd answers TERM with an LCP terminate over a dead link and may never
+	// exit, so the reap escalates the way the openfortivpn stop does.
+	for where, body := range paths {
+		t.Run(where+" pppd reap", func(t *testing.T) {
+			reap := body[strings.Index(body, "169.254.2.1"):]
+			term := strings.Index(reap, "kill -TERM")
+			kill := strings.Index(reap, "kill -KILL")
+			if term < 0 || kill < term {
+				t.Fatalf("pppd TERM at %d, KILL at %d; want TERM, then KILL", term, kill)
+			}
+			if wait := strings.Index(reap[term:], "sleep 0.1"); wait < 0 || term+wait > kill {
+				t.Error("KILLs pppd without waiting for TERM first")
+			}
+		})
+	}
+
+	// "stopped" is only true when nothing is left; den logs a failing stop.
+	tail := stop[strings.Index(stop, "169.254.2.1"):]
+	check := strings.Index(tail, "pgrep -x openfortivpn")
+	fail := strings.Index(tail, "did not stop")
+	if check < 0 || fail < check || !strings.Contains(tail[fail:], "exit 1") {
+		t.Error("cmd_stop does not fail when openfortivpn survives the KILL")
+	}
+	pppd := strings.Index(tail, "pppd (pid")
+	if pppd < 0 || !strings.Contains(tail[pppd:], "did not stop") || !strings.Contains(tail[pppd:], "exit 1") {
+		t.Error("cmd_stop does not fail when an orphaned pppd survives the KILL")
+	}
+}
+
+// The stop scripts are only ever run as root, by the helper or behind an admin
+// prompt, so a syntax error would first show as a stop that did nothing.
+func TestStopScriptsParse(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("needs sh")
+	}
+	script := filepath.Join(t.TempDir(), "den-vpn")
+	if err := os.WriteFile(script, []byte(Script("/usr/bin/openfortivpn")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command("sh", "-n", script).CombinedOutput(); err != nil {
+		t.Errorf("helper script: %v\n%s", err, out)
+	}
+	for _, gateway := range []string{"", "vpn.example.com"} {
+		if out, err := exec.Command("sh", "-n", "-c", stopShell(gateway)).CombinedOutput(); err != nil {
+			t.Errorf("stopShell(%q): %v\n%s", gateway, err, out)
+		}
 	}
 }
 

@@ -18,6 +18,7 @@ commands, it never runs them.
 | session-manager-plugin | missing while services use SSM | — |
 | client and secret tools | — | `psql`, `mysql`, `redis-cli`, `mongosh`, `curl`, `docker`, `ssh`, `kubectl`, `sops`, `gpg`, `vault`, `keepassxc-cli`, `openfortivpn`… missing, older than den needs, installed off PATH, or not available on this OS |
 | SSO *session* | — | not logged in, or the login expired |
+| vpn helper (with a `vpn:` entry, once [installed](../vpn/README.md#passwordless-setup)) | — | the installed helper script is not the one this den would install: an older one's stop cannot clear a hung openfortivpn or pppd, so the fix is to re-run `den vpn install-helper` |
 | kernel PPP (Linux, with a `vpn:` entry) | with `--for vpn`: the kernel has no PPP driver | the kernel has no PPP driver, which openfortivpn's pppd needs: WSL 3.0.1's kernel, a kernel without `ppp_generic`, or a kernel whose modules were removed since boot |
 | local ports | — | a port is already taken (two services sharing a `local_port` is a `config` warning) |
 | secrets | — | a secret source cannot be read yet (missing file, expired login, no key to decrypt with); sources failing for the same reason share one line |

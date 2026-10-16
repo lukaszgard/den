@@ -25,6 +25,7 @@ import (
 	"github.com/lukaszgard/den/internal/prereq"
 	"github.com/lukaszgard/den/internal/secrets"
 	"github.com/lukaszgard/den/internal/service"
+	"github.com/lukaszgard/den/internal/service/vpn"
 )
 
 // Status is a check's verdict.
@@ -61,7 +62,8 @@ type Deps struct {
 	// SSMOnline reports whether an instance's SSM agent is online, as the
 	// given profile in the given region. Only --deep calls it.
 	SSMOnline func(ctx context.Context, profile, region, instanceID string) (bool, error)
-	// ReadFile reads what the kernel says about itself (/proc, /lib/modules).
+	// ReadFile reads what the kernel says about itself (/proc, /lib/modules)
+	// and the installed VPN helper.
 	ReadFile func(name string) ([]byte, error)
 }
 
@@ -127,6 +129,7 @@ func Run(ctx context.Context, in Input, d Deps) []Result {
 		}
 		if slices.Contains(in.For, "openfortivpn") {
 			out = append(out, checkVPNSettings(in)...)
+			out = append(out, checkVPNHelper(in, d)...)
 		}
 		return out
 	}
@@ -147,6 +150,7 @@ func Run(ctx context.Context, in Input, d Deps) []Result {
 	if needsPPPCheck(d, len(needs.tools["openfortivpn"]) > 0) {
 		add(checkPPP(d, Warn))
 	}
+	out = append(out, checkVPNHelper(in, d)...)
 
 	// Whether the profiles den.yaml names exist is the config check's, already
 	// reported above; what remains here is whether their logins are alive.
@@ -272,6 +276,24 @@ func checkVPNSettings(in Input) []Result {
 		}
 	}
 	return out
+}
+
+// checkVPNHelper reports whether the installed VPN helper is the one this den
+// would install. An older one still answers den's protocol, so den keeps using
+// it, but it is its stop that runs: one from before the KILL escalation leaves
+// a hung openfortivpn running. Nothing is reported when no helper is installed.
+func checkVPNHelper(in Input, d Deps) []Result {
+	if in.Config == nil || len(in.Config.VPNs) == 0 || d.ReadFile == nil {
+		return nil
+	}
+	data, err := d.ReadFile(vpn.HelperPath)
+	if err != nil {
+		return nil
+	}
+	if vpn.ScriptOutdated(string(data)) {
+		return []Result{{Check: "vpn helper", Status: Warn, Detail: vpn.HelperPath + " is outdated", Fix: vpn.OutdatedScriptFix}}
+	}
+	return []Result{{Check: "vpn helper", Status: OK, Detail: vpn.HelperPath + " is current"}}
 }
 
 // toolNeed is a tool the config depends on: who needs it and how bad its

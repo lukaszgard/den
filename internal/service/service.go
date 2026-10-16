@@ -174,6 +174,30 @@ type VPNBound interface {
 	ToggleAutoConnect() bool
 }
 
+// Leftover is one process of Leftovers.
+type Leftover struct {
+	Name string
+	PID  string
+	Age  time.Duration // how long it has run; zero when ps did not say
+}
+
+// Leftovers are processes from an earlier session that keep a service from
+// connecting, and the commands that end them by hand.
+type Leftovers struct {
+	Processes   []Leftover
+	KillCommand string // ends them by pid: sudo kill, or taskkill on Windows
+	StopCommand string // den's own stop as a person runs it; "" without the VPN helper
+	AdminPrompt bool   // den's stop raises the OS password dialog
+}
+
+// LeftoverAware is implemented by services that cannot connect while such
+// processes run (a VPN: a hung openfortivpn, or the pppd it leaves behind).
+type LeftoverAware interface {
+	// Leftovers reports what runs now, nil when nothing does. It runs ps and
+	// sudo -n, so callers keep it off the UI goroutine.
+	Leftovers(ctx context.Context) *Leftovers
+}
+
 // TokenHolder is implemented by services that hold an expiring credential the
 // user can refresh (r) and copy (p).
 type TokenHolder interface {

@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"os/user"
@@ -285,6 +287,16 @@ func vpnHelperStatus(ctx context.Context, w io.Writer) error {
 		fmt.Fprintln(w, "status:  usable — den connects and disconnects without a prompt")
 	} else {
 		fmt.Fprintf(w, "status:  not usable — %s\n", why)
+	}
+	switch outdated, err := vpnsvc.InstalledScriptOutdated(); {
+	case errors.Is(err, fs.ErrNotExist):
+		// Not installed: the status line already says so.
+	case err != nil:
+		fmt.Fprintf(w, "script:  cannot read: %v\n", err)
+	case outdated:
+		fmt.Fprintln(w, "script:  outdated — "+vpnsvc.OutdatedScriptFix)
+	default:
+		fmt.Fprintln(w, "script:  current")
 	}
 
 	profiles, err := loadVPNProfiles("")
