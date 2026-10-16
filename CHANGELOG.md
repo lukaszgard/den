@@ -1,5 +1,54 @@
 # Changelog
 
+## [1.8.0] - 2026-10-16
+
+**Go back to an older den from inside den.** Until now the Updates panel offered one version, the
+latest, so someone hit by a bad release had to find the install script and its `--version` flag.
+`v` in the Updates panel now lists every release, older ones included, and installs any of them;
+`den update` does the same from a shell. A version can be kept from coming back: skipped on one
+machine, pinned for a team, or yanked by the maintainers for everyone.
+
+### 🔄 Updates
+
+- `v` in the Updates panel opens the version picker: every release, newest first, with its date
+  and whether installing it is an upgrade or a downgrade, marked `rc`, `pinned`, `skipped`,
+  `⚠ yanked` with the reason, or `no <os>/<arch> build`. `enter` asks before it installs, and only
+  `y` answers: the question says which way it goes, why a release is yanked, that a den older
+  than 1.8.0 offers the latest release again and knows none of this, and that `den.yaml` keys
+  newer than the release are ignored or rejected by it. `s` shows a release's notes and `p`
+  shows release candidates.
+- A downgrade offers to skip the version you leave (on by default), so the next check does not
+  offer it straight back; it is saved once the install has worked. `x` in the picker skips or
+  unskips any version. The skip list is the machine's own, in `updates.json` in den's state
+  directory, which `den paths` lists.
+- `den update` says what the check offers and why; `den update list [--all]` lists the releases,
+  `den update install [VERSION] [--yes] [--skip-current]` installs one, older ones too, verified
+  against `checksums.txt` like the panel's install, and `den update skip|unskip VERSION` edits the
+  skip list. Outside a terminal `install` needs `--yes`. It reads only the `updates:` block of a
+  `den.yaml` with errors elsewhere, so a release that rejects your config can still install one
+  that accepts it. None of it is offered over MCP.
+- A yanked release is no longer offered, and a den running one with nothing newer to go to is
+  offered the newest good release below it. The panel says when the running release is yanked,
+  and why the check offered what it did.
+- The check now reads `releases.json`, the list of every release that each release publishes
+  from now on. It is one file of the release feed, so it costs no API call; until a release has
+  it the check reads `latest.json` as before, and the picker asks the releases API once. An S3
+  mirror copies `releases.json` with the other files to get the picker and the yanks.
+
+### 🔧 Configuration and checks
+
+- `updates.pin: v1.8.0` holds den on one version, older or newer than the running one: the check
+  offers it and nothing else. `den config --check` refuses a pin that is not a full version.
+- `updates.channel: prerelease` offers release candidates too; `stable`, the default, does not.
+
+### 📦 Install and updates
+
+- Release candidates (`vX.Y.Z-rc.N`) are published as GitHub prereleases, for people on the
+  prerelease channel to try before a release; `releases/latest` and the install scripts' default
+  ignore them.
+- Every pull request now builds its release archives, ready for `install.sh`, so a reviewer can
+  run a change before it is merged; `docs/updates` has the commands.
+
 ## [1.7.2] - 2026-10-16
 
 **A service you disconnect connects again.** After `d` on an RDS service, or any other service
