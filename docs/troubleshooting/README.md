@@ -45,13 +45,15 @@ then run `den doctor` again. The commands for every platform are in
 ### The local port is already in use
 
 **You see:** `port 5555 is already in use — is another ssh/tunnel still running?` for a
-tunnel, a service that never reaches `CONNECTED`, or `den doctor` warning `ports in use`
-or `local ports` (two services share a port).
+tunnel, `port 5432 is already in use — is another SSM session or den still running?` for
+a service (the transport's name in place of `SSM session`), a service that never reaches
+`CONNECTED`, or `den doctor` warning `ports in use` or `local ports` (two services share
+a port).
 
 **Why:** a tunnel is ready when its local port accepts connections, so something else
-holding the port, often a den you left running or an old `ssh -L`, either blocks the
-tunnel or answers in its place. Two services with the same `local_port` cannot be
-connected at once.
+holding the port, often a den you left running, an `aws ssm start-session` of your own
+or an old `ssh -L`, either blocks the tunnel or answers in its place. Two services with
+the same `local_port` cannot be connected at once.
 
 **Fix:** find the holder with `lsof -i :PORT` (on Windows `netstat -ano`) and stop it, or
 give the service another `local_port`. See [Configuration reference](../config/README.md).

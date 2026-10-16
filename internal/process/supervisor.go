@@ -58,8 +58,8 @@ type StartOptions struct {
 	Env []string
 	// Dir sets the child's working directory when non-empty.
 	Dir string
-	// ProcessGroup puts the child in its own process group so StopGraceful can
-	// signal the whole tree it spawns.
+	// ProcessGroup puts the child in its own process group so Stop,
+	// StopGraceful and a cancelled context reach the whole tree it spawns.
 	ProcessGroup bool
 	// OnLine, when set, is called for every stdout/stderr line as it is read.
 	// Unlike the events channel it never drops, and unlike the ring buffer it
@@ -214,13 +214,22 @@ func (s *Supervisor) StartWith(ctx context.Context, opts StartOptions, name stri
 	return nil
 }
 
-// Stop force-kills the process immediately. Use StopGraceful when the process
-// should get a chance to clean up first.
+// Stop force-kills the process immediately, with its whole group when it was
+// started in one. Use StopGraceful when the process should get a chance to
+// clean up first.
 func (s *Supervisor) Stop() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.cmd == nil || s.cmd.Process == nil {
 		return nil
+	}
+	// Killing the leader alone orphans what it started: aws runs
+	// session-manager-plugin as its child, and the plugin would keep the port
+	// and the output pipes, so wait would never see the process end. Only while
+	// running, which ends as wait reaps the leader: until then its PID, the
+	// group's ID, is not free for another process to take.
+	if s.running && s.pgid != 0 {
+		_ = killGroupID(s.pgid)
 	}
 	return s.cmd.Process.Kill()
 }

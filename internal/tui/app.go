@@ -240,6 +240,8 @@ type AppModel struct {
 	// restart is set when the user confirmed restarting into a freshly
 	// installed version; the CLI re-execs once the program has exited.
 	restart bool
+	// shutDown is set by the first Shutdown.
+	shutDown bool
 }
 
 // RestartRequested reports whether den quit to restart into a new version.
@@ -726,7 +728,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// ── restart into the installed version ─────────────────────────────────
 	case msgs.UpdateRestartMsg:
 		m.logger.Info("restarting into " + msg.Version)
-		m.shutdown()
+		m.Shutdown()
 		m.restart = true
 		return m, tea.Sequence(m.setPointer(pointerOwn), tea.Quit)
 
@@ -868,7 +870,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		// A q typed into a search box is text, not quit; ctrl+c still quits.
 		case key.Matches(msg, km.Quit) && (msg.String() != "q" || m.leftFocused || !m.inSearch()):
-			m.shutdown()
+			m.Shutdown()
 			return m, tea.Sequence(before, tea.Quit)
 
 		// A pop-up keeps tab: it would leave for the menu with the pop-up
@@ -1696,8 +1698,15 @@ func countRunning(svcs []service.Service) int {
 	return n
 }
 
-// shutdown stops everything den started, for a quit or a restart.
-func (m *AppModel) shutdown() {
+// Shutdown stops everything den started, for a quit or a restart. The CLI
+// calls it again once the program has ended, for the ways out that never reach
+// Update (a closed terminal, a SIGTERM), so only the first call does anything:
+// a second would stop the services again.
+func (m *AppModel) Shutdown() {
+	if m.shutDown {
+		return
+	}
+	m.shutDown = true
 	// First, while nothing is stopped yet: what was typed for an agent since
 	// the form last saved it.
 	m.runbooksPane.SaveDraft()

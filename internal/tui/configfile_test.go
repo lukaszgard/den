@@ -68,7 +68,7 @@ func newFileHarness(t *testing.T, yaml string) *fileHarness {
 		mgr.Reconcile(context.Background(), entries(cfg))
 	}
 	f.harness = &harness{t: t, m: New(mgr, Options{ConfigPath: f.path, Config: cfg, ConfigProblems: problems, Version: "test", ConfigFile: file})}
-	t.Cleanup(func() { f.m.shutdown() })
+	t.Cleanup(func() { f.m.Shutdown() })
 	f.send(tea.WindowSizeMsg{Width: 140, Height: 40})
 	return f
 }

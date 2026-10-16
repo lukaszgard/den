@@ -24,7 +24,7 @@ const panelX = leftPaneWidth + 10
 func configHarness(t *testing.T, cfg *config.Config, svcs ...service.Service) *harness {
 	t.Helper()
 	h := &harness{t: t, m: New(managerWith(svcs...), Options{ConfigPath: "den.yaml", Config: cfg, Version: "test"})}
-	t.Cleanup(func() { h.m.shutdown() })
+	t.Cleanup(func() { h.m.Shutdown() })
 	h.send(tea.WindowSizeMsg{Width: 140, Height: 40})
 	return h
 }
@@ -258,7 +258,7 @@ func TestClickingAConfigProblem(t *testing.T) {
 	}
 	h := &harness{t: t, m: New(managerWith(), Options{ConfigPath: path, Config: &config.Config{AWS: awsFiles(t, "")},
 		Version: "test", ConfigProblems: problems})}
-	t.Cleanup(func() { h.m.shutdown() })
+	t.Cleanup(func() { h.m.Shutdown() })
 	h.send(tea.WindowSizeMsg{Width: 140, Height: 40})
 	h.openPane(paneConfig)
 	h.press("right", "p")

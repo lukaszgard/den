@@ -124,7 +124,7 @@ func newHarness(t testing.TB, mgr *service.Manager, file *ConfigFile) *harness {
 	// Every test ends as den does when it quits: the clients in the terminal
 	// tabs exit and the manager closes, which releases the waiters send gave up
 	// on. Otherwise they would stay blocked for good.
-	t.Cleanup(func() { h.m.shutdown() })
+	t.Cleanup(func() { h.m.Shutdown() })
 	h.send(tea.WindowSizeMsg{Width: 140, Height: 40})
 	return h
 }
@@ -312,6 +312,22 @@ func TestQuitIsNotTypedIntoSearch(t *testing.T) {
 	h.press("q")
 	if !h.quit {
 		t.Fatal("q from the menu should quit")
+	}
+}
+
+// The CLI shuts den down again once the program has ended, for the ways out
+// that never reach Update. After a q that is already done, and doing it again
+// would stop the services a second time.
+func TestShutdownAfterQuitStopsNothingAgain(t *testing.T) {
+	svc := newSvc(service.TypeRDS, "db")
+	h := newHarness(t, managerWith(svc), nil)
+	h.press("q")
+	if !h.quit {
+		t.Fatal("q from the menu should quit")
+	}
+	h.m.Shutdown()
+	if _, stops, _ := svc.counts(); stops != 1 {
+		t.Fatalf("the service was stopped %d times, want once", stops)
 	}
 }
 
@@ -966,7 +982,7 @@ func secretsHarness(t *testing.T) (h *harness, login func()) {
 		}},
 	}
 	h = &harness{t: t, m: New(managerWith(), Options{ConfigPath: "den.yaml", Config: cfg, Version: "test"})}
-	t.Cleanup(func() { h.m.shutdown() })
+	t.Cleanup(func() { h.m.Shutdown() })
 	h.send(tea.WindowSizeMsg{Width: 140, Height: 40})
 	return h, func() {
 		t.Helper()
