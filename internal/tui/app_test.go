@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -100,13 +101,14 @@ func (t *fakeTunnel) HealthCheckTarget() string { return t.target }
 
 // harness is an AppModel plus the side effects its commands produced. The
 // addresses den asked to open in the browser are in opened: a test never
-// opens one.
+// opens one. What it wrote to the terminal itself (tea.Raw) is in raw.
 type harness struct {
 	t      testing.TB
 	m      *AppModel
 	quit   bool
 	errors []error
 	opened []string
+	raw    []string
 }
 
 func newHarness(t testing.TB, mgr *service.Manager, file *ConfigFile) *harness {
@@ -215,6 +217,8 @@ func (h *harness) send(msg tea.Msg) {
 				queue = append(queue, out)
 			case msgs.OpenBrowserMsg:
 				h.opened = append(h.opened, out.URL)
+			case tea.RawMsg:
+				h.raw = append(h.raw, fmt.Sprint(out.Msg))
 			case msgs.TickMsg, msgs.ServiceEventMsg, msgs.UpdateCheckResultMsg:
 				// Background traffic, not a consequence of the key under test.
 			default:
@@ -232,9 +236,12 @@ func runCmd(cmd tea.Cmd) []tea.Msg {
 	go func() { ch <- cmd() }()
 	select {
 	case msg := <-ch:
-		if batch, ok := msg.(tea.BatchMsg); ok {
+		// A tea.Batch, or a tea.Sequence, whose type Bubble Tea keeps to
+		// itself: both are a slice of commands, run here in order.
+		if v := reflect.ValueOf(msg); v.Kind() == reflect.Slice && v.Type().Elem() == reflect.TypeFor[tea.Cmd]() {
 			var out []tea.Msg
-			for _, c := range batch {
+			for i := range v.Len() {
+				c, _ := v.Index(i).Interface().(tea.Cmd)
 				out = append(out, runCmd(c)...)
 			}
 			return out

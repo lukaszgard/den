@@ -5,6 +5,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/lukaszgard/den/internal/tui/components"
 	"github.com/lukaszgard/den/internal/tui/msgs"
@@ -83,8 +84,7 @@ func (m *AppModel) click(x, y int) []tea.Cmd {
 	// nothing more, and a link under a pop-up is not there to click.
 	m.link = ""
 	if url, ok := components.LinkTarget(id); ok {
-		covered := m.popUp() || m.paneModal() || (m.showRunbook && m.runbookView.PopUp())
-		if !double && !covered {
+		if !double && !m.linksCovered() {
 			m.link = url
 		}
 		return nil
@@ -126,6 +126,12 @@ func (m *AppModel) click(x, y int) []tea.Cmd {
 		cmds = append(cmds, m.handleRightKey(enterKey)...)
 	}
 	return cmds
+}
+
+// linksCovered reports that no link may be clicked: a pop-up or a question
+// is up, and a click answers none.
+func (m *AppModel) linksCovered() bool {
+	return m.popUp() || m.paneModal() || (m.showRunbook && m.runbookView.PopUp())
 }
 
 // wheel handles one notch of the wheel: the arrow it stands for, sent to what
@@ -259,6 +265,45 @@ func (m *AppModel) release() tea.Cmd {
 		return nil
 	}
 	return components.Copy(text, "copied "+count(strings.Count(text, "\n")+1, "line", "lines"))
+}
+
+// pointerOverLink is the mouse pointer over a link: the pointing hand of a
+// browser, by its CSS name, which Ghostty, kitty and foot take (OSC 22). A
+// terminal that cannot change its pointer ignores it.
+const pointerOverLink = "pointer"
+
+// hover shows the hand while the pointer is on a link a click would open,
+// and the terminal's own pointer anywhere else and while a button is held: a
+// drag selects rather than opens.
+func (m *AppModel) hover(x, y int, held bool) tea.Cmd {
+	shape := ""
+	if id, _ := m.zones.At(x, y); !held && !m.linksCovered() {
+		if _, ok := components.LinkTarget(id); ok {
+			shape = pointerOverLink
+		}
+	}
+	return m.setPointer(shape)
+}
+
+// setPointer asks the terminal for the pointer shape, "" for its own, unless
+// that is the one it has.
+func (m *AppModel) setPointer(shape string) tea.Cmd {
+	if shape == m.pointer {
+		return nil
+	}
+	m.pointer = shape
+	return tea.Raw(ansi.SetPointerShape(shape))
+}
+
+// PointerReset is what gives the terminal its own pointer back once den has
+// quit, or "" when den left it as it was. Bubble Tea puts back the modes it
+// set, and den set this one itself; a quit without a key (a signal, a
+// restart into a new version) can leave the hand behind.
+func (m *AppModel) PointerReset() string {
+	if m.pointer == "" {
+		return ""
+	}
+	return ansi.SetPointerShape("")
 }
 
 // toggleMouse gives the mouse to the terminal, or takes it back. With it the

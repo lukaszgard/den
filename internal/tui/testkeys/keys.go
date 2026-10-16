@@ -158,6 +158,12 @@ func Drag(x, y int) tea.MouseMotionMsg {
 	return tea.MouseMotionMsg{X: x, Y: y, Button: tea.MouseLeft}
 }
 
+// Move is the pointer moved onto the cell at column x, row y with no button
+// held, which a terminal reports when it is asked for every move.
+func Move(x, y int) tea.MouseMotionMsg {
+	return tea.MouseMotionMsg{X: x, Y: y, Button: tea.MouseNone}
+}
+
 // Release is the left button let go of on the cell at column x, row y.
 func Release(x, y int) tea.MouseReleaseMsg {
 	return tea.MouseReleaseMsg{X: x, Y: y, Button: tea.MouseLeft}

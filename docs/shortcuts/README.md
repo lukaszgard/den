@@ -224,6 +224,12 @@ on a link opens it in the browser.
   cut with `…` is not a link, and one wrapped onto a second line opens only the part
   on its first line. With `M`, the terminal handles links itself (⌘-click or
   Ctrl-click in most).
+- **The hand.** With the mouse over a link the pointer turns into a hand, in a
+  terminal that lets den set it (OSC 22): Ghostty, kitty and foot. Alacritty and
+  GNOME Terminal cannot; iTerm2 and xterm name the hand differently and may keep their
+  own pointer. It changes as the mouse moves, and a key brings the terminal's own
+  pointer back until the next move, so a program den starts, or the shell after it,
+  never gets the hand.
 - **Keyboard-only.** Pop-ups, forms and y/n questions take no click, no drag and no
   wheel, so a stray click never answers one; hint lines and the bars at the bottom are
   not buttons, but for a link in them.

@@ -8,6 +8,7 @@ import (
 
 	"github.com/lukaszgard/den/internal/service"
 	"github.com/lukaszgard/den/internal/tui/msgs"
+	"github.com/lukaszgard/den/internal/tui/testkeys"
 )
 
 // These measure one redraw. Bubble Tea calls View after every message Update
@@ -112,6 +113,20 @@ func BenchmarkLogsWithLinks(b *testing.B) {
 	}
 	b.ReportAllocs()
 	for b.Loop() {
+		_ = m.View().Content
+	}
+}
+
+// BenchmarkMove is a move of the mouse over the panel, which the terminal
+// reports once a cell: it changes nothing on screen.
+func BenchmarkMove(b *testing.B) {
+	m := benchApp(b)
+	_ = m.View()
+	msg := testkeys.Move(leftPaneWidth+10, 5)
+	b.ReportAllocs()
+	for b.Loop() {
+		model, _ := m.Update(msg)
+		m = model.(*AppModel)
 		_ = m.View().Content
 	}
 }

@@ -48,13 +48,13 @@ func (h *harness) openPane(id paneID) {
 	}
 }
 
-// den asks the terminal for clicks and the wheel, and what it hands the
-// terminal carries none of the marks its zones are found by.
+// den asks the terminal for clicks, the wheel and every move, and what it
+// hands the terminal carries none of the marks its zones are found by.
 func TestTheViewCapturesTheMouseAndCarriesNoMarks(t *testing.T) {
 	h := newHarness(t, managerWith(newSvc(service.TypeRDS, "orders-db")), nil)
 	v := h.m.View()
-	if v.MouseMode != tea.MouseModeCellMotion {
-		t.Fatalf("MouseMode = %v, want cell motion", v.MouseMode)
+	if v.MouseMode != tea.MouseModeAllMotion {
+		t.Fatalf("MouseMode = %v, want every move", v.MouseMode)
 	}
 	if strings.Contains(v.Content, "\x1b_") {
 		t.Fatal("a zone mark reached the terminal")
@@ -462,7 +462,7 @@ func TestADragUnderAPopUpSelectsNothing(t *testing.T) {
 // ── M: the mouse to the terminal ─────────────────────────────────────────────
 
 // mouseIsDens reports whether den asks the terminal for the mouse.
-func mouseIsDens(m *AppModel) bool { return m.View().MouseMode == tea.MouseModeCellMotion }
+func mouseIsDens(m *AppModel) bool { return m.View().MouseMode == tea.MouseModeAllMotion }
 
 // M gives the mouse to the terminal, whose own selection then works, and
 // takes it back, from the menu, the panel, the detail view and the runbook
@@ -643,5 +643,99 @@ func TestALinkBesideAPopUpOpensNothing(t *testing.T) {
 	f.send(testkeys.Release(x, y))
 	if len(f.opened) != 0 || !f.m.runbooksPane.Modal() {
 		t.Fatalf("opened %q: a click on an address being typed should do nothing", f.opened)
+	}
+}
+
+// ── the hand over a link ─────────────────────────────────────────────────────
+
+var (
+	hand       = ansi.SetPointerShape("pointer")
+	ownPointer = ansi.SetPointerShape("")
+)
+
+// The pointer turns into a hand over a link, once, and back into the
+// terminal's own off it and while a drag passes over it.
+func TestTheHandShowsOverALink(t *testing.T) {
+	h := newHarness(t, managerWith(ssoSession{newSvc(service.TypeAWS, "acme")}), nil)
+	h.openPane(paneAWS)
+	x, y := screenPos(t, h.m, "https://acme.awsapps.com/start")
+	h.m.View()
+	h.send(testkeys.Move(x-1, y))
+	if len(h.raw) != 0 {
+		t.Fatalf("wrote %q before the pointer reached the link", h.raw)
+	}
+	h.send(testkeys.Move(x, y))
+	h.send(testkeys.Move(x+3, y))
+	if len(h.raw) != 1 || h.raw[0] != hand {
+		t.Fatalf("wrote %q, want the hand once over the link", h.raw)
+	}
+	h.send(testkeys.Move(x-1, y))
+	if len(h.raw) != 2 || h.raw[1] != ownPointer {
+		t.Fatalf("wrote %q, want the terminal's pointer back off the link", h.raw)
+	}
+
+	// A drag selects: no hand while the button is held, and the hand again
+	// when it comes up over the link.
+	h.raw = nil
+	h.m.View()
+	h.send(testkeys.Click(x-1, y))
+	h.send(testkeys.Drag(x+3, y))
+	if len(h.raw) != 0 {
+		t.Fatalf("wrote %q during a drag", h.raw)
+	}
+	h.send(testkeys.Release(x+3, y))
+	if len(h.raw) != 1 || h.raw[0] != hand {
+		t.Fatalf("wrote %q, want the hand where the button came up", h.raw)
+	}
+}
+
+// No hand over a link a click would not open: a pop-up is up.
+func TestNoHandUnderAPopUp(t *testing.T) {
+	h := newHarness(t, managerWith(newSvc(service.TypeRDS, "orders-db")), nil)
+	h.send(msgs.StatusFlashMsg{Text: "docs at https://den-tui.com", Hold: time.Minute})
+	h.press("tab", "h")
+	x, y := screenPos(t, h.m, "https://den-tui.com")
+	h.send(testkeys.Move(x, y))
+	if len(h.raw) != 0 {
+		t.Fatalf("wrote %q under the shortcuts pop-up", h.raw)
+	}
+}
+
+// A key puts the terminal's own pointer back before anything it does, so a
+// program it starts or the shell after a quit never gets the hand; den
+// leaves the pointer as it found it.
+func TestAKeyGivesThePointerBack(t *testing.T) {
+	h := newHarness(t, managerWith(ssoSession{newSvc(service.TypeAWS, "acme")}), nil)
+	h.openPane(paneAWS)
+	x, y := screenPos(t, h.m, "https://acme")
+	h.send(testkeys.Move(x, y))
+	if h.m.PointerReset() != ownPointer {
+		t.Fatal("with the hand shown, den should say how to put the pointer back")
+	}
+	h.press("q")
+	if !h.quit || len(h.raw) != 2 || h.raw[1] != ownPointer {
+		t.Fatalf("quit %v, wrote %q: q should put the pointer back, then quit", h.quit, h.raw)
+	}
+	if h.m.PointerReset() != "" {
+		t.Fatal("after the key, the terminal has its own pointer: nothing is left to reset")
+	}
+	h.press("down")
+	if len(h.raw) != 2 {
+		t.Fatalf("wrote %q: a key with the terminal's own pointer should write nothing", h.raw)
+	}
+}
+
+// A move of the mouse hands back the frame drawn last, and whatever comes
+// next draws a new one.
+func TestAMoveRedrawsNothing(t *testing.T) {
+	h := newHarness(t, managerWith(newSvc(service.TypeRDS, "orders-db")), nil)
+	before := h.m.View()
+	h.send(testkeys.Move(panelX, 5))
+	if after := h.m.View(); after.Content != before.Content || after.MouseMode != before.MouseMode {
+		t.Fatal("a move should hand back the frame drawn last")
+	}
+	h.send(msgs.StatusFlashMsg{Text: "something new", Hold: time.Minute})
+	if !strings.Contains(plain(h.m), "something new") {
+		t.Fatal("after a move, the next update should draw a new frame")
 	}
 }

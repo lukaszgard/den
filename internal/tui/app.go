@@ -212,6 +212,13 @@ type AppModel struct {
 	link       string
 	// linker finds the links in each frame. See components.Linker.
 	linker components.Linker
+	// pointer is the mouse pointer den asked the terminal for, "" for the
+	// terminal's own. See hover in mouse.go.
+	pointer string
+	// sameFrame is set by an update that changed nothing on screen, a move
+	// of the mouse, so View hands back lastView rather than drawing it again.
+	sameFrame bool
+	lastView  *tea.View
 
 	// terminals are the terminal tabs of each service that has any, and
 	// startTerminal runs a client for one. See terminals.go.
@@ -451,7 +458,10 @@ func (m *AppModel) Init() tea.Cmd {
 
 func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
+	// before runs ahead of cmds, in order: see the key press.
+	var before tea.Cmd
 	km := msgs.GlobalKeys
+	m.sameFrame = false
 
 	switch msg := msg.(type) {
 	// ── window resize ──────────────────────────────────────────────────────
@@ -772,6 +782,10 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.logger.Trace("key: " + msg.String() + " [" + focus + "]")
 		// A key ends a selection, as in a terminal; the key still counts.
 		m.sel = selection{}
+		// A key may quit or hand the terminal to another program, an editor
+		// or a login, which must not get den's hand pointer: the terminal's
+		// own comes back first, and the hand with the next move of the mouse.
+		before = m.setPointer("")
 
 		// The shortcuts pop-up takes every key: esc closes it before what is
 		// under it, and a c or d pressed while reading what it does must not
@@ -817,7 +831,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if key.Matches(msg, km.Back) || msg.String() == "esc" {
 				m.showDetail = false
-				return m, tea.Batch(cmds...)
+				return m, tea.Sequence(before, tea.Batch(cmds...))
 			}
 			svc := m.detailModel.Service()
 			switch {
@@ -849,7 +863,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// A q typed into a search box is text, not quit; ctrl+c still quits.
 		case key.Matches(msg, km.Quit) && (msg.String() != "q" || m.leftFocused || !m.inSearch()):
 			m.shutdown()
-			return m, tea.Quit
+			return m, tea.Sequence(before, tea.Quit)
 
 		// A pop-up keeps tab: it would leave for the menu with the pop-up
 		// still drawn, and what is typed next would move the menu instead.
@@ -877,14 +891,19 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.press(msg.X, msg.Y)
 		}
 
+	// The terminal reports every move, for the hand over a link. One with no
+	// button held changes nothing on screen.
 	case tea.MouseMotionMsg:
 		if msg.Button == tea.MouseLeft {
 			m.drag(msg.X, msg.Y)
+		} else {
+			m.sameFrame = true
 		}
+		cmds = append(cmds, m.hover(msg.X, msg.Y, msg.Button != tea.MouseNone))
 
 	// Not every terminal says which button was let go of.
 	case tea.MouseReleaseMsg:
-		cmds = append(cmds, m.release())
+		cmds = append(cmds, m.release(), m.hover(msg.X, msg.Y, false))
 
 	case tea.MouseWheelMsg:
 		m.sel = selection{}
@@ -952,7 +971,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, tickCmd(m.tickEvery()))
 	}
 
-	return m, tea.Batch(cmds...)
+	return m, tea.Sequence(before, tea.Batch(cmds...))
 }
 
 // tickEvery is the fast interval while anything on screen moves — a status
@@ -1063,7 +1082,14 @@ func (m *AppModel) handleRightKey(msg tea.KeyPressMsg) []tea.Cmd {
 // to the terminal, takes out of the frame the zones the panes marked,
 // remembering where they landed, draws the addresses on it as links, and
 // draws the selection of a drag over it.
+//
+// The terminal reports every move of the mouse, one a cell, and a redraw is
+// most of what each costs; a move changes nothing on screen, so the frame
+// drawn last is handed back.
 func (m *AppModel) View() tea.View {
+	if m.sameFrame && m.lastView != nil {
+		return *m.lastView
+	}
 	content, cursor := m.screen()
 	content, m.zones = components.ScanZones(content)
 	content, links := m.linker.Links(content)
@@ -1075,11 +1101,12 @@ func (m *AppModel) View() tea.View {
 	v := tea.NewView(content)
 	v.AltScreen = true
 	if !m.mouseOff {
-		v.MouseMode = tea.MouseModeCellMotion
+		v.MouseMode = tea.MouseModeAllMotion
 	}
 	v.Cursor = cursor
 	v.WindowTitle = m.windowTitle()
 	v.ProgressBar = m.progressBar()
+	m.lastView = &v
 	return v
 }
 
