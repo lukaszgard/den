@@ -42,6 +42,12 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
+# A pull request's build (CI job snapshot) and make snapshot: above the last
+# release and below the next one, and a prerelease, so den built from it is
+# not offered the release it is ahead of.
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot.{{ .ShortCommit }}"
+
 release:
   github:
     owner: "lukaszgard"
