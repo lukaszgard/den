@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -116,8 +117,18 @@ func runTUI(cmd *cobra.Command, args []string) error {
 // the restart after an update would be skipped without a word.
 var _ interface{ RestartRequested() bool } = (*tui.AppModel)(nil)
 
+// Nor would the terminal get its own mouse pointer back after a quit with the
+// hand over a link.
+var _ interface{ PointerReset() string } = (*tui.AppModel)(nil)
+
 func runProgram(m tea.Model) error {
 	final, err := tea.NewProgram(m).Run()
+	// Not on Windows: Bubble Tea has put the console's own mode back, which
+	// may not read escape sequences and would print this one, and no Windows
+	// terminal is known to change its pointer.
+	if app, ok := final.(interface{ PointerReset() string }); ok && runtime.GOOS != "windows" {
+		fmt.Print(app.PointerReset())
+	}
 	if err != nil {
 		return fmt.Errorf("TUI error: %w", err)
 	}

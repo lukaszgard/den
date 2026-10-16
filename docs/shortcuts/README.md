@@ -190,7 +190,8 @@ token inlined, and `p` the raw token.
 
 den reads clicks, drags and the wheel in every panel and view, and the keys keep working
 as before. A click selects, a double-click does what `Enter` does, a drag selects text
-and copies it, and the wheel is `↑` or `↓` sent to what is under the pointer.
+and copies it, the wheel is `↑` or `↓` sent to what is under the pointer, and a click
+on a link opens it in the browser.
 
 | Where                              | Click                                       | Double-click                                 | Wheel                                        |
 |------------------------------------|---------------------------------------------|----------------------------------------------|----------------------------------------------|
@@ -201,6 +202,7 @@ and copies it, and the wheel is `↑` or `↓` sent to what is under the pointer
 | History, Files                     | Pick a run or a file                        | The run's whole log, or the file             | Move through the runs or the tree            |
 | Run, About, a file shown, the logs | —                                           | —                                            | Scroll                                       |
 | The shortcuts pop-up               | Nothing                                     | Nothing                                      | Scroll it                                    |
+| A link, anywhere outside a pop-up  | Open it in the browser                      | Open it once                                 | —                                            |
 | Drag: any text, outside a pop-up   | Press and drag: select it; let go: copy it  | —                                            | Clears the selection                         |
 
 - **Selecting text.** A drag selects in reverse video, and letting go copies the text,
@@ -213,9 +215,28 @@ and copies it, and the wheel is `↑` or `↓` sent to what is under the pointer
   terminal's modifier while you drag: `Option` in iTerm2, `Fn` in Terminal.app (or `⌘R`,
   View → Allow Mouse Reporting), `Shift` in Ghostty, kitty, WezTerm, Alacritty and
   Windows Terminal.
+- **Links.** Every http(s) address den shows is underlined in blue and opens in the
+  default browser with a click: in a panel, the logs, a Help topic, the Updates panel,
+  a bar, a runbook's output or a terminal tab, whether den wrote it or a program
+  printed it, plain or as an OSC 8 link. It opens when the button comes up, so a drag over it
+  selects and copies it instead. Only `http` and `https` open: a program's link to a
+  file or an app is left to the terminal, so a click never starts an app. An address
+  cut with `…` is not a link, and one wrapped onto a second line opens only the part
+  on its first line. With `M`, the terminal handles links itself (⌘-click or
+  Ctrl-click in most).
+- **The hand.** With the mouse over a link the pointer turns into a hand, in a
+  terminal that lets den set it (OSC 22) while den has the mouse: Ghostty, kitty and
+  foot. Alacritty, GNOME Terminal and Windows Terminal cannot, and keep their own
+  pointer. iTerm2 3.6 and earlier keep theirs, an I-beam in a circle, as long as a
+  program has the mouse; its development version shows the hand. In iTerm2, hold
+  `⌘` over a link for its own hand, and `⌘`-click to open the link. Terminals name
+  the shapes differently (CSS names in Ghostty, kitty and foot, X11 ones in iTerm2
+  and xterm), so den sends both. The pointer changes as the mouse moves, and a key
+  gives the terminal its own pointer back until the next move, so a program den
+  starts, or the shell after it, never gets the hand.
 - **Keyboard-only.** Pop-ups, forms and y/n questions take no click, no drag and no
   wheel, so a stray click never answers one; hint lines and the bars at the bottom are
-  not buttons.
+  not buttons, but for a link in them.
 - **Terminal tabs.** A click hands a tab the keyboard, but the program in it never sees
   the mouse: `vim` or `less` get the wheel as arrow keys, and no clicks.
 

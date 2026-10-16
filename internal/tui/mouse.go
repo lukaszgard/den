@@ -5,6 +5,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/lukaszgard/den/internal/tui/components"
 	"github.com/lukaszgard/den/internal/tui/msgs"
@@ -78,6 +79,17 @@ func (m *AppModel) click(x, y int) []tea.Cmd {
 		m.lastClick.id = ""
 	}
 
+	// A link opens when the button comes up, so a drag over it selects it
+	// instead; release opens it. The second click of a double-click opens
+	// nothing more, and a link under a pop-up is not there to click.
+	m.link = ""
+	if url, ok := components.LinkTarget(id); ok {
+		if !double && !m.linksCovered() {
+			m.link = url
+		}
+		return nil
+	}
+
 	// A stray click must never answer a question, nor reach what a pop-up
 	// covers.
 	var cmd tea.Cmd
@@ -114,6 +126,12 @@ func (m *AppModel) click(x, y int) []tea.Cmd {
 		cmds = append(cmds, m.handleRightKey(enterKey)...)
 	}
 	return cmds
+}
+
+// linksCovered reports that no link may be clicked: a pop-up or a question
+// is up, and a click answers none.
+func (m *AppModel) linksCovered() bool {
+	return m.popUp() || m.paneModal() || (m.showRunbook && m.runbookView.PopUp())
 }
 
 // wheel handles one notch of the wheel: the arrow it stands for, sent to what
@@ -220,15 +238,21 @@ func (m *AppModel) drag(x, y int) {
 	m.sel.hx, m.sel.hy = m.sel.area.Clamp(x, y)
 	if m.sel.hx != m.sel.ax || m.sel.hy != m.sel.ay {
 		m.sel.shown = true
-		// A drag is not a click: a click right after it starts a new pair.
+		// A drag is not a click: a click right after it starts a new pair,
+		// and a drag from a link copies it rather than opening it.
 		m.lastClick.id = ""
+		m.link = ""
 	}
 }
 
 // release ends a drag and copies what it selected from the frame on screen.
 // The highlight stays, to show what was copied, until a key, a click or the
-// wheel.
+// wheel. A click on a link, a press that did not drag, opens it.
 func (m *AppModel) release() tea.Cmd {
+	if url := m.link; url != "" {
+		m.link, m.sel = "", selection{}
+		return func() tea.Msg { return msgs.OpenBrowserMsg{URL: url} }
+	}
 	if !m.sel.dragging {
 		return nil
 	}
@@ -243,13 +267,83 @@ func (m *AppModel) release() tea.Cmd {
 	return components.Copy(text, "copied "+count(strings.Count(text, "\n")+1, "line", "lines"))
 }
 
+// A pointer is what den last asked the terminal to show under the mouse.
+type pointer int
+
+const (
+	// pointerOwn is the terminal's own: den has asked for nothing, or gave it
+	// back for what comes after it, a program it starts or the shell.
+	pointerOwn pointer = iota
+	// pointerHand is the pointing hand of a browser, over a link.
+	pointerHand
+	// pointerArrow is den's pointer off a link, while it has the mouse.
+	pointerArrow
+)
+
+// pointerNames are the shapes den asks for a pointer with (OSC 22), in turn:
+// terminals name them differently and keep the last one they know. Ghostty,
+// kitty and foot take CSS names, iTerm2 and xterm X11 ones. The empty name
+// gives the terminal its own pointer back, but Ghostty before 1.4 ignores it
+// and kept the hand for good; the name before it is the pointer Ghostty
+// shows then, the arrow while den has the mouse and the I-beam over text
+// after it. A terminal that cannot change its pointer ignores them all.
+var pointerNames = [...][]string{
+	pointerOwn:   {"text", ""},
+	pointerHand:  {"pointer", "hand2"},
+	pointerArrow: {"default", ""},
+}
+
+// pointerSequence is what asks the terminal for p.
+func pointerSequence(p pointer) string {
+	var b strings.Builder
+	for _, name := range pointerNames[p] {
+		b.WriteString(ansi.SetPointerShape(name))
+	}
+	return b.String()
+}
+
+// hover shows the hand while the pointer is on a link a click would open, and
+// takes it away anywhere else and while a button is held: a drag selects
+// rather than opens.
+func (m *AppModel) hover(x, y int, held bool) tea.Cmd {
+	if id, _ := m.zones.At(x, y); !held && !m.linksCovered() {
+		if _, ok := components.LinkTarget(id); ok {
+			return m.setPointer(pointerHand)
+		}
+	}
+	if m.pointer == pointerHand {
+		return m.setPointer(pointerArrow)
+	}
+	return nil
+}
+
+// setPointer asks the terminal for p, unless that is the one it has.
+func (m *AppModel) setPointer(p pointer) tea.Cmd {
+	if p == m.pointer {
+		return nil
+	}
+	m.pointer = p
+	return tea.Raw(pointerSequence(p))
+}
+
+// PointerReset is what gives the terminal its own pointer back once den has
+// quit, or "" when den left it as it was. Bubble Tea puts back the modes it
+// set, and den set this one itself; a key and a restart give it back before
+// den quits, a signal cannot.
+func (m *AppModel) PointerReset() string {
+	if m.pointer == pointerOwn {
+		return ""
+	}
+	return pointerSequence(pointerOwn)
+}
+
 // toggleMouse gives the mouse to the terminal, or takes it back. With it the
 // terminal selects as it always did, which den's own selection cannot match:
 // a line cut short with …, a wrapped line as one, the scrollback. View asks
 // for the mouse again, or stops asking, on the next frame.
 func (m *AppModel) toggleMouse() tea.Cmd {
 	m.mouseOff = !m.mouseOff
-	m.sel = selection{}
+	m.sel, m.link = selection{}, ""
 	text := "den has the mouse again"
 	if m.mouseOff {
 		text = "mouse given to the terminal — M takes it back"

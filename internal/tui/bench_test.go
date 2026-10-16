@@ -8,6 +8,7 @@ import (
 
 	"github.com/lukaszgard/den/internal/service"
 	"github.com/lukaszgard/den/internal/tui/msgs"
+	"github.com/lukaszgard/den/internal/tui/testkeys"
 )
 
 // These measure one redraw. Bubble Tea calls View after every message Update
@@ -89,6 +90,39 @@ func BenchmarkTerminalOutput(b *testing.B) {
 	}
 	m := h.m
 	msg := terminalChangedMsg{term: term}
+	b.ReportAllocs()
+	for b.Loop() {
+		model, _ := m.Update(msg)
+		m = model.(*AppModel)
+		_ = m.View().Content
+	}
+}
+
+// BenchmarkLogsWithLinks is an idle redraw of the Logs pane with an address on
+// every line, each found and drawn as a link.
+func BenchmarkLogsWithLinks(b *testing.B) {
+	m := benchApp(b)
+	for i := range 60 {
+		m.logger.Info(fmt.Sprintf("fetched https://den-tui.com/releases/v1.%d/latest.json in 20ms", i))
+	}
+	model, _ := m.Update(msgs.TickMsg{Time: time.Now()})
+	m = model.(*AppModel)
+	m.leftCursor = m.paneIndexOf(paneLogs)
+	if !strings.Contains(m.View().Content, "\x1b]8;;https://den-tui.com/releases/v1.59/latest.json") {
+		b.Fatalf("the log's addresses are not links:\n%s", plain(m))
+	}
+	b.ReportAllocs()
+	for b.Loop() {
+		_ = m.View().Content
+	}
+}
+
+// BenchmarkMove is a move of the mouse over the panel, which the terminal
+// reports once a cell: it changes nothing on screen.
+func BenchmarkMove(b *testing.B) {
+	m := benchApp(b)
+	_ = m.View()
+	msg := testkeys.Move(leftPaneWidth+10, 5)
 	b.ReportAllocs()
 	for b.Loop() {
 		model, _ := m.Update(msg)

@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.7.0] - 2026-10-16
+
+**Click a link to open it.** Since den took the mouse in 1.3.0, the terminal's own ⌘-click never
+reached an address on screen. den now underlines every http(s) address it shows in blue and opens
+it in the default browser with one click, and in Ghostty, kitty and foot the pointer turns into a
+hand over it.
+
+### 🖥 The dashboard
+
+- Every http(s) address den shows is underlined in blue and opens in the default browser with a
+  click: in a panel, the logs, a Help topic, the Updates panel, a bar, a runbook's output or a
+  terminal tab, whether den wrote it or a program printed it, plain or as an OSC 8 link.
+- A link opens when the button comes up, so a drag that starts on an address selects and copies
+  it instead, and a double-click opens it once. Under a pop-up or a question a click opens
+  nothing.
+- Only `http` and `https` open: a link a program writes to a file or an app is left to the
+  terminal (`M`), so a click never starts an app. An address cut with `…` is not a link, and one
+  wrapped onto a second line opens only the part on its first line.
+- With the mouse over a link the pointer turns into a hand, in a terminal that lets den set it
+  (OSC 22): Ghostty, kitty and foot. It turns back off the link, and a key, a quit or a restart
+  into a new version gives the terminal its own pointer back, so the shell or a program den
+  starts never keeps the hand. Alacritty, GNOME Terminal and Windows Terminal keep their own.
+- iTerm2 3.6 and earlier keep their own pointer, an I-beam in a circle, while den has the mouse.
+  Hold ⌘ over a link for iTerm2's own hand; ⌘-click opens the link once.
+- The Mouse help topic and the shortcuts page cover links and the hand, and say what to do when
+  the pointer stays a hand after den was killed.
+
 ## [1.6.0] - 2026-10-15
 
 **A VPN left running no longer blocks you.** When den's stop could not clear an openfortivpn hung

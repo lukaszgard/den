@@ -143,6 +143,9 @@ func TestMouseMessages(t *testing.T) {
 	if d := Drag(4, 8); d.X != 4 || d.Y != 8 || d.Button != tea.MouseLeft {
 		t.Fatalf("Drag(4, 8) = %+v", d)
 	}
+	if mv := Move(6, 1); mv.X != 6 || mv.Y != 1 || mv.Button != tea.MouseNone {
+		t.Fatalf("Move(6, 1) = %+v", mv)
+	}
 	if r := Release(5, 9); r.X != 5 || r.Y != 9 || r.Button != tea.MouseLeft {
 		t.Fatalf("Release(5, 9) = %+v", r)
 	}

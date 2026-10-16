@@ -48,13 +48,13 @@ func (h *harness) openPane(id paneID) {
 	}
 }
 
-// den asks the terminal for clicks and the wheel, and what it hands the
-// terminal carries none of the marks its zones are found by.
+// den asks the terminal for clicks, the wheel and every move, and what it
+// hands the terminal carries none of the marks its zones are found by.
 func TestTheViewCapturesTheMouseAndCarriesNoMarks(t *testing.T) {
 	h := newHarness(t, managerWith(newSvc(service.TypeRDS, "orders-db")), nil)
 	v := h.m.View()
-	if v.MouseMode != tea.MouseModeCellMotion {
-		t.Fatalf("MouseMode = %v, want cell motion", v.MouseMode)
+	if v.MouseMode != tea.MouseModeAllMotion {
+		t.Fatalf("MouseMode = %v, want every move", v.MouseMode)
 	}
 	if strings.Contains(v.Content, "\x1b_") {
 		t.Fatal("a zone mark reached the terminal")
@@ -462,7 +462,7 @@ func TestADragUnderAPopUpSelectsNothing(t *testing.T) {
 // ── M: the mouse to the terminal ─────────────────────────────────────────────
 
 // mouseIsDens reports whether den asks the terminal for the mouse.
-func mouseIsDens(m *AppModel) bool { return m.View().MouseMode == tea.MouseModeCellMotion }
+func mouseIsDens(m *AppModel) bool { return m.View().MouseMode == tea.MouseModeAllMotion }
 
 // M gives the mouse to the terminal, whose own selection then works, and
 // takes it back, from the menu, the panel, the detail view and the runbook
@@ -535,5 +535,239 @@ func TestMIsTextWhereTextIsTyped(t *testing.T) {
 	f.press("enter", "r", "M")
 	if !mouseIsDens(f.m) {
 		t.Fatal("M typed as a parameter should not give the mouse away")
+	}
+}
+
+// ── links ────────────────────────────────────────────────────────────────────
+
+// ssoSession is an AWS SSO session, which the AWS pane shows with its portal
+// address.
+type ssoSession struct{ *fakeSvc }
+
+func (ssoSession) StartURL() string { return "https://acme.awsapps.com/start" }
+
+// clickAndRelease presses the left button on the first cell of text and lets
+// go there, as a click does.
+func (h *harness) clickAndRelease(text string) {
+	h.t.Helper()
+	x, y := screenPos(h.t, h.m, text)
+	h.send(testkeys.Click(x, y))
+	h.send(testkeys.Release(x, y))
+}
+
+// A click on an address den shows opens it in the browser, once the button
+// comes up; the address is drawn as a link.
+func TestAClickOnALinkOpensIt(t *testing.T) {
+	const portal = "https://acme.awsapps.com/start"
+	h := newHarness(t, managerWith(ssoSession{newSvc(service.TypeAWS, "acme")}), nil)
+	h.openPane(paneAWS)
+	if !strings.Contains(h.m.View().Content, ansi.SetHyperlink(portal)) {
+		t.Fatalf("the sso_start_url is not drawn as a link:\n%q", h.m.View().Content)
+	}
+	x, y := screenPos(t, h.m, portal)
+	h.send(testkeys.Click(x+5, y))
+	if len(h.opened) != 0 {
+		t.Fatal("the link opened on the press, before the button came up")
+	}
+	h.send(testkeys.Release(x+5, y))
+	if len(h.opened) != 1 || h.opened[0] != portal {
+		t.Fatalf("opened %q, want the portal once", h.opened)
+	}
+
+	// A log line's address is a link as well.
+	h.m.logger.Info("release notes at https://den-tui.com/changelog.")
+	h.send(msgs.TickMsg{Time: time.Now()}) // the Logs pane reads the log on a tick
+	h.openPane(paneLogs)
+	h.clickAndRelease("https://den-tui.com/changelog")
+	if got := h.opened[len(h.opened)-1]; got != "https://den-tui.com/changelog" {
+		t.Fatalf("opened %q, want the log line's address without its full stop", got)
+	}
+}
+
+// A drag that starts on a link selects and copies it, and opens nothing.
+func TestADragOverALinkCopiesIt(t *testing.T) {
+	copied := clipboard(t)
+	h := newHarness(t, managerWith(ssoSession{newSvc(service.TypeAWS, "acme")}), nil)
+	h.openPane(paneAWS)
+	x, y := screenPos(t, h.m, "https://acme")
+	h.dragOver(x, y, x+len("https://acme")-1, y)
+	if *copied != "https://acme" || len(h.opened) != 0 {
+		t.Fatalf("copied %q and opened %q, want the address copied and nothing opened", *copied, h.opened)
+	}
+}
+
+// A double-click on a link opens it once, not twice.
+func TestADoubleClickOnALinkOpensItOnce(t *testing.T) {
+	h := newHarness(t, managerWith(ssoSession{newSvc(service.TypeAWS, "acme")}), nil)
+	h.openPane(paneAWS)
+	h.clickAndRelease("https://acme")
+	h.clickAndRelease("https://acme")
+	if len(h.opened) != 1 {
+		t.Fatalf("opened %q, want the link once", h.opened)
+	}
+	h.clickAndRelease("https://acme")
+	if len(h.opened) != 2 {
+		t.Fatalf("opened %q: a third click starts a new pair and opens it again", h.opened)
+	}
+}
+
+// A link left in sight beside a pop-up opens nothing while the pop-up is up,
+// as a click answers nothing.
+func TestALinkBesideAPopUpOpensNothing(t *testing.T) {
+	h := newHarness(t, managerWith(newSvc(service.TypeRDS, "orders-db")), nil)
+	h.send(msgs.StatusFlashMsg{Text: "docs at https://den-tui.com", Hold: time.Minute})
+	h.press("tab", "h")
+	if !h.m.shortcuts.Open() {
+		t.Fatal("h should open the shortcuts")
+	}
+	x, y := screenPos(t, h.m, "https://den-tui.com")
+	if id, _ := h.m.zones.At(x, y); id != "link:https://den-tui.com" {
+		t.Fatalf("zone %q: the status bar's link should still be on screen", id)
+	}
+	h.send(testkeys.Click(x, y))
+	h.send(testkeys.Release(x, y))
+	if len(h.opened) != 0 || !h.m.shortcuts.Open() {
+		t.Fatalf("opened %q: a click while a pop-up is up should do nothing", h.opened)
+	}
+
+	// Nor does an address typed into a pane's question.
+	f := runbookHarness(t)
+	f.selectRow("Ask")
+	f.press("r")
+	f.send(testkeys.Paste("https://den-tui.com/typed"))
+	x, y = screenPos(t, f.m, "https://den-tui.com/typed")
+	if id, _ := f.m.zones.At(x, y); id != "link:https://den-tui.com/typed" {
+		t.Fatalf("zone %q: the address being typed should be drawn as a link", id)
+	}
+	f.send(testkeys.Click(x, y))
+	f.send(testkeys.Release(x, y))
+	if len(f.opened) != 0 || !f.m.runbooksPane.Modal() {
+		t.Fatalf("opened %q: a click on an address being typed should do nothing", f.opened)
+	}
+}
+
+// ── the hand over a link ─────────────────────────────────────────────────────
+
+// What den writes for each pointer: names each terminal keeps the last of it
+// knows, and never only the empty one, which Ghostty before 1.4 ignores.
+var (
+	hand         = ansi.SetPointerShape("pointer") + ansi.SetPointerShape("hand2")
+	arrowPointer = ansi.SetPointerShape("default") + ansi.SetPointerShape("")
+	ownPointer   = ansi.SetPointerShape("text") + ansi.SetPointerShape("")
+)
+
+// The pointer turns into a hand over a link, once, and back into an arrow off
+// it and while a drag passes over it.
+func TestTheHandShowsOverALink(t *testing.T) {
+	h := newHarness(t, managerWith(ssoSession{newSvc(service.TypeAWS, "acme")}), nil)
+	h.openPane(paneAWS)
+	x, y := screenPos(t, h.m, "https://acme.awsapps.com/start")
+	h.m.View()
+	h.send(testkeys.Move(x-1, y))
+	if len(h.raw) != 0 {
+		t.Fatalf("wrote %q before the pointer reached the link", h.raw)
+	}
+	h.send(testkeys.Move(x, y))
+	h.send(testkeys.Move(x+3, y))
+	if len(h.raw) != 1 || h.raw[0] != hand {
+		t.Fatalf("wrote %q, want the hand once over the link", h.raw)
+	}
+	h.send(testkeys.Move(x-1, y))
+	h.send(testkeys.Move(x-2, y))
+	if len(h.raw) != 2 || h.raw[1] != arrowPointer {
+		t.Fatalf("wrote %q, want the arrow once off the link", h.raw)
+	}
+
+	// A drag selects: no hand while the button is held, and the hand again
+	// when it comes up over the link.
+	h.raw = nil
+	h.m.View()
+	h.send(testkeys.Click(x-1, y))
+	h.send(testkeys.Drag(x+3, y))
+	if len(h.raw) != 0 {
+		t.Fatalf("wrote %q during a drag", h.raw)
+	}
+	h.send(testkeys.Release(x+3, y))
+	if len(h.raw) != 1 || h.raw[0] != hand {
+		t.Fatalf("wrote %q, want the hand where the button came up", h.raw)
+	}
+}
+
+// No hand over a link a click would not open: a pop-up is up.
+func TestNoHandUnderAPopUp(t *testing.T) {
+	h := newHarness(t, managerWith(newSvc(service.TypeRDS, "orders-db")), nil)
+	h.send(msgs.StatusFlashMsg{Text: "docs at https://den-tui.com", Hold: time.Minute})
+	h.press("tab", "h")
+	x, y := screenPos(t, h.m, "https://den-tui.com")
+	h.send(testkeys.Move(x, y))
+	if len(h.raw) != 0 {
+		t.Fatalf("wrote %q under the shortcuts pop-up", h.raw)
+	}
+}
+
+// A key gives the terminal its own pointer back before anything it does, so a
+// program it starts or the shell after a quit never gets den's; then a key
+// writes nothing.
+func TestAKeyGivesThePointerBack(t *testing.T) {
+	h := newHarness(t, managerWith(ssoSession{newSvc(service.TypeAWS, "acme")}), nil)
+	h.openPane(paneAWS)
+	x, y := screenPos(t, h.m, "https://acme")
+	h.send(testkeys.Move(x, y))
+	h.press("q")
+	if !h.quit || len(h.raw) != 2 || h.raw[1] != ownPointer {
+		t.Fatalf("quit %v, wrote %q: q should give the pointer back, then quit", h.quit, h.raw)
+	}
+	if h.m.PointerReset() != "" {
+		t.Fatal("after the key, the terminal has its own pointer: nothing is left to reset")
+	}
+	h.press("down")
+	if len(h.raw) != 2 {
+		t.Fatalf("wrote %q: a key with the terminal's own pointer should write nothing", h.raw)
+	}
+
+	// Off the link the arrow is den's too, and a key gives it back as well.
+	h = newHarness(t, managerWith(ssoSession{newSvc(service.TypeAWS, "acme")}), nil)
+	h.openPane(paneAWS)
+	h.m.View()
+	h.send(testkeys.Move(x, y))
+	h.send(testkeys.Move(x-1, y))
+	h.press("down")
+	if len(h.raw) != 3 || h.raw[2] != ownPointer {
+		t.Fatalf("wrote %q, want the hand, the arrow, then the terminal's own", h.raw)
+	}
+}
+
+// A quit without a key leaves nothing of den's pointer: a restart into a new
+// version gives it back first, and after a signal den says how to.
+func TestAQuitWithoutAKeyGivesThePointerBack(t *testing.T) {
+	h := newHarness(t, managerWith(ssoSession{newSvc(service.TypeAWS, "acme")}), nil)
+	h.openPane(paneAWS)
+	x, y := screenPos(t, h.m, "https://acme")
+	h.send(testkeys.Move(x, y))
+	if h.m.PointerReset() != ownPointer {
+		t.Fatal("with the hand shown, den should say how to give the pointer back")
+	}
+	h.send(testkeys.Move(x-1, y))
+	if h.m.PointerReset() != ownPointer {
+		t.Fatal("with den's arrow shown, den should say how to give the pointer back")
+	}
+	h.send(msgs.UpdateRestartMsg{Version: "9.9.9"})
+	if !h.quit || h.raw[len(h.raw)-1] != ownPointer || h.m.PointerReset() != "" {
+		t.Fatalf("quit %v, wrote %q: a restart should give the pointer back, then quit", h.quit, h.raw)
+	}
+}
+
+// A move of the mouse hands back the frame drawn last, and whatever comes
+// next draws a new one.
+func TestAMoveRedrawsNothing(t *testing.T) {
+	h := newHarness(t, managerWith(newSvc(service.TypeRDS, "orders-db")), nil)
+	before := h.m.View()
+	h.send(testkeys.Move(panelX, 5))
+	if after := h.m.View(); after.Content != before.Content || after.MouseMode != before.MouseMode {
+		t.Fatal("a move should hand back the frame drawn last")
+	}
+	h.send(msgs.StatusFlashMsg{Text: "something new", Hold: time.Minute})
+	if !strings.Contains(plain(h.m), "something new") {
+		t.Fatal("after a move, the next update should draw a new frame")
 	}
 }
