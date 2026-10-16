@@ -41,6 +41,14 @@ func TestCompareOrdersVersions(t *testing.T) {
 	}
 }
 
+func TestFollowsPolicy(t *testing.T) {
+	for v, want := range map[string]bool{"v1.7.2": false, "1.8.0-rc.1": true, "v1.8.0": true, "v2.0.0": true, "dev": false} {
+		if got := FollowsPolicy(v); got != want {
+			t.Errorf("FollowsPolicy(%s) = %v, want %v", v, got, want)
+		}
+	}
+}
+
 func rels(specs ...string) []Release {
 	var out []Release
 	for _, s := range specs {

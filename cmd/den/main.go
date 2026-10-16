@@ -81,6 +81,7 @@ func newRootCmd() *cobra.Command {
 		initCmd(),
 		pathsCmd(),
 		mcpCmd(),
+		updateCmd(),
 	)
 	return root
 }

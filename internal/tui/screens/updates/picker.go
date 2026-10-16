@@ -15,11 +15,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// pickerSince is the first den with the version picker, the skip list and
-// updates.pin. An older one offers the latest release again and knows none of
-// them, which a downgrade to it must say.
-const pickerSince = "v1.8.0"
-
 // picker is the version picker: every published release, to install any of
 // them, an older one included, which is how someone gets off a bad release.
 type picker struct {
@@ -428,9 +423,9 @@ func (m Model) renderConfirm(width int) string {
 	if rel.Yanked != "" {
 		lines = append(lines, "", pickerYanked.Render("⚠ yanked: "+rel.Yanked))
 	}
-	// -0 is below every prerelease of it: v1.8.0-rc.1 has the picker too.
-	if update.Compare(rel.Version, pickerSince+"-0") < 0 {
-		lines = append(lines, "", warn.Render("⚠ "+rel.Version+" is older than the version picker ("+pickerSince+
+	// An older den knows none of this, which a downgrade to it must say.
+	if !update.FollowsPolicy(rel.Version) {
+		lines = append(lines, "", warn.Render("⚠ "+rel.Version+" is older than the version picker ("+update.PolicySince+
 			"): it offers the latest release again, and knows no skip list or updates.pin."))
 	}
 	if pin := m.pin(); pin != "" && !update.SameVersion(rel.Version, pin) {

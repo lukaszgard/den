@@ -11,6 +11,14 @@ const (
 	ChannelPrerelease = "prerelease" // release candidates too
 )
 
+// PolicySince is the first den that follows a Policy, with the version picker:
+// an older one offers the latest release whatever a pin, a skip or a yank say.
+const PolicySince = "v1.8.0"
+
+// FollowsPolicy reports whether den at version follows a Policy. Its release
+// candidates do too: -0 sorts below every prerelease of a version.
+func FollowsPolicy(version string) bool { return Compare(version, PolicySince+"-0") >= 0 }
+
 // Policy says which releases an update check may offer: the team's channel
 // and pin from den.yaml, and the versions this machine skipped.
 type Policy struct {
