@@ -8,13 +8,24 @@ set -eu
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+# Go makes the files of its module cache read-only: should one end up in $work,
+# the rm alone would fail, and fail a run whose tests all passed.
+trap 'chmod -R u+w "$work" 2>/dev/null; rm -rf "$work"' EXIT
 
 failed=0
 fail() {
 	printf 'FAIL %s\n' "$*" >&2
 	failed=$((failed + 1))
 }
+
+# go finds its caches and its settings under HOME and XDG_CONFIG_HOME when
+# GOPATH and the rest are not set, as on CI: pin them before those move, or
+# every build downloads all the modules into $work and compiles from cold.
+GOPATH=$(go env GOPATH)
+GOMODCACHE=$(go env GOMODCACHE)
+GOCACHE=$(go env GOCACHE)
+GOENV=$(go env GOENV)
+export GOPATH GOMODCACHE GOCACHE GOENV
 
 # The developer's AWS, den state and GitHub token must not leak in.
 unset AWS_PROFILE AWS_REGION GITHUB_TOKEN DEN_INSTALL_BASE DEN_VERSION
