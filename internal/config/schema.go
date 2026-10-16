@@ -218,13 +218,15 @@ type VaultSecretSpec struct {
 // token and no API call. Set github_api for a fork or a GitHub Enterprise server
 // (with GITHUB_TOKEN in the environment when its repository is private), or
 // s3_bucket for a mirror you host: S3 is then used for both version checking and
-// download.
+// download. channel and pin say which release the check offers.
 type UpdatesConfig struct {
-	GitHubAPI  string `yaml:"github_api,omitempty"`  // releases/latest API URL of a fork or GitHub Enterprise server, e.g. https://api.github.com/repos/you/den/releases/latest; a fork on api.github.com reads its own release feed, and GITHUB_TOKEN, when set, makes den use the API
-	S3Bucket   string `yaml:"s3_bucket,omitempty"`   // an S3 mirror of the releases; wins over github_api
-	S3Prefix   string `yaml:"s3_prefix,omitempty"`   // e.g. "den/releases/" — no leading slash
-	AWSProfile string `yaml:"aws_profile,omitempty"` // uses default AWS profile if omitted
-	AWSRegion  string `yaml:"aws_region,omitempty"`  // e.g. "eu-west-1"
+	GitHubAPI  string `yaml:"github_api,omitempty"`                                       // releases/latest API URL of a fork or GitHub Enterprise server, e.g. https://api.github.com/repos/you/den/releases/latest; a fork on api.github.com reads its own release feed, and GITHUB_TOKEN, when set, makes den use the API
+	S3Bucket   string `yaml:"s3_bucket,omitempty"`                                        // an S3 mirror of the releases; wins over github_api
+	S3Prefix   string `yaml:"s3_prefix,omitempty"`                                        // e.g. "den/releases/" — no leading slash
+	AWSProfile string `yaml:"aws_profile,omitempty"`                                      // uses default AWS profile if omitted
+	AWSRegion  string `yaml:"aws_region,omitempty"`                                       // e.g. "eu-west-1"
+	Channel    string `yaml:"channel,omitempty" jsonschema:"enum=stable,enum=prerelease"` // which releases the check offers and the version picker lists: stable (the default), or prerelease for release candidates too
+	Pin        string `yaml:"pin,omitempty"`                                              // hold den on this version, e.g. v1.7.1: the check offers it, older or newer, and nothing else
 }
 
 // LogsConfig controls file-based logging and log level filtering.

@@ -19,3 +19,14 @@ func NewSource(cfg *config.UpdatesConfig) Source {
 	}
 	return src
 }
+
+// NewPolicy is the policy an update check follows: the channel and the pin of
+// den.yaml, and the versions this machine skipped.
+func NewPolicy(cfg *config.UpdatesConfig, prefs Prefs) Policy {
+	p := Policy{Skipped: prefs.Skipped}
+	if cfg != nil {
+		p.Channel = cfg.Channel
+		p.Pin = cfg.Pin
+	}
+	return p
+}

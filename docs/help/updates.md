@@ -33,6 +33,8 @@ An `updates:` section; leave it out to use this project's GitHub Releases.
 - `s3_prefix`: the key prefix of `latest.json` and the archives, without a leading slash.
 - `aws_profile`: the profile `aws s3 cp` runs as; the default profile without it.
 - `aws_region`: the bucket's region.
+- `channel`: which releases the check offers and the version picker lists: `stable` (the default), or `prerelease` for release candidates too.
+- `pin`: hold den on one version, such as `v1.7.1`: the check offers it, older or newer, and nothing else; for a team that stays on a release it tested.
 
 Releases from a bucket, read as a dedicated profile:
 
@@ -54,6 +56,18 @@ updates:
 ```yaml
 updates:
   s3_bucket: my-den-releases
+```
+
+Try release candidates before everyone else, or hold the team on a tested release:
+
+```yaml
+updates:
+  channel: prerelease
+```
+
+```yaml
+updates:
+  pin: v1.7.1
 ```
 
 ## Limitations

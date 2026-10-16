@@ -14,6 +14,7 @@ import (
 	"time"
 	"unicode"
 
+	"golang.org/x/mod/semver"
 	"gopkg.in/yaml.v3"
 
 	"github.com/lukaszgard/den/internal/platform"
@@ -208,9 +209,34 @@ func Validate(cfg *Config) error {
 	for i, t := range cfg.Tunnels {
 		add(validateTunnel(i, t, cfg.VPNs))
 	}
+	add(validateUpdates(cfg.Updates))
 	errs = append(errs, validateRunbooks(cfg)...)
 	errs = append(errs, validateSecrets(cfg.Secrets)...)
 	return errors.Join(errs...)
+}
+
+// validateUpdates checks the channel and the pin: a pin that is not a version
+// would match no release, and every check would fail on it.
+func validateUpdates(u *UpdatesConfig) error {
+	if u == nil {
+		return nil
+	}
+	switch u.Channel {
+	case "", "stable", "prerelease":
+	default:
+		return fmt.Errorf("updates.channel: must be stable or prerelease, got %q", u.Channel)
+	}
+	if u.Pin != "" {
+		v := u.Pin
+		if !strings.HasPrefix(v, "v") {
+			v = "v" + v
+		}
+		// The full version: v1.7 is valid semver but names no release tag.
+		if semver.Canonical(v) != v {
+			return fmt.Errorf("updates.pin: %q is not a version, such as v1.7.1 or v1.8.0-rc.1", u.Pin)
+		}
+	}
+	return nil
 }
 
 // validateService checks one services: entry.

@@ -1007,6 +1007,29 @@ func TestValidateTitle(t *testing.T) {
 	}
 }
 
+// A pin that is not a version matches no release, so every update check would
+// fail on it; a channel den does not know would offer nothing.
+func TestValidateUpdates(t *testing.T) {
+	for _, u := range []UpdatesConfig{{}, {Channel: "stable"}, {Channel: "prerelease"}, {Pin: "v1.7.1"}, {Pin: "1.8.0-rc.1"}} {
+		if err := Validate(&Config{Updates: &u}); err != nil {
+			t.Errorf("%+v: %v", u, err)
+		}
+	}
+	for _, c := range []struct {
+		u    UpdatesConfig
+		want string
+	}{
+		{UpdatesConfig{Channel: "beta"}, "updates.channel:"},
+		{UpdatesConfig{Pin: "latest"}, "updates.pin:"},
+		{UpdatesConfig{Pin: "v1.7"}, "updates.pin:"},
+	} {
+		err := Validate(&Config{Updates: &c.u})
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%+v: err = %v, want %q", c.u, err, c.want)
+		}
+	}
+}
+
 func TestResolveEnvNeedsAnInstanceOnlyForSSM(t *testing.T) {
 	for _, tc := range []struct {
 		name string

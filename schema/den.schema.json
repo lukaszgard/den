@@ -1370,6 +1370,18 @@
         "aws_region": {
           "type": "string",
           "description": "e.g. \"eu-west-1\""
+        },
+        "channel": {
+          "type": "string",
+          "enum": [
+            "stable",
+            "prerelease"
+          ],
+          "description": "which releases the check offers and the version picker lists: stable (the default), or prerelease for release candidates too"
+        },
+        "pin": {
+          "type": "string",
+          "description": "hold den on this version, e.g. v1.7.1: the check offers it, older or newer, and nothing else"
         }
       },
       "additionalProperties": false,
