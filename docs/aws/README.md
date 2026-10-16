@@ -123,16 +123,29 @@ until the IAM Identity Center session ends. den does the same: every minute, and
 on `r` in the Connect list, it renews a session's access token that has run out.
 The file then stays valid for every reader (the Secrets pane, `den doctor`, tools
 outside den), even when nothing used AWS during that hour. A renewal never opens a
-browser. When one fails, because the IAM Identity Center session has ended, the
-session's log says why and the session reads as expired until you log in again.
+browser.
 
-The Secrets pane and `den doctor` count a login as live while it can still be
-refreshed, not only while its access token is unexpired. After a den login, they
-follow the expiry den recorded, as the AWS pane does.
+The AWS pane, the Secrets pane and `den doctor` decide in one place whether a
+login is live, so they cannot disagree: a login counts while its access token is
+valid or while it can still be refreshed, not only until the hour-long token runs
+out. After a den login, all three follow the expiry den recorded. After `aws sso
+logout`, which deletes the CLI's token files but not den's record, all three say
+the session is logged out.
 
 No file records when the IAM Identity Center session ends. After a login made
 outside den, the token bar therefore shows the current access token's hour, and
-starts over at each renewal.
+starts over at each renewal; until den first renews it, the row reads
+`logged in · token renews on next use`.
+
+When IAM Identity Center refuses a renewal (the refresh token or the client
+registration is no longer accepted, because the session ended or was revoked),
+den ends its record of the session in `~/.aws/sso/cache/den.json`. Every pane,
+and `den doctor` in another terminal, then reads the session as expired until
+you log in again, by den or with `aws sso login`. A renewal that fails on the
+way (no network, a timeout) changes nothing: the session's log says why, once,
+and the next minute tries again. When another den or the CLI renewed the login a
+moment before den and spent the refresh token den sent, den sees the renewed
+file and records nothing.
 
 From the command line, the session is an ordinary service:
 

@@ -387,6 +387,8 @@ var (
 
 	noTokenStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5F87"))
 
+	loggedInStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575"))
+
 	profileListTitleStyle = lipgloss.NewStyle().
 				Bold(true).
 				Foreground(lipgloss.Color("#6C91BF"))
@@ -448,10 +450,19 @@ func (m Model) View(width, height int, focused bool) string {
 				label = selectedRowStyle.Render("► " + name)
 			}
 			var tokenPart string
-			if st.TokenExpires == nil || time.Until(*st.TokenExpires) <= 0 {
+			switch {
+			case st.Status == service.StatusConnected && st.TokenExpires == nil:
+				// A refresh token keeps the login alive and no file says
+				// until when; the Secrets pane counts it, so this does too.
+				tokenPart = loggedInStyle.Render("logged in") + dimStyle.Render(" · token renews on next use") +
+					"  " + dimStyle.Render("↵ login")
+				if lipgloss.Width(label+"  "+tokenPart) > ssoBoxInnerWidth {
+					tokenPart = loggedInStyle.Render("logged in") + "  " + dimStyle.Render("↵ login")
+				}
+			case st.TokenExpires == nil || time.Until(*st.TokenExpires) <= 0:
 				tokenPart = noTokenStyle.Render("No active token") + "  " +
 					dimStyle.Render("↵ to login")
-			} else {
+			default:
 				total := st.TokenTTL
 				if total <= 0 {
 					total = 12 * time.Hour
