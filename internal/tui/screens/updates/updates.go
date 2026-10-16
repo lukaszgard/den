@@ -5,7 +5,6 @@ package updates
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"runtime"
@@ -260,7 +259,7 @@ func (m Model) Update(msg tea.Msg, focused bool) (Model, tea.Cmd) {
 			if m.state != stateUpdateAvailable && m.state != stateInstallError {
 				break
 			}
-			src := source(m.updatesCfg)
+			src := update.NewSource(m.updatesCfg)
 			if !src.UsesS3() && m.release.ArchiveURL == "" {
 				m.state = stateInstallError
 				m.installErr = "no " + m.release.Archive + " asset in this release — re-check for updates (c)"
@@ -543,7 +542,7 @@ func (m Model) renderHelp(width, height int) string {
 			head.Render("What you need"),
 			"",
 			dim.Render("Releases are read from:"),
-			code.Render("  " + source(m.updatesCfg).Location()),
+			code.Render("  " + update.NewSource(m.updatesCfg).Location()),
 			"",
 			dim.Render("Public repository: nothing to configure. den needs HTTPS"),
 			dim.Render("access to github.com; behind a proxy, set HTTPS_PROXY."),
@@ -602,7 +601,7 @@ func (m Model) renderHelp(width, height int) string {
 // archive itself, which curl cannot fetch; the aws command carries the profile
 // and region the install uses, on a line of their own so it fits the pane.
 func (m Model) downloadInstructions(archive string) (cmds []string, releasePage string) {
-	src := source(m.updatesCfg)
+	src := update.NewSource(m.updatesCfg)
 	if !src.UsesS3() {
 		releaseBase := strings.TrimSuffix(m.url, "/tag/"+m.latest)
 		return []string{fmt.Sprintf("curl -LO %s/archive/%s", releaseBase, archive)}, m.url
@@ -629,20 +628,6 @@ func installInstructions(version string) (archive string, extractCmds []string, 
 		return archive, []string{"Expand-Archive " + archive + " -DestinationPath ."}, `Move-Item den.exe C:\Windows\System32\den.exe`
 	}
 	return archive, []string{"tar -xzf " + archive}, "mv den /usr/local/bin/den"
-}
-
-// source builds the release source from den.yaml's updates block and the
-// environment.
-func source(cfg *config.UpdatesConfig) update.Source {
-	src := update.Source{Token: os.Getenv("GITHUB_TOKEN")}
-	if cfg != nil {
-		src.GitHubAPI = cfg.GitHubAPI
-		src.S3Bucket = cfg.S3Bucket
-		src.S3Prefix = cfg.S3Prefix
-		src.AWSProfile = cfg.AWSProfile
-		src.AWSRegion = cfg.AWSRegion
-	}
-	return src
 }
 
 // Bounds for the network steps. The AWS CLI may first refresh SSO credentials,
@@ -720,19 +705,14 @@ func stepVerifyArchive(ctx *installContext) tea.Cmd {
 	return func() tea.Msg {
 		c, cancel := context.WithTimeout(context.Background(), checkTimeout)
 		defer cancel()
-		sums, err := ctx.src.Checksums(c, ctx.rel)
-		step := "Verified SHA-256 against " + update.ChecksumsFile
-		switch {
-		case errors.Is(err, update.ErrNoChecksums):
-			step = "⚠ This release publishes no " + update.ChecksumsFile + " — download not verified"
-		case err != nil:
+		warning, err := ctx.src.VerifyDownload(c, ctx.rel, ctx.archivePath)
+		if err != nil {
 			os.Remove(ctx.archivePath) //nolint:errcheck
 			return msgs.UpdateInstallResultMsg{Err: fmt.Errorf("verify: %w", err)}
-		default:
-			if err := update.Verify(ctx.archivePath, ctx.rel.Archive, sums); err != nil {
-				os.Remove(ctx.archivePath) //nolint:errcheck
-				return msgs.UpdateInstallResultMsg{Err: fmt.Errorf("verify: %w", err)}
-			}
+		}
+		step := "Verified SHA-256 against " + update.ChecksumsFile
+		if warning != "" {
+			step = "⚠ " + warning
 		}
 		return msgs.UpdateInstallProgressMsg{Step: step, NextCmd: stepExtractBinary(ctx)}
 	}
@@ -798,7 +778,7 @@ func formatBytes(n int64) string {
 // with GITHUB_TOKEN or a GitHub Enterprise server).
 func CheckForUpdates(cfg *config.UpdatesConfig, logger *applog.Logger) tea.Cmd {
 	return func() tea.Msg {
-		src := source(cfg)
+		src := update.NewSource(cfg)
 		where := src.Location()
 		logger.Trace("update check [" + where + "]: looking up the latest release")
 		start := time.Now()

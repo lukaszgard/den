@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"archive/zip"
 	"compress/gzip"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -41,6 +42,64 @@ func TempFile(target, pattern string) (string, error) {
 	}
 	path := f.Name()
 	return path, f.Close()
+}
+
+// VerifyDownload checks the archive at path against the release's
+// checksums.txt. A release without one — every release made before den
+// verified downloads — passes with a warning the caller must show; a
+// mismatch, or checksums that cannot be read, is an error.
+func (s Source) VerifyDownload(ctx context.Context, rel Release, path string) (warning string, err error) {
+	sums, err := s.Checksums(ctx, rel)
+	switch {
+	case errors.Is(err, ErrNoChecksums):
+		return "This release publishes no " + ChecksumsFile + " — download not verified", nil
+	case err != nil:
+		return "", err
+	}
+	return "", Verify(path, rel.Archive, sums)
+}
+
+// Install puts the den binary of rel in place of exe: download, verify,
+// extract, replace. onStep, when set, hears each step once it is done, a
+// verification warning among them. exe is only touched by the last step, so a
+// failure before it leaves the installed den as it was.
+func (s Source) Install(ctx context.Context, rel Release, exe, goos string, onStep func(string)) error {
+	step := func(text string) {
+		if onStep != nil {
+			onStep(text)
+		}
+	}
+	if !s.CanInstall(rel) {
+		return fmt.Errorf("release %s has no %s asset", rel.Version, rel.Archive)
+	}
+	archive, err := TempFile(exe, "den-download-*")
+	if err != nil {
+		return fmt.Errorf("temp file: %w", err)
+	}
+	defer os.Remove(archive) //nolint:errcheck
+	if err := s.Download(ctx, rel, archive, nil, nil); err != nil {
+		return fmt.Errorf("download: %w", err)
+	}
+	step("Downloaded " + rel.Archive)
+	warning, err := s.VerifyDownload(ctx, rel, archive)
+	if err != nil {
+		return fmt.Errorf("verify: %w", err)
+	}
+	if warning != "" {
+		step("⚠ " + warning)
+	} else {
+		step("Verified SHA-256 against " + ChecksumsFile)
+	}
+	bin, err := ExtractBinary(archive, goos, exe)
+	if err != nil {
+		return fmt.Errorf("extract: %w", err)
+	}
+	step("Extracted the den binary")
+	if err := Replace(bin, exe); err != nil {
+		return fmt.Errorf("replace binary: %w", err)
+	}
+	step("Replaced " + exe)
+	return nil
 }
 
 // ExtractBinary copies the den binary out of the archive at archivePath into a

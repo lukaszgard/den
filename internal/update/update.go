@@ -74,11 +74,15 @@ type Source struct {
 // UsesS3 reports whether the source reads from S3 rather than GitHub.
 func (s Source) UsesS3() bool { return s.S3Bucket != "" }
 
-// Release is the latest published release for this platform.
+// Release is one published release, with the files of this platform.
 type Release struct {
 	Version string // tag, e.g. v0.0.41
 	URL     string // release page (GitHub) or archive location (S3)
 	Notes   string // release notes, markdown
+
+	Date       time.Time // when it was published; zero when the source does not say
+	Prerelease bool      // a release candidate, offered on the prerelease channel only
+	Yanked     string    // why the release must not be installed; empty when it may
 
 	Archive      string // archive file name for this platform
 	ArchiveURL   string // GitHub asset URL (API or release feed); empty for S3
@@ -180,42 +184,58 @@ func (s Source) feedURL(repo string) string {
 // files by URL, so no API call is made. A 404 is returned as a statusError for
 // Latest to fall back on.
 func (s Source) latestFeed(ctx context.Context, repo, goos, goarch string) (Release, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.feedURL(repo), nil)
+	data, err := s.getFeed(ctx, s.feedURL(repo))
 	if err != nil {
-		return Release{}, err
-	}
-	resp, err := s.client().Do(req)
-	if err != nil {
-		if ctx.Err() != nil {
-			return Release{}, err
-		}
-		return Release{}, fmt.Errorf("could not reach github.com — den needs HTTPS access to github.com; behind a proxy set HTTPS_PROXY: %w", err)
-	}
-	defer resp.Body.Close() //nolint:errcheck
-	if err := s.checkStatus(resp); err != nil {
 		return Release{}, err
 	}
 	var meta struct {
 		Version string `json:"version"`
 		Notes   string `json:"notes"`
 	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 10<<20)).Decode(&meta); err != nil {
+	if err := json.Unmarshal(data, &meta); err != nil {
 		return Release{}, fmt.Errorf("parse latest.json: %w", err)
 	}
 	if meta.Version == "" {
 		return Release{}, fmt.Errorf("latest.json has no version")
 	}
-	archive := ArchiveName(meta.Version, goos, goarch)
+	return s.feedRelease(repo, meta.Version, meta.Notes, goos, goarch), nil
+}
+
+// getFeed fetches one file of the release feed. A 404 comes back as a
+// statusError, which callers tell apart from a failure.
+func (s Source) getFeed(ctx context.Context, fileURL string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fileURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := s.client().Do(req)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("could not reach github.com — den needs HTTPS access to github.com; behind a proxy set HTTPS_PROXY: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+	if err := s.checkStatus(resp); err != nil {
+		return nil, err
+	}
+	return io.ReadAll(io.LimitReader(resp.Body, 10<<20))
+}
+
+// feedRelease names the files of version on the release feed of repo by their
+// URLs, which GitHub serves without an API call for every public release.
+func (s Source) feedRelease(repo, version, notes, goos, goarch string) Release {
+	archive := ArchiveName(version, goos, goarch)
 	base := s.web() + "/" + repo + "/releases/"
 	return Release{
-		Version:      meta.Version,
-		URL:          base + "tag/" + meta.Version,
-		Notes:        meta.Notes,
+		Version:      version,
+		URL:          base + "tag/" + version,
+		Notes:        notes,
 		Archive:      archive,
-		ArchiveURL:   base + "download/" + meta.Version + "/" + archive,
-		ChecksumsURL: base + "download/" + meta.Version + "/" + ChecksumsFile,
+		ArchiveURL:   base + "download/" + version + "/" + archive,
+		ChecksumsURL: base + "download/" + version + "/" + ChecksumsFile,
 		feed:         true,
-	}, nil
+	}
 }
 
 func (s Source) latestS3(ctx context.Context, goos, goarch string) (Release, error) {
@@ -233,13 +253,19 @@ func (s Source) latestS3(ctx context.Context, goos, goarch string) (Release, err
 	if meta.Version == "" {
 		return Release{}, fmt.Errorf("latest.json has no version")
 	}
-	archive := ArchiveName(meta.Version, goos, goarch)
+	return s.s3Release(meta.Version, meta.Notes, goos, goarch), nil
+}
+
+// s3Release names the archive of version in the mirror, laid out as
+// <prefix><version>/<archive>.
+func (s Source) s3Release(version, notes, goos, goarch string) Release {
+	archive := ArchiveName(version, goos, goarch)
 	return Release{
-		Version: meta.Version,
-		URL:     s.s3URL(meta.Version + "/" + archive),
-		Notes:   meta.Notes,
+		Version: version,
+		URL:     s.s3URL(version + "/" + archive),
+		Notes:   notes,
 		Archive: archive,
-	}, nil
+	}
 }
 
 func (s Source) latestGitHub(ctx context.Context, goos, goarch string) (Release, error) {
@@ -247,49 +273,18 @@ func (s Source) latestGitHub(ctx context.Context, goos, goarch string) (Release,
 	if api == "" {
 		api = DefaultGitHubAPI
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, api, nil)
-	if err != nil {
+	var buf bytes.Buffer
+	if err := s.getAPI(ctx, api, &buf); err != nil {
 		return Release{}, err
 	}
-	s.authorize(req)
-	resp, err := s.client().Do(req)
-	if err != nil {
-		return Release{}, err
-	}
-	defer resp.Body.Close() //nolint:errcheck
-	if err := s.checkStatus(resp); err != nil {
-		return Release{}, err
-	}
-	var release struct {
-		TagName string `json:"tag_name"`
-		HTMLURL string `json:"html_url"`
-		Body    string `json:"body"`
-		Assets  []struct {
-			Name string `json:"name"`
-			URL  string `json:"url"` // API URL — fetched with Accept: application/octet-stream
-		} `json:"assets"`
-	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 10<<20)).Decode(&release); err != nil {
+	var release ghRelease
+	if err := json.Unmarshal(buf.Bytes(), &release); err != nil {
 		return Release{}, fmt.Errorf("parse release: %w", err)
 	}
 	if release.TagName == "" {
 		return Release{}, fmt.Errorf("no release tag returned by API")
 	}
-	rel := Release{
-		Version: release.TagName,
-		URL:     release.HTMLURL,
-		Notes:   release.Body,
-		Archive: ArchiveName(release.TagName, goos, goarch),
-	}
-	for _, a := range release.Assets {
-		switch a.Name {
-		case rel.Archive:
-			rel.ArchiveURL = a.URL
-		case ChecksumsFile:
-			rel.ChecksumsURL = a.URL
-		}
-	}
-	return rel, nil
+	return release.release(goos, goarch), nil
 }
 
 // Download writes the release archive to path. When progress is non-nil it
@@ -422,12 +417,30 @@ func (s Source) aws(ctx context.Context, args ...string) ([]byte, error) {
 		if authErr := awsAuthError(msg, s.AWSProfile); authErr != nil {
 			return nil, authErr
 		}
-		if msg != "" {
-			return nil, fmt.Errorf("aws %s: %s", args[0], msg)
+		if msg == "" {
+			return nil, fmt.Errorf("aws %s: %w", args[0], err)
 		}
-		return nil, fmt.Errorf("aws %s: %w", args[0], err)
+		text := fmt.Sprintf("aws %s: %s", args[0], msg)
+		if code := s3Status(msg); code != 0 {
+			return nil, &statusError{code: code, msg: text}
+		}
+		return nil, errors.New(text)
 	}
 	return out, nil
+}
+
+// s3Status reads the HTTP status of a failed S3 call out of the CLI's error:
+// 404 for a missing object and 403 for one this caller may not read, which S3
+// also answers for a missing object when the caller may not list the bucket.
+// 0 when it is neither.
+func s3Status(stderr string) int {
+	switch {
+	case strings.Contains(stderr, "(404)"), strings.Contains(stderr, "NoSuchKey"):
+		return http.StatusNotFound
+	case strings.Contains(stderr, "(403)"), strings.Contains(stderr, "AccessDenied"):
+		return http.StatusForbidden
+	}
+	return 0
 }
 
 // awsAuthError turns the AWS CLI's credential failures into an actionable
