@@ -193,6 +193,35 @@ func TestCancelTakesTheProcessGroupDown(t *testing.T) {
 	}
 }
 
+// The aws CLI runs session-manager-plugin as its child. Killing aws alone left
+// the plugin holding the port and the output pipes, so Done never closed and
+// every later connect found the supervisor still running.
+func TestStopTakesTheProcessGroupDown(t *testing.T) {
+	s := NewSupervisor(10)
+	opts := StartOptions{ProcessGroup: true}
+	if err := s.StartWith(context.Background(), opts, "sh", "-c", "sleep 30 & echo child=$!; wait"); err != nil {
+		t.Fatal(err)
+	}
+	line := waitForLog(t, s, "child=")
+	pid, err := strconv.Atoi(line[strings.Index(line, "child=")+len("child="):])
+	if err != nil {
+		t.Fatalf("bad child line %q", line)
+	}
+	if err := s.Stop(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = syscall.Kill(pid, syscall.SIGKILL) })
+	waitDone(t, s, 5*time.Second)
+
+	deadline := time.Now().Add(3 * time.Second)
+	for syscall.Kill(pid, 0) == nil {
+		if time.Now().After(deadline) {
+			t.Fatalf("grandchild %d survived Stop", pid)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 func TestEnvAndDir(t *testing.T) {
 	dir := t.TempDir()
 	s := NewSupervisor(10)

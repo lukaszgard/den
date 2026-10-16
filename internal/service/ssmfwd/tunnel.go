@@ -349,6 +349,15 @@ func (t *Tunnel) runOnce(ctx context.Context) bool {
 		return fail(fmt.Errorf("no forwards to open"))
 	}
 
+	// A port something else already listens on would pass the readiness check
+	// for the wrong process: den would report connected and mint a credential
+	// for a session it does not own.
+	for _, f := range fwds {
+		if service.Reachable(fmt.Sprintf("127.0.0.1:%d", f.LocalPort), portCheckTimeout) {
+			return fail(fmt.Errorf("port %d is already in use — is another %s or den still running?", f.LocalPort, t.transport.Name()))
+		}
+	}
+
 	// Every forward must be confirmed open before anything credential-related
 	// happens. Minting an IAM token (and rewriting ~/.pgpass) against a dead
 	// tunnel is worse than useless.
@@ -451,7 +460,11 @@ func (t *Tunnel) runOnce(ctx context.Context) bool {
 // open starts one SSM session and confirms its local port accepts connections,
 // retrying a few times to ride out transient SSM failures.
 func (t *Tunnel) open(ctx context.Context, sup *process.Supervisor, f Forward, labelled bool) error {
-	var startOpts process.StartOptions
+	// A group of its own, so a stop takes down what the command starts as
+	// well: aws runs session-manager-plugin as its child. No WaitDelay: it
+	// counts from the start, not the exit, and would cut off the last lines of
+	// a long session that den's error messages quote.
+	startOpts := process.StartOptions{ProcessGroup: true}
 	tr := t.transport
 	starting := tr.Name() + " starting..."
 	if labelled {

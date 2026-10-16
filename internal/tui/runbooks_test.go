@@ -128,7 +128,7 @@ func (f runbookFixture) open() {
 	h := f.harness
 	h.m = New(managerWith(), f.opts)
 	m := h.m
-	f.t.Cleanup(func() { m.shutdown() })
+	f.t.Cleanup(func() { m.Shutdown() })
 	h.send(tea.WindowSizeMsg{Width: 140, Height: 40})
 	h.m.startProgram = f.starts.start
 	for h.m.currentPane() != paneRunbooks {
@@ -141,7 +141,7 @@ func (f runbookFixture) open() {
 // who closed it would: what was only in memory is gone.
 func (f runbookFixture) reopen() {
 	f.t.Helper()
-	f.m.shutdown()
+	f.m.Shutdown()
 	f.open()
 }
 
@@ -1240,7 +1240,7 @@ func TestNWithoutRunbooksDirsSaysWhatToAdd(t *testing.T) {
 		Version:        "test",
 		RunbookHistory: runbook.NewHistory(filepath.Join(dir, "state")),
 	})}
-	t.Cleanup(func() { h.m.shutdown() })
+	t.Cleanup(func() { h.m.Shutdown() })
 	h.send(tea.WindowSizeMsg{Width: 140, Height: 40})
 	for h.m.currentPane() != paneRunbooks {
 		h.press("down")
@@ -1691,7 +1691,7 @@ runbooks:
 		RunbookSources: store,
 		RunbookTrust:   runbook.NewTrust(filepath.Join(dir, "trust.json")),
 	})}
-	t.Cleanup(func() { h.m.shutdown() })
+	t.Cleanup(func() { h.m.Shutdown() })
 	h.send(tea.WindowSizeMsg{Width: 140, Height: 40})
 	starts := &programStarts{}
 	h.m.startProgram = starts.start

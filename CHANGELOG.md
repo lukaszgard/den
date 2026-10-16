@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.7.2] - 2026-10-16
+
+**A service you disconnect connects again.** After `d` on an RDS service, or any other service
+reached through SSM, every `c` failed with `SSM session start failed: supervisor: already running`
+until den was restarted. The aws CLI runs `session-manager-plugin` as a child, and den stopped
+only `aws`: the plugin kept running, held the local port, and den kept waiting for it to finish.
+
+### 🔌 Data stores and tunnels
+
+- Disconnecting a service stops its whole session, `session-manager-plugin` included, so the port
+  is free again and `c` connects. The same holds when a connect fails, when an attempt is retried
+  and when a dropped connection is torn down before reconnecting.
+- A service whose local port something else already holds no longer connects through it. It stops
+  at once with `port 5432 is already in use — is another SSM session or den still running?` (the
+  transport's name in place of `SSM session`), rather than reporting `CONNECTED` and minting a
+  credential for a session that is not den's.
+- `kill` on den now stops the services it connected, as `q` and closing the terminal window do.
+  Before, they kept running after den was gone.
+
 ## [1.7.1] - 2026-10-16
 
 **Secrets no longer say "SSO login expired" while the AWS pane shows hours left.** With an

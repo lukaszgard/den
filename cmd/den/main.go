@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
 	"runtime"
 	"strings"
+	"syscall"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/log/v2"
@@ -121,8 +123,33 @@ var _ interface{ RestartRequested() bool } = (*tui.AppModel)(nil)
 // hand over a link.
 var _ interface{ PointerReset() string } = (*tui.AppModel)(nil)
 
+// Nor would the tunnels stop when the program ends without a q.
+var _ interface{ Shutdown() } = (*tui.AppModel)(nil)
+
 func runProgram(m tea.Model) error {
-	final, err := tea.NewProgram(m).Run()
+	p := tea.NewProgram(m)
+	// Closing the terminal window sends a SIGHUP, which by default ends den on
+	// the spot. The tunnels run in process groups of their own, so nothing
+	// would take them down with it: quit instead, and stop them below.
+	hup := make(chan os.Signal, 1)
+	signal.Notify(hup, syscall.SIGHUP)
+	ran := make(chan struct{})
+	go func() {
+		select {
+		case <-hup:
+			p.Quit()
+		case <-ran:
+		}
+	}()
+	final, err := p.Run()
+	signal.Stop(hup)
+	close(ran)
+	// Whatever ended the program, what den started ends with it. A SIGHUP or
+	// SIGTERM quits without asking the model, so nothing has stopped yet;
+	// after a q this does nothing.
+	if app, ok := final.(interface{ Shutdown() }); ok {
+		app.Shutdown()
+	}
 	// Not on Windows: Bubble Tea has put the console's own mode back, which
 	// may not read escape sequences and would print this one, and no Windows
 	// terminal is known to change its pointer.

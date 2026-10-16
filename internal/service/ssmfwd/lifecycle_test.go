@@ -120,6 +120,19 @@ func fakeAWS(t *testing.T) (dieDir string) {
 // fakeBinary is fakeAWS for any transport's program.
 func fakeBinary(t *testing.T, name string) (dieDir string) {
 	t.Helper()
+	return writeFake(t, name, true)
+}
+
+// fakeAWSPlugin is fakeAWS as the real aws CLI behaves: it runs the helper as
+// its child, the way it runs session-manager-plugin, rather than becoming it.
+// Killing aws alone then leaves the helper holding the port and den's pipes.
+func fakeAWSPlugin(t *testing.T) (dieDir string) {
+	t.Helper()
+	return writeFake(t, "aws", false)
+}
+
+func writeFake(t *testing.T, name string, execs bool) (dieDir string) {
+	t.Helper()
 	if testing.Short() {
 		t.Skip("drives real processes through connect/drop/reconnect cycles; skipped with -short")
 	}
@@ -129,7 +142,14 @@ func fakeBinary(t *testing.T, name string) (dieDir string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := fmt.Sprintf("#!/bin/sh\nexec %q -test.run='^TestHelperProcess$' -- \"$@\"\n", exe)
+	run := fmt.Sprintf("%q -test.run='^TestHelperProcess$' -- \"$@\"", exe)
+	if execs {
+		run = "exec " + run
+	} else {
+		// Not the last command, so no shell turns it into an exec.
+		run += "\nexit $?"
+	}
+	script := "#!/bin/sh\n" + run + "\n"
 	if err := os.WriteFile(filepath.Join(bin, name), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -445,6 +465,66 @@ func TestStopReturnsToIdle(t *testing.T) {
 	}
 	if st := tun.State(); st.Status != service.StatusIdle {
 		t.Fatalf("status after teardown = %v (err %v), want idle", st.Status, st.Error)
+	}
+}
+
+// d then c must connect again. With the plugin a child of aws, Stop used to
+// kill aws alone: the orphaned plugin kept the port and den's output pipes, the
+// supervisor never saw the session end, and every later connect failed with
+// "already running".
+func TestConnectAgainAfterStop(t *testing.T) {
+	fakeAWSPlugin(t)
+	e := &fakeEngine{ports: []int{freePort(t)}}
+	tun := newTunnel(e, false)
+
+	if _, err := tun.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { tun.Stop(context.Background()) }) //nolint:errcheck
+	waitStatus(t, tun, service.StatusConnected)
+
+	if err := tun.Stop(context.Background()); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+	if service.Reachable(fmt.Sprintf("127.0.0.1:%d", e.ports[0]), 200*time.Millisecond) {
+		t.Fatal("the plugin still listens after Stop")
+	}
+
+	if _, err := tun.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	waitStatus(t, tun, service.StatusConnected)
+}
+
+// A port something else already listens on would pass the readiness check for
+// the wrong process: den would report CONNECTED and mint a credential for a
+// session it does not own.
+func TestConnectRefusesAPortInUse(t *testing.T) {
+	fakeAWS(t)
+	argsFile := filepath.Join(t.TempDir(), "args")
+	t.Setenv("DEN_SSMFWD_ARGS_FILE", argsFile)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	port := ln.Addr().(*net.TCPAddr).Port
+	e := &fakeEngine{ports: []int{port}}
+	tun := newTunnel(e, false)
+
+	if _, err := tun.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { tun.Stop(context.Background()) }) //nolint:errcheck
+	st := waitStatus(t, tun, service.StatusError)
+	if st.Error == nil || !strings.Contains(st.Error.Error(), fmt.Sprintf("port %d is already in use", port)) {
+		t.Fatalf("error = %v, want the port in use", st.Error)
+	}
+	if _, err := os.Stat(argsFile); err == nil {
+		t.Fatal("a session was started on a port already in use")
+	}
+	if n := e.mintCount(); n != 0 {
+		t.Fatalf("minted %d credentials for a session den does not own", n)
 	}
 }
 
