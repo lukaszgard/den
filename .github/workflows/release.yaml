@@ -68,3 +68,9 @@ jobs:
           gh release upload "${{ github.ref_name }}" latest.json --repo "${{ github.repository }}" --clobber
           gh release upload "${{ github.ref_name }}" repo/CHANGELOG.md repo/scripts/install.sh repo/scripts/install.ps1 \
             --repo "${{ github.repository }}" --clobber
+
+  # releases.json, the list the version picker reads, goes up once the release
+  # is published: it names this release too.
+  index:
+    needs: release
+    uses: ./.github/workflows/release-index.yaml
