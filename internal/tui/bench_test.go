@@ -96,3 +96,22 @@ func BenchmarkTerminalOutput(b *testing.B) {
 		_ = m.View().Content
 	}
 }
+
+// BenchmarkLogsWithLinks is an idle redraw of the Logs pane with an address on
+// every line, each found and drawn as a link.
+func BenchmarkLogsWithLinks(b *testing.B) {
+	m := benchApp(b)
+	for i := range 60 {
+		m.logger.Info(fmt.Sprintf("fetched https://den-tui.com/releases/v1.%d/latest.json in 20ms", i))
+	}
+	model, _ := m.Update(msgs.TickMsg{Time: time.Now()})
+	m = model.(*AppModel)
+	m.leftCursor = m.paneIndexOf(paneLogs)
+	if !strings.Contains(m.View().Content, "\x1b]8;;https://den-tui.com/releases/v1.59/latest.json") {
+		b.Fatalf("the log's addresses are not links:\n%s", plain(m))
+	}
+	b.ReportAllocs()
+	for b.Loop() {
+		_ = m.View().Content
+	}
+}

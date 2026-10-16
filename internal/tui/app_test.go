@@ -98,12 +98,15 @@ func (t *fakeTunnel) ToggleHealthCheck() bool   { t.health = !t.health; return t
 func (t *fakeTunnel) HealthCheckEnabled() bool  { return t.health }
 func (t *fakeTunnel) HealthCheckTarget() string { return t.target }
 
-// harness is an AppModel plus the side effects its commands produced.
+// harness is an AppModel plus the side effects its commands produced. The
+// addresses den asked to open in the browser are in opened: a test never
+// opens one.
 type harness struct {
 	t      testing.TB
 	m      *AppModel
 	quit   bool
 	errors []error
+	opened []string
 }
 
 func newHarness(t testing.TB, mgr *service.Manager, file *ConfigFile) *harness {
@@ -210,6 +213,8 @@ func (h *harness) send(msg tea.Msg) {
 			case msgs.ErrorMsg:
 				h.errors = append(h.errors, out.Err)
 				queue = append(queue, out)
+			case msgs.OpenBrowserMsg:
+				h.opened = append(h.opened, out.URL)
 			case msgs.TickMsg, msgs.ServiceEventMsg, msgs.UpdateCheckResultMsg:
 				// Background traffic, not a consequence of the key under test.
 			default:

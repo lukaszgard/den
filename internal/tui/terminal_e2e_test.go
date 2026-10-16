@@ -4,6 +4,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -31,6 +32,10 @@ import (
 
 const e2eAppEnv = "DEN_TERMINAL_E2E_APP"
 
+// e2eOpenedEnv names the file den writes the addresses it would open in the
+// browser to, one a line: a test never opens one.
+const e2eOpenedEnv = "DEN_TERMINAL_E2E_OPENED"
+
 // e2eApp is den without the startup update check, which would go to the network.
 type e2eApp struct{ *AppModel }
 
@@ -47,6 +52,15 @@ func (a e2eApp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func TestHelperDen(t *testing.T) {
 	if os.Getenv(e2eAppEnv) != "1" {
 		return
+	}
+	opened := os.Getenv(e2eOpenedEnv)
+	openURL = func(url string) error {
+		f, err := os.OpenFile(opened, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+		if err != nil {
+			return err
+		}
+		_, err = f.WriteString(url + "\n")
+		return errors.Join(err, f.Close())
 	}
 	svc := fakeTermSvc{newSvc(service.TypeRDS, "db")}
 	if _, err := svc.Start(context.Background()); err != nil {
@@ -129,18 +143,22 @@ func (sc screen) assertFrame(rows int) {
 	}
 }
 
-func TestTerminalTabsEndToEnd(t *testing.T) {
+// startDen runs den on a 120×36 pty and opens the detail view of its
+// connected service. The addresses den opens go to the file it returns.
+func startDen(t *testing.T) (*termsession.Session, screen, string) {
+	t.Helper()
 	if testing.Short() {
 		t.Skip("runs den on a pty")
 	}
 	if _, err := os.Stat("/bin/sh"); err != nil {
 		t.Skip("no /bin/sh on this machine")
 	}
+	opened := filepath.Join(t.TempDir(), "opened")
 	s, err := termsession.Start(termsession.Command{
 		Path: os.Args[0],
 		Args: []string{"-test.run=^TestHelperDen$"},
 		// A home of its own: den must not read the developer's files.
-		Env: []string{e2eAppEnv + "=1", "HOME=" + t.TempDir()},
+		Env: []string{e2eAppEnv + "=1", e2eOpenedEnv + "=" + opened, "HOME=" + t.TempDir()},
 	}, 120, 36)
 	if err != nil {
 		t.Fatal(err)
@@ -154,6 +172,11 @@ func TestTerminalTabsEndToEnd(t *testing.T) {
 	den.enter()
 	den.waitText("t: terminal")
 	den.assertFrame(36)
+	return s, den, opened
+}
+
+func TestTerminalTabsEndToEnd(t *testing.T) {
+	s, den, _ := startDen(t)
 
 	// h opens the shortcuts over the view, in the same frame. esc closes them
 	// and leaves the detail view open.
@@ -317,6 +340,34 @@ func TestTerminalTabsEndToEnd(t *testing.T) {
 			time.Sleep(25 * time.Millisecond)
 		}
 	}
+}
+
+// waitOpened waits for den to have opened url in the browser.
+func (sc screen) waitOpened(opened, url string) {
+	sc.t.Helper()
+	sc.waitFor("den to open "+url, func(string) bool {
+		data, _ := os.ReadFile(opened)
+		return strings.Contains(string(data), url+"\n")
+	})
+}
+
+// An address a client prints in a terminal tab, and a link it writes as OSC
+// 8, open with a click: the frame den hands the outer terminal carries them.
+func TestLinksInATerminalTabEndToEnd(t *testing.T) {
+	_, den, opened := startDen(t)
+	den.typeText("t")
+	den.waitText("client>")
+
+	// The output, not the command line above it: right after the box's side.
+	den.run("echo https://den-tui.com/echoed")
+	x, y := den.at("│https://den-tui.com/echoed")
+	den.clickAt(x+1, y)
+	den.waitOpened(opened, "https://den-tui.com/echoed")
+
+	den.run(`printf '\033]8;;https://den-tui.com/osc\033\\den site\033]8;;\033\\\n'`)
+	x, y = den.at("│den site")
+	den.clickAt(x+1, y)
+	den.waitOpened(opened, "https://den-tui.com/osc")
 }
 
 // startClient is replaced in every other test. This runs the real one: a

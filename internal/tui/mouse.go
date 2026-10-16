@@ -78,6 +78,18 @@ func (m *AppModel) click(x, y int) []tea.Cmd {
 		m.lastClick.id = ""
 	}
 
+	// A link opens when the button comes up, so a drag over it selects it
+	// instead; release opens it. The second click of a double-click opens
+	// nothing more, and a link under a pop-up is not there to click.
+	m.link = ""
+	if url, ok := components.LinkTarget(id); ok {
+		covered := m.popUp() || m.paneModal() || (m.showRunbook && m.runbookView.PopUp())
+		if !double && !covered {
+			m.link = url
+		}
+		return nil
+	}
+
 	// A stray click must never answer a question, nor reach what a pop-up
 	// covers.
 	var cmd tea.Cmd
@@ -220,15 +232,21 @@ func (m *AppModel) drag(x, y int) {
 	m.sel.hx, m.sel.hy = m.sel.area.Clamp(x, y)
 	if m.sel.hx != m.sel.ax || m.sel.hy != m.sel.ay {
 		m.sel.shown = true
-		// A drag is not a click: a click right after it starts a new pair.
+		// A drag is not a click: a click right after it starts a new pair,
+		// and a drag from a link copies it rather than opening it.
 		m.lastClick.id = ""
+		m.link = ""
 	}
 }
 
 // release ends a drag and copies what it selected from the frame on screen.
 // The highlight stays, to show what was copied, until a key, a click or the
-// wheel.
+// wheel. A click on a link, a press that did not drag, opens it.
 func (m *AppModel) release() tea.Cmd {
+	if url := m.link; url != "" {
+		m.link, m.sel = "", selection{}
+		return func() tea.Msg { return msgs.OpenBrowserMsg{URL: url} }
+	}
 	if !m.sel.dragging {
 		return nil
 	}
@@ -249,7 +267,7 @@ func (m *AppModel) release() tea.Cmd {
 // for the mouse again, or stops asking, on the next frame.
 func (m *AppModel) toggleMouse() tea.Cmd {
 	m.mouseOff = !m.mouseOff
-	m.sel = selection{}
+	m.sel, m.link = selection{}, ""
 	text := "den has the mouse again"
 	if m.mouseOff {
 		text = "mouse given to the terminal — M takes it back"

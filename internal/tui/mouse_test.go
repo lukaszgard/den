@@ -537,3 +537,111 @@ func TestMIsTextWhereTextIsTyped(t *testing.T) {
 		t.Fatal("M typed as a parameter should not give the mouse away")
 	}
 }
+
+// ── links ────────────────────────────────────────────────────────────────────
+
+// ssoSession is an AWS SSO session, which the AWS pane shows with its portal
+// address.
+type ssoSession struct{ *fakeSvc }
+
+func (ssoSession) StartURL() string { return "https://acme.awsapps.com/start" }
+
+// clickAndRelease presses the left button on the first cell of text and lets
+// go there, as a click does.
+func (h *harness) clickAndRelease(text string) {
+	h.t.Helper()
+	x, y := screenPos(h.t, h.m, text)
+	h.send(testkeys.Click(x, y))
+	h.send(testkeys.Release(x, y))
+}
+
+// A click on an address den shows opens it in the browser, once the button
+// comes up; the address is drawn as a link.
+func TestAClickOnALinkOpensIt(t *testing.T) {
+	const portal = "https://acme.awsapps.com/start"
+	h := newHarness(t, managerWith(ssoSession{newSvc(service.TypeAWS, "acme")}), nil)
+	h.openPane(paneAWS)
+	if !strings.Contains(h.m.View().Content, ansi.SetHyperlink(portal)) {
+		t.Fatalf("the sso_start_url is not drawn as a link:\n%q", h.m.View().Content)
+	}
+	x, y := screenPos(t, h.m, portal)
+	h.send(testkeys.Click(x+5, y))
+	if len(h.opened) != 0 {
+		t.Fatal("the link opened on the press, before the button came up")
+	}
+	h.send(testkeys.Release(x+5, y))
+	if len(h.opened) != 1 || h.opened[0] != portal {
+		t.Fatalf("opened %q, want the portal once", h.opened)
+	}
+
+	// A log line's address is a link as well.
+	h.m.logger.Info("release notes at https://den-tui.com/changelog.")
+	h.send(msgs.TickMsg{Time: time.Now()}) // the Logs pane reads the log on a tick
+	h.openPane(paneLogs)
+	h.clickAndRelease("https://den-tui.com/changelog")
+	if got := h.opened[len(h.opened)-1]; got != "https://den-tui.com/changelog" {
+		t.Fatalf("opened %q, want the log line's address without its full stop", got)
+	}
+}
+
+// A drag that starts on a link selects and copies it, and opens nothing.
+func TestADragOverALinkCopiesIt(t *testing.T) {
+	copied := clipboard(t)
+	h := newHarness(t, managerWith(ssoSession{newSvc(service.TypeAWS, "acme")}), nil)
+	h.openPane(paneAWS)
+	x, y := screenPos(t, h.m, "https://acme")
+	h.dragOver(x, y, x+len("https://acme")-1, y)
+	if *copied != "https://acme" || len(h.opened) != 0 {
+		t.Fatalf("copied %q and opened %q, want the address copied and nothing opened", *copied, h.opened)
+	}
+}
+
+// A double-click on a link opens it once, not twice.
+func TestADoubleClickOnALinkOpensItOnce(t *testing.T) {
+	h := newHarness(t, managerWith(ssoSession{newSvc(service.TypeAWS, "acme")}), nil)
+	h.openPane(paneAWS)
+	h.clickAndRelease("https://acme")
+	h.clickAndRelease("https://acme")
+	if len(h.opened) != 1 {
+		t.Fatalf("opened %q, want the link once", h.opened)
+	}
+	h.clickAndRelease("https://acme")
+	if len(h.opened) != 2 {
+		t.Fatalf("opened %q: a third click starts a new pair and opens it again", h.opened)
+	}
+}
+
+// A link left in sight beside a pop-up opens nothing while the pop-up is up,
+// as a click answers nothing.
+func TestALinkBesideAPopUpOpensNothing(t *testing.T) {
+	h := newHarness(t, managerWith(newSvc(service.TypeRDS, "orders-db")), nil)
+	h.send(msgs.StatusFlashMsg{Text: "docs at https://den-tui.com", Hold: time.Minute})
+	h.press("tab", "h")
+	if !h.m.shortcuts.Open() {
+		t.Fatal("h should open the shortcuts")
+	}
+	x, y := screenPos(t, h.m, "https://den-tui.com")
+	if id, _ := h.m.zones.At(x, y); id != "link:https://den-tui.com" {
+		t.Fatalf("zone %q: the status bar's link should still be on screen", id)
+	}
+	h.send(testkeys.Click(x, y))
+	h.send(testkeys.Release(x, y))
+	if len(h.opened) != 0 || !h.m.shortcuts.Open() {
+		t.Fatalf("opened %q: a click while a pop-up is up should do nothing", h.opened)
+	}
+
+	// Nor does an address typed into a pane's question.
+	f := runbookHarness(t)
+	f.selectRow("Ask")
+	f.press("r")
+	f.send(testkeys.Paste("https://den-tui.com/typed"))
+	x, y = screenPos(t, f.m, "https://den-tui.com/typed")
+	if id, _ := f.m.zones.At(x, y); id != "link:https://den-tui.com/typed" {
+		t.Fatalf("zone %q: the address being typed should be drawn as a link", id)
+	}
+	f.send(testkeys.Click(x, y))
+	f.send(testkeys.Release(x, y))
+	if len(f.opened) != 0 || !f.m.runbooksPane.Modal() {
+		t.Fatalf("opened %q: a click on an address being typed should do nothing", f.opened)
+	}
+}

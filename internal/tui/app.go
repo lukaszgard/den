@@ -88,6 +88,10 @@ var paneMetadata = map[paneID]leftMenuItem{
 	paneUpdates:   {"Updates", "\uf0aa ", "#4FD1C5", "Check for new versions"},
 }
 
+// openURL opens an address in the default browser. It is a variable so the
+// end-to-end tests, which run den on a pty, never open one.
+var openURL = platform.OpenURL
+
 var defaultMenuOrder = []paneID{
 	paneConnect, paneTunnel, paneRunbooks, paneVPN, paneAWS, paneSecrets, paneCreateEnv, paneConfig, paneLogs, paneHelp, paneUpdates,
 }
@@ -200,10 +204,14 @@ type AppModel struct {
 	}
 	// sel is the text a drag selects, and screenText the last frame without
 	// its highlight: what a drag copies is what was on screen. mouseOff is set
-	// while M has given the mouse back to the terminal.
+	// while M has given the mouse back to the terminal. link is the address
+	// the button went down on, opened when it comes up unless it dragged.
 	sel        selection
 	screenText string
 	mouseOff   bool
+	link       string
+	// linker finds the links in each frame. See components.Linker.
+	linker components.Linker
 
 	// terminals are the terminal tabs of each service that has any, and
 	// startTerminal runs a client for one. See terminals.go.
@@ -722,7 +730,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case msgs.OpenBrowserMsg:
 		url := msg.URL
 		cmds = append(cmds, func() tea.Msg {
-			if err := platform.OpenURL(url); err != nil {
+			if err := openURL(url); err != nil {
 				return msgs.ErrorMsg{Err: fmt.Errorf("open browser: %w", err)}
 			}
 			return msgs.StatusFlashMsg{Text: "opening browser…"}
@@ -1053,10 +1061,13 @@ func (m *AppModel) handleRightKey(msg tea.KeyPressMsg) []tea.Cmd {
 // which a view asks for itself; the panes and components below it draw plain
 // strings. It also asks for the clicks and the wheel, unless M gave the mouse
 // to the terminal, takes out of the frame the zones the panes marked,
-// remembering where they landed, and draws the selection of a drag over it.
+// remembering where they landed, draws the addresses on it as links, and
+// draws the selection of a drag over it.
 func (m *AppModel) View() tea.View {
 	content, cursor := m.screen()
 	content, m.zones = components.ScanZones(content)
+	content, links := m.linker.Links(content)
+	m.zones = append(m.zones, links...)
 	m.screenText = content
 	if m.sel.shown {
 		content = components.Highlight(content, m.sel.spans())
