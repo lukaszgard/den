@@ -212,9 +212,9 @@ type AppModel struct {
 	link       string
 	// linker finds the links in each frame. See components.Linker.
 	linker components.Linker
-	// pointer is the mouse pointer den asked the terminal for, "" for the
-	// terminal's own. See hover in mouse.go.
-	pointer string
+	// pointer is the mouse pointer den asked the terminal for last. See
+	// hover in mouse.go.
+	pointer pointer
 	// sameFrame is set by an update that changed nothing on screen, a move
 	// of the mouse, so View hands back lastView rather than drawing it again.
 	sameFrame bool
@@ -722,7 +722,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.logger.Info("restarting into " + msg.Version)
 		m.shutdown()
 		m.restart = true
-		return m, tea.Quit
+		return m, tea.Sequence(m.setPointer(pointerOwn), tea.Quit)
 
 	// ── open file in $EDITOR ───────────────────────────────────────────────
 	case msgs.OpenEditorMsg:
@@ -785,7 +785,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// A key may quit or hand the terminal to another program, an editor
 		// or a login, which must not get den's hand pointer: the terminal's
 		// own comes back first, and the hand with the next move of the mouse.
-		before = m.setPointer("")
+		before = m.setPointer(pointerOwn)
 
 		// The shortcuts pop-up takes every key: esc closes it before what is
 		// under it, and a c or d pressed while reading what it does must not

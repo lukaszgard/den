@@ -267,43 +267,74 @@ func (m *AppModel) release() tea.Cmd {
 	return components.Copy(text, "copied "+count(strings.Count(text, "\n")+1, "line", "lines"))
 }
 
-// pointerOverLink is the mouse pointer over a link: the pointing hand of a
-// browser, by its CSS name, which Ghostty, kitty and foot take (OSC 22). A
-// terminal that cannot change its pointer ignores it.
-const pointerOverLink = "pointer"
+// A pointer is what den last asked the terminal to show under the mouse.
+type pointer int
 
-// hover shows the hand while the pointer is on a link a click would open,
-// and the terminal's own pointer anywhere else and while a button is held: a
-// drag selects rather than opens.
-func (m *AppModel) hover(x, y int, held bool) tea.Cmd {
-	shape := ""
-	if id, _ := m.zones.At(x, y); !held && !m.linksCovered() {
-		if _, ok := components.LinkTarget(id); ok {
-			shape = pointerOverLink
-		}
-	}
-	return m.setPointer(shape)
+const (
+	// pointerOwn is the terminal's own: den has asked for nothing, or gave it
+	// back for what comes after it, a program it starts or the shell.
+	pointerOwn pointer = iota
+	// pointerHand is the pointing hand of a browser, over a link.
+	pointerHand
+	// pointerArrow is den's pointer off a link, while it has the mouse.
+	pointerArrow
+)
+
+// pointerNames are the shapes den asks for a pointer with (OSC 22), in turn:
+// terminals name them differently and keep the last one they know. Ghostty,
+// kitty and foot take CSS names, iTerm2 and xterm X11 ones. The empty name
+// gives the terminal its own pointer back, but Ghostty before 1.4 ignores it
+// and kept the hand for good; the name before it is the pointer Ghostty
+// shows then, the arrow while den has the mouse and the I-beam over text
+// after it. A terminal that cannot change its pointer ignores them all.
+var pointerNames = [...][]string{
+	pointerOwn:   {"text", ""},
+	pointerHand:  {"pointer", "hand2"},
+	pointerArrow: {"default", ""},
 }
 
-// setPointer asks the terminal for the pointer shape, "" for its own, unless
-// that is the one it has.
-func (m *AppModel) setPointer(shape string) tea.Cmd {
-	if shape == m.pointer {
+// pointerSequence is what asks the terminal for p.
+func pointerSequence(p pointer) string {
+	var b strings.Builder
+	for _, name := range pointerNames[p] {
+		b.WriteString(ansi.SetPointerShape(name))
+	}
+	return b.String()
+}
+
+// hover shows the hand while the pointer is on a link a click would open, and
+// takes it away anywhere else and while a button is held: a drag selects
+// rather than opens.
+func (m *AppModel) hover(x, y int, held bool) tea.Cmd {
+	if id, _ := m.zones.At(x, y); !held && !m.linksCovered() {
+		if _, ok := components.LinkTarget(id); ok {
+			return m.setPointer(pointerHand)
+		}
+	}
+	if m.pointer == pointerHand {
+		return m.setPointer(pointerArrow)
+	}
+	return nil
+}
+
+// setPointer asks the terminal for p, unless that is the one it has.
+func (m *AppModel) setPointer(p pointer) tea.Cmd {
+	if p == m.pointer {
 		return nil
 	}
-	m.pointer = shape
-	return tea.Raw(ansi.SetPointerShape(shape))
+	m.pointer = p
+	return tea.Raw(pointerSequence(p))
 }
 
 // PointerReset is what gives the terminal its own pointer back once den has
 // quit, or "" when den left it as it was. Bubble Tea puts back the modes it
-// set, and den set this one itself; a quit without a key (a signal, a
-// restart into a new version) can leave the hand behind.
+// set, and den set this one itself; a key and a restart give it back before
+// den quits, a signal cannot.
 func (m *AppModel) PointerReset() string {
-	if m.pointer == "" {
+	if m.pointer == pointerOwn {
 		return ""
 	}
-	return ansi.SetPointerShape("")
+	return pointerSequence(pointerOwn)
 }
 
 // toggleMouse gives the mouse to the terminal, or takes it back. With it the

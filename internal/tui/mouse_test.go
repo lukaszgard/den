@@ -648,13 +648,16 @@ func TestALinkBesideAPopUpOpensNothing(t *testing.T) {
 
 // ── the hand over a link ─────────────────────────────────────────────────────
 
+// What den writes for each pointer: names each terminal keeps the last of it
+// knows, and never only the empty one, which Ghostty before 1.4 ignores.
 var (
-	hand       = ansi.SetPointerShape("pointer")
-	ownPointer = ansi.SetPointerShape("")
+	hand         = ansi.SetPointerShape("pointer") + ansi.SetPointerShape("hand2")
+	arrowPointer = ansi.SetPointerShape("default") + ansi.SetPointerShape("")
+	ownPointer   = ansi.SetPointerShape("text") + ansi.SetPointerShape("")
 )
 
-// The pointer turns into a hand over a link, once, and back into the
-// terminal's own off it and while a drag passes over it.
+// The pointer turns into a hand over a link, once, and back into an arrow off
+// it and while a drag passes over it.
 func TestTheHandShowsOverALink(t *testing.T) {
 	h := newHarness(t, managerWith(ssoSession{newSvc(service.TypeAWS, "acme")}), nil)
 	h.openPane(paneAWS)
@@ -670,8 +673,9 @@ func TestTheHandShowsOverALink(t *testing.T) {
 		t.Fatalf("wrote %q, want the hand once over the link", h.raw)
 	}
 	h.send(testkeys.Move(x-1, y))
-	if len(h.raw) != 2 || h.raw[1] != ownPointer {
-		t.Fatalf("wrote %q, want the terminal's pointer back off the link", h.raw)
+	h.send(testkeys.Move(x-2, y))
+	if len(h.raw) != 2 || h.raw[1] != arrowPointer {
+		t.Fatalf("wrote %q, want the arrow once off the link", h.raw)
 	}
 
 	// A drag selects: no hand while the button is held, and the hand again
@@ -701,20 +705,17 @@ func TestNoHandUnderAPopUp(t *testing.T) {
 	}
 }
 
-// A key puts the terminal's own pointer back before anything it does, so a
-// program it starts or the shell after a quit never gets the hand; den
-// leaves the pointer as it found it.
+// A key gives the terminal its own pointer back before anything it does, so a
+// program it starts or the shell after a quit never gets den's; then a key
+// writes nothing.
 func TestAKeyGivesThePointerBack(t *testing.T) {
 	h := newHarness(t, managerWith(ssoSession{newSvc(service.TypeAWS, "acme")}), nil)
 	h.openPane(paneAWS)
 	x, y := screenPos(t, h.m, "https://acme")
 	h.send(testkeys.Move(x, y))
-	if h.m.PointerReset() != ownPointer {
-		t.Fatal("with the hand shown, den should say how to put the pointer back")
-	}
 	h.press("q")
 	if !h.quit || len(h.raw) != 2 || h.raw[1] != ownPointer {
-		t.Fatalf("quit %v, wrote %q: q should put the pointer back, then quit", h.quit, h.raw)
+		t.Fatalf("quit %v, wrote %q: q should give the pointer back, then quit", h.quit, h.raw)
 	}
 	if h.m.PointerReset() != "" {
 		t.Fatal("after the key, the terminal has its own pointer: nothing is left to reset")
@@ -722,6 +723,37 @@ func TestAKeyGivesThePointerBack(t *testing.T) {
 	h.press("down")
 	if len(h.raw) != 2 {
 		t.Fatalf("wrote %q: a key with the terminal's own pointer should write nothing", h.raw)
+	}
+
+	// Off the link the arrow is den's too, and a key gives it back as well.
+	h = newHarness(t, managerWith(ssoSession{newSvc(service.TypeAWS, "acme")}), nil)
+	h.openPane(paneAWS)
+	h.m.View()
+	h.send(testkeys.Move(x, y))
+	h.send(testkeys.Move(x-1, y))
+	h.press("down")
+	if len(h.raw) != 3 || h.raw[2] != ownPointer {
+		t.Fatalf("wrote %q, want the hand, the arrow, then the terminal's own", h.raw)
+	}
+}
+
+// A quit without a key leaves nothing of den's pointer: a restart into a new
+// version gives it back first, and after a signal den says how to.
+func TestAQuitWithoutAKeyGivesThePointerBack(t *testing.T) {
+	h := newHarness(t, managerWith(ssoSession{newSvc(service.TypeAWS, "acme")}), nil)
+	h.openPane(paneAWS)
+	x, y := screenPos(t, h.m, "https://acme")
+	h.send(testkeys.Move(x, y))
+	if h.m.PointerReset() != ownPointer {
+		t.Fatal("with the hand shown, den should say how to give the pointer back")
+	}
+	h.send(testkeys.Move(x-1, y))
+	if h.m.PointerReset() != ownPointer {
+		t.Fatal("with den's arrow shown, den should say how to give the pointer back")
+	}
+	h.send(msgs.UpdateRestartMsg{Version: "9.9.9"})
+	if !h.quit || h.raw[len(h.raw)-1] != ownPointer || h.m.PointerReset() != "" {
+		t.Fatalf("quit %v, wrote %q: a restart should give the pointer back, then quit", h.quit, h.raw)
 	}
 }
 
