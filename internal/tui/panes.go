@@ -416,12 +416,12 @@ func (p updatesAdapter) setSize(w, h int)             { *p.m = p.m.SetSize(w, h-
 func (p updatesAdapter) setDark(isDark bool)          { *p.m = p.m.SetDark(isDark) }
 func (p updatesAdapter) searching() bool              { return p.m.Searching() }
 
-// h is the updates help; esc closes the help, the changelog or the restart
-// prompt (answering "later").
+// h is the updates help; esc closes the help, the changelog, the version
+// picker (a question in it first) or the restart prompt (answering "later").
 func (p updatesAdapter) ownsBack(msg tea.KeyPressMsg) bool {
 	return msg.String() == "h" ||
-		(isBack(msg) && (p.m.ShowingHelp() || p.m.ShowingChangelog() || p.m.ShowingRestartPrompt()))
+		(isBack(msg) && (p.m.ShowingHelp() || p.m.ShowingChangelog() || p.m.ShowingPicker() || p.m.ShowingRestartPrompt()))
 }
 func (updatesAdapter) help() []helpEntry {
-	return []helpEntry{{"tab", "switch panel"}, {"c", "check updates"}, {"q", "quit"}}
+	return []helpEntry{{"tab", "switch panel"}, {"c", "check updates"}, {"v", "versions"}, {"q", "quit"}}
 }

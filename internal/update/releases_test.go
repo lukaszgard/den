@@ -89,44 +89,44 @@ func TestCheckWithoutIndexReadsLatestJSONOnly(t *testing.T) {
 		return http.StatusNotFound, ""
 	}}
 	src := Source{HTTPClient: r.client()}
-	offer, index, err := src.Check(context.Background(), "linux", "amd64", "1.2.0", Policy{})
+	res, err := src.Check(context.Background(), "linux", "amd64", "1.2.0", Policy{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if offer.Version != "v1.2.3" || index != nil {
-		t.Fatalf("offer = %s, index = %v; want v1.2.3 and no index", offer.Version, index)
+	if res.Offer.Version != "v1.2.3" || res.Index != nil {
+		t.Fatalf("offer = %s, index = %v; want v1.2.3 and no index", res.Offer.Version, res.Index)
 	}
 	if asked := r.urls(); len(asked) != 2 || asked[0] != indexURL || asked[1] != feedURL {
 		t.Fatalf("asked %v, want the index then latest.json, and never the API", asked)
 	}
 
-	// A skip applies to latest.json too.
-	offer, _, err = src.Check(context.Background(), "linux", "amd64", "1.2.0", Policy{Skipped: []string{"v1.2.3"}})
-	if err != nil || offer.Version != "1.2.0" {
-		t.Fatalf("offer = %s, %v; want the current version", offer.Version, err)
+	// A skip applies to latest.json too, and says so.
+	res, err = src.Check(context.Background(), "linux", "amd64", "1.2.0", Policy{Skipped: []string{"v1.2.3"}})
+	if err != nil || res.Offer.Version != "1.2.0" || res.Why != "v1.2.3 is skipped on this machine" {
+		t.Fatalf("check = %+v, %v; want the current version and why", res, err)
 	}
 	// A pin is named on the feed without a listing.
-	offer, _, err = src.Check(context.Background(), "linux", "amd64", "1.2.3", Policy{Pin: "1.1.0"})
-	if err != nil || offer.Version != "v1.1.0" ||
-		offer.ArchiveURL != "https://github.com/lukaszgard/den/releases/download/v1.1.0/den_1.1.0_linux_amd64.tar.gz" {
-		t.Fatalf("offer = %+v, %v; want v1.1.0 named on the feed", offer, err)
+	res, err = src.Check(context.Background(), "linux", "amd64", "1.2.3", Policy{Pin: "1.1.0"})
+	if err != nil || res.Offer.Version != "v1.1.0" ||
+		res.Offer.ArchiveURL != "https://github.com/lukaszgard/den/releases/download/v1.1.0/den_1.1.0_linux_amd64.tar.gz" {
+		t.Fatalf("offer = %+v, %v; want v1.1.0 named on the feed", res.Offer, err)
 	}
 }
 
 func TestCheckWithIndex(t *testing.T) {
 	r := &routed{reply: func(*http.Request) (int, string) { return http.StatusOK, indexJSON }}
 	src := Source{HTTPClient: r.client()}
-	offer, index, err := src.Check(context.Background(), "linux", "amd64", "1.7.0", Policy{})
+	res, err := src.Check(context.Background(), "linux", "amd64", "1.7.0", Policy{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if offer.Version != "v1.7.2" || len(index) != 3 {
-		t.Fatalf("offer = %s, index = %v", offer.Version, versions(index))
+	if res.Offer.Version != "v1.7.2" || len(res.Index) != 3 {
+		t.Fatalf("offer = %s, index = %v", res.Offer.Version, versions(res.Index))
 	}
 	if asked := r.urls(); len(asked) != 1 {
 		t.Fatalf("asked %v, want the index alone", asked)
 	}
-	if _, _, err := src.Check(context.Background(), "linux", "amd64", "1.7.0", Policy{Pin: "v1.6.0"}); err == nil {
+	if _, err := src.Check(context.Background(), "linux", "amd64", "1.7.0", Policy{Pin: "v1.6.0"}); err == nil {
 		t.Fatal("a pin the index does not list must fail the check")
 	}
 }
@@ -207,7 +207,7 @@ func TestEnterpriseListsNextToItsLatestURL(t *testing.T) {
 
 func TestIndexFailureIsNotFallenBackOn(t *testing.T) {
 	r := &routed{reply: func(*http.Request) (int, string) { return http.StatusInternalServerError, "" }}
-	_, _, err := Source{HTTPClient: r.client()}.Check(context.Background(), "linux", "amd64", "1.0.0", Policy{})
+	_, err := Source{HTTPClient: r.client()}.Check(context.Background(), "linux", "amd64", "1.0.0", Policy{})
 	if err == nil || errors.Is(err, ErrNoIndex) || !strings.Contains(err.Error(), "500") {
 		t.Fatalf("err = %v, want the index's HTTP 500", err)
 	}

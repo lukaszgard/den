@@ -1,6 +1,7 @@
 // Package updates implements the right-panel "Updates" view.
 // It shows the current version and allows checking for new releases, read from
-// the GitHub release feed (or its API) or from an S3 bucket.
+// the GitHub release feed (or its API) or from an S3 bucket, and installing any
+// published version, older ones included, from the version picker.
 package updates
 
 import (
@@ -49,6 +50,11 @@ type installContext struct {
 	downloadDone    atomic.Bool
 }
 
+// result is the install's outcome, naming the version it was for.
+func (ctx *installContext) result(err error) tea.Msg {
+	return msgs.UpdateInstallResultMsg{Version: ctx.rel.Version, Err: err}
+}
+
 // Model is the Updates right-pane model.
 type Model struct {
 	version         string
@@ -77,13 +83,36 @@ type Model struct {
 	// active lists what a restart would close; read when the prompt renders,
 	// so it is current rather than a snapshot from the end of the install.
 	active func() []string
+
+	// releases is what the last check or picker load listed, newest first;
+	// nil until one did, and after a config reload, which may change the source.
+	releases []update.Release
+	why      string // why the check offered m.latest, from update.Why
+	picker   picker
+	// prefsPath is this machine's updates.json (the skip list); "" keeps none.
+	prefsPath string
+	// skipAfter is the version a downgrade leaves, which goes on the skip list
+	// once the install has succeeded.
+	skipAfter string
+	// newSource builds the release source; update.NewSource but in tests.
+	newSource func(*config.UpdatesConfig) update.Source
 }
 
 // New creates an Updates pane. active lists the connections a restart would
 // close; nil means none.
 func New(version string, cfg *config.UpdatesConfig, logger *applog.Logger, active func() []string, width, height int) Model {
-	return Model{version: version, updatesCfg: cfg, logger: logger, active: active, width: width, height: height}
+	return Model{version: version, updatesCfg: cfg, logger: logger, active: active, width: width, height: height,
+		newSource: update.NewSource}
 }
+
+// WithPrefs keeps the skip list in path, this machine's updates.json.
+func (m Model) WithPrefs(path string) Model {
+	m.prefsPath = path
+	return m
+}
+
+// source is where this pane reads releases from, for the current config.
+func (m Model) source() update.Source { return m.newSource(m.updatesCfg) }
 
 func (m Model) Init() tea.Cmd { return nil }
 
@@ -94,8 +123,10 @@ func (m Model) Version() string { return m.version }
 func (m Model) UpdatesConfig() *config.UpdatesConfig { return m.updatesCfg }
 
 // SetUpdatesConfig changes where the next check looks, after a config reload.
+// The releases listed so far may be another source's, so they are dropped.
 func (m Model) SetUpdatesConfig(cfg *config.UpdatesConfig) Model {
 	m.updatesCfg = cfg
+	m.releases = nil
 	return m
 }
 
@@ -105,8 +136,14 @@ func (m Model) ShowingHelp() bool { return m.showHelp }
 // ShowingChangelog reports whether the changelog overlay is currently open.
 func (m Model) ShowingChangelog() bool { return m.showChangelog }
 
-// Searching reports that the changelog's search box has the keyboard.
-func (m Model) Searching() bool { return m.showChangelog && m.changelog.Searching() }
+// Searching reports that the search box of the changelog, or of a release's
+// notes in the picker, has the keyboard.
+func (m Model) Searching() bool {
+	return (m.showChangelog && m.changelog.Searching()) || (m.picker.open && m.picker.notes && m.picker.view.Searching())
+}
+
+// ShowingPicker reports whether the version picker is open.
+func (m Model) ShowingPicker() bool { return m.picker.open }
 
 // Progress is the install in flight as the terminal's tab progress bar: the
 // download as a percentage while its size is known, indeterminate for the other
@@ -131,6 +168,9 @@ func (m Model) SetDark(isDark bool) Model {
 	if m.showChangelog {
 		m.changelog.SetDark(isDark)
 	}
+	if m.picker.notes {
+		m.picker.view.SetDark(isDark)
+	}
 	return m
 }
 
@@ -147,6 +187,9 @@ func (m Model) SetSize(width, height int) Model {
 	m.height = height
 	if m.showChangelog {
 		m.changelog.SetSize(width, height)
+	}
+	if m.picker.notes {
+		m.picker.view.SetSize(width, height)
 	}
 	return m
 }
@@ -171,7 +214,14 @@ func (m Model) Update(msg tea.Msg, focused bool) (Model, tea.Cmd) {
 		m.latest = msg.Latest
 		m.url = msg.URL
 		m.release = msg.Release
+		if m.release.Version == "" {
+			m.release.Version = msg.Latest
+		}
 		m.notes = strings.TrimSpace(msg.Notes)
+		m.why = msg.Why
+		if msg.Releases != nil {
+			m.releases = msg.Releases
+		}
 		if update.SameVersion(msg.Latest, m.version) {
 			m.state = stateUpToDate
 		} else {
@@ -187,13 +237,21 @@ func (m Model) Update(msg tea.Msg, focused bool) (Model, tea.Cmd) {
 		m.progressLines = append(m.progressLines, "✓ "+msg.Step)
 		return m, msg.NextCmd
 
+	case msgs.UpdateReleasesMsg:
+		m = m.releasesLoaded(msg)
+
 	case msgs.UpdateInstallResultMsg:
+		skip := m.skipAfter
+		m.skipAfter = ""
 		if msg.Err != nil {
 			m.state = stateInstallError
 			m.installErr = msg.Err.Error()
 		} else {
 			m.state = stateInstallDone
 			m.confirmRestart = update.CanReexec
+			if skip != "" {
+				m = m.skipVersion(skip)
+			}
 		}
 
 	case tea.KeyPressMsg:
@@ -222,13 +280,16 @@ func (m Model) Update(msg tea.Msg, focused bool) (Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		if m.picker.open {
+			return m.pickerKey(msg)
+		}
 		// Only an explicit y restarts — not enter: a restart drops every
 		// connection, so it must not happen on a reflex keypress.
 		if m.confirmRestart {
 			switch msg.String() {
 			case "y", "Y":
 				m.confirmRestart = false
-				version := m.latest
+				version := m.release.Version
 				return m, func() tea.Msg { return msgs.UpdateRestartMsg{Version: version} }
 			case "n", "N", "esc", "backspace":
 				m.confirmRestart = false
@@ -244,8 +305,10 @@ func (m Model) Update(msg tea.Msg, focused bool) (Model, tea.Cmd) {
 			m.state = stateChecking
 			return m, tea.Batch(
 				func() tea.Msg { return msgs.UpdateCheckStartedMsg{} },
-				CheckForUpdates(m.updatesCfg, m.logger),
+				m.Check(),
 			)
+		case "v":
+			return m.openPicker()
 		case "h":
 			m.showHelp = true
 		case "s":
@@ -259,25 +322,36 @@ func (m Model) Update(msg tea.Msg, focused bool) (Model, tea.Cmd) {
 			if m.state != stateUpdateAvailable && m.state != stateInstallError {
 				break
 			}
-			src := update.NewSource(m.updatesCfg)
-			if !src.UsesS3() && m.release.ArchiveURL == "" {
-				m.state = stateInstallError
-				m.installErr = "no " + m.release.Archive + " asset in this release — re-check for updates (c)"
-				break
-			}
-			ctx := &installContext{src: src, rel: m.release}
-			m.state = stateInstalling
-			m.progressLines = nil
-			m.installErr = ""
-			m.downloadedBytes = 0
-			m.downloadTotal = 0
-			return m, tea.Batch(
-				func() tea.Msg { return msgs.UpdateInstallStartedMsg{} },
-				stepResolveBinaryPath(ctx),
-			)
+			return m.install(m.release, "")
 		}
 	}
 	return m, nil
+}
+
+// install starts installing rel through the step chain. skip, when set, is
+// the version to put on the skip list once the install has succeeded: the one
+// a downgrade leaves.
+func (m Model) install(rel update.Release, skip string) (Model, tea.Cmd) {
+	src := m.source()
+	m.release = rel
+	if !src.CanInstall(rel) {
+		m.state = stateInstallError
+		m.installErr = "no " + rel.Archive + " asset in this release — re-check for updates (c)"
+		return m, nil
+	}
+	ctx := &installContext{src: src, rel: rel}
+	m.state = stateInstalling
+	m.picker = picker{}
+	m.skipAfter = skip
+	m.progressLines = nil
+	m.installErr = ""
+	m.downloadedBytes = 0
+	m.downloadTotal = 0
+	version := rel.Version
+	return m, tea.Batch(
+		func() tea.Msg { return msgs.UpdateInstallStartedMsg{Version: version} },
+		stepResolveBinaryPath(ctx),
+	)
 }
 
 func (m Model) View(width, height int, focused bool) string {
@@ -287,6 +361,12 @@ func (m Model) View(width, height int, focused bool) string {
 	if m.showHelp {
 		return clampRows(m.renderHelp(width, height), height)
 	}
+	if m.picker.open {
+		if m.picker.notes {
+			return m.picker.view.View()
+		}
+		return m.renderPicker(width, height, focused)
+	}
 
 	header := lipgloss.NewStyle().
 		Bold(true).
@@ -294,33 +374,54 @@ func (m Model) View(width, height int, focused bool) string {
 		Padding(0, 2).
 		Render("Updates")
 
+	versionText := "Current version: " + m.version
+	if pin := m.pin(); pin != "" {
+		versionText += "  ·  pinned to " + update.Canonical(pin) + " (updates.pin)"
+	}
 	versionLine := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#9B9B9B")).
 		Padding(0, 2).
-		Render("Current version: " + m.version)
+		Render(versionText)
 
 	dim := lipgloss.NewStyle().Foreground(lipgloss.Color("#9B9B9B"))
 	code := lipgloss.NewStyle().Foreground(lipgloss.Color("#ECFD65"))
 
 	var statusLines []string
+	// A yanked release is worth saying in every state: it is why the check
+	// may offer an older one.
+	if reason := m.currentYanked(); reason != "" {
+		statusLines = append(statusLines,
+			lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5F87")).Bold(true).
+				Render(fmt.Sprintf("⚠ %s is yanked: %s", update.Canonical(m.version), reason)), "")
+	}
 	switch m.state {
 	case stateIdle:
-		statusLines = []string{
+		statusLines = append(statusLines,
 			lipgloss.NewStyle().Foreground(lipgloss.Color("#626262")).Render("Press c to check for latest version"),
-		}
+		)
 	case stateChecking:
-		statusLines = []string{
+		statusLines = append(statusLines,
 			code.Render("Checking..."),
-		}
+		)
 	case stateUpToDate:
-		statusLines = []string{
+		statusLines = append(statusLines,
 			lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575")).Render(fmt.Sprintf("✓ Up to date (%s)", m.latest)),
+		)
+		if why := m.whyLine(); why != "" {
+			statusLines = append(statusLines, dim.Render("  "+why))
 		}
 	case stateUpdateAvailable:
 		archive, extractCmds, installCmd := installInstructions(m.latest)
 		downloadCmds, releasePage := m.downloadInstructions(archive)
+		available := fmt.Sprintf("↑ %s available", m.latest)
+		if update.Compare(m.latest, m.version) < 0 {
+			available = fmt.Sprintf("↓ %s offered — older than this den", m.latest)
+		}
 		lines := []string{
-			lipgloss.NewStyle().Foreground(lipgloss.Color("#ECFD65")).Bold(true).Render(fmt.Sprintf("↑ %s available", m.latest)),
+			lipgloss.NewStyle().Foreground(lipgloss.Color("#ECFD65")).Bold(true).Render(available),
+		}
+		if why := m.whyLine(); why != "" {
+			lines = append(lines, dim.Render("  "+why))
 		}
 		// The notes are a whole CHANGELOG section; they open in the changelog
 		// box, which scrolls.
@@ -345,12 +446,12 @@ func (m Model) View(width, height int, focused bool) string {
 			lines = append(lines, "", dim.Render("Release page: "+releasePage))
 		}
 		lines = append(lines, "", dim.Render("Or press i to auto-install."))
-		statusLines = lines
+		statusLines = append(statusLines, lines...)
 
 	case stateInstalling:
 		lines := []string{
 			lipgloss.NewStyle().Foreground(lipgloss.Color("#ECFD65")).Bold(true).
-				Render(fmt.Sprintf("⠋ Installing %s…", m.latest)),
+				Render(fmt.Sprintf("⠋ Installing %s…", m.release.Version)),
 			"",
 		}
 		if m.downloadedBytes > 0 {
@@ -359,15 +460,15 @@ func (m Model) View(width, height int, focused bool) string {
 		for _, step := range m.progressLines {
 			lines = append(lines, dim.Render("  "+step))
 		}
-		statusLines = lines
+		statusLines = append(statusLines, lines...)
 
 	case stateInstallDone:
-		statusLines = []string{
+		statusLines = append(statusLines,
 			lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575")).Bold(true).
-				Render(fmt.Sprintf("✓ Installed %s successfully", m.latest)),
+				Render(fmt.Sprintf("✓ Installed %s successfully", m.release.Version)),
 			"",
 			dim.Render("Restart den to use the new version."),
-		}
+		)
 		if update.CanReexec {
 			statusLines = append(statusLines, dim.Render("Press r to restart now."))
 		}
@@ -385,7 +486,7 @@ func (m Model) View(width, height int, focused bool) string {
 				lines = append(lines, dim.Render("  "+step))
 			}
 		}
-		statusLines = lines
+		statusLines = append(statusLines, lines...)
 
 	case stateError:
 		lines := []string{
@@ -394,7 +495,7 @@ func (m Model) View(width, height int, focused bool) string {
 		for line := range strings.SplitSeq(m.errMsg, ": ") {
 			lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5F87")).Render("  "+line))
 		}
-		statusLines = lines
+		statusLines = append(statusLines, lines...)
 	}
 	status := "  " + strings.Join(statusLines, "\n  ")
 	if m.confirmRestart {
@@ -411,14 +512,15 @@ func (m Model) View(width, height int, focused bool) string {
 			changelog.Text = "what's new"
 		}
 		check, help := components.HelpKey{Key: "c", Text: "check"}, components.HelpKey{Key: "h", Text: "help"}
-		keys := []components.HelpKey{check, changelog, help}
+		versions := components.HelpKey{Key: "v", Text: "versions"}
+		keys := []components.HelpKey{check, changelog, versions, help}
 		switch {
 		case m.confirmRestart:
 			keys = []components.HelpKey{{Key: "y", Text: "restart now"}, {Key: "n", Text: "later"}}
 		case m.state == stateInstallDone && update.CanReexec:
-			keys = []components.HelpKey{{Key: "r", Text: "restart"}, check, changelog, help}
+			keys = []components.HelpKey{{Key: "r", Text: "restart"}, check, changelog, versions, help}
 		case m.state == stateUpdateAvailable || m.state == stateInstallError:
-			keys = []components.HelpKey{check, {Key: "i", Text: "install"}, changelog, help}
+			keys = []components.HelpKey{check, {Key: "i", Text: "install"}, changelog, versions, help}
 		}
 		hint = components.HintLine(width, true, keys...)
 	} else {
@@ -481,7 +583,7 @@ func (m Model) renderRestartPrompt(width int) string {
 
 	lines := []string{
 		lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575")).Bold(true).
-			Render(fmt.Sprintf("✓ Installed %s", m.latest)),
+			Render(fmt.Sprintf("✓ Installed %s", m.release.Version)),
 		"",
 		warn.Render("Restart den now?"),
 		"",
@@ -565,7 +667,8 @@ func (m Model) renderHelp(width, height int) string {
 		head.Render("↑ Updates"),
 		"",
 		dim.Render("This panel checks for a newer version of den and"),
-		dim.Render("shows install instructions."),
+		dim.Render("shows install instructions. v lists every published"),
+		dim.Render("version, to upgrade or go back to an older one."),
 		"",
 	}
 	lines = append(lines, authLines...)
@@ -575,6 +678,8 @@ func (m Model) renderHelp(width, height int) string {
 		"",
 		dim.Render("  c   check for latest release"),
 		dim.Render("  i   auto-install latest release"),
+		dim.Render("  v   pick any version to install, older ones too"),
+		dim.Render("      (s notes, x skip in checks, p release candidates)"),
 		dim.Render("  r   restart into the installed version"),
 		dim.Render("      (closes every open connection)"),
 		dim.Render("  h   toggle this help"),
@@ -643,7 +748,7 @@ func stepResolveBinaryPath(ctx *installContext) tea.Cmd {
 	return func() tea.Msg {
 		exe, err := update.Executable()
 		if err != nil {
-			return msgs.UpdateInstallResultMsg{Err: fmt.Errorf("resolve binary: %w", err)}
+			return ctx.result(fmt.Errorf("resolve binary: %w", err))
 		}
 		ctx.finalBinPath = exe
 		return msgs.UpdateInstallProgressMsg{
@@ -658,14 +763,14 @@ func stepDownloadArchive(ctx *installContext) tea.Cmd {
 		defer ctx.downloadDone.Store(true)
 		path, err := update.TempFile(ctx.finalBinPath, "den-download-*")
 		if err != nil {
-			return msgs.UpdateInstallResultMsg{Err: fmt.Errorf("temp file: %w", err)}
+			return ctx.result(fmt.Errorf("temp file: %w", err))
 		}
 		ctx.archivePath = path
 		c, cancel := context.WithTimeout(context.Background(), downloadTimeout)
 		defer cancel()
 		if err := ctx.src.Download(c, ctx.rel, path, &ctx.downloadedBytes, &ctx.totalBytes); err != nil {
 			os.Remove(path) //nolint:errcheck
-			return msgs.UpdateInstallResultMsg{Err: fmt.Errorf("download: %w", err)}
+			return ctx.result(fmt.Errorf("download: %w", err))
 		}
 		return msgs.UpdateInstallProgressMsg{
 			Step:    fmt.Sprintf("Downloaded %s → %s", ctx.rel.Archive, path),
@@ -708,7 +813,7 @@ func stepVerifyArchive(ctx *installContext) tea.Cmd {
 		warning, err := ctx.src.VerifyDownload(c, ctx.rel, ctx.archivePath)
 		if err != nil {
 			os.Remove(ctx.archivePath) //nolint:errcheck
-			return msgs.UpdateInstallResultMsg{Err: fmt.Errorf("verify: %w", err)}
+			return ctx.result(fmt.Errorf("verify: %w", err))
 		}
 		step := "Verified SHA-256 against " + update.ChecksumsFile
 		if warning != "" {
@@ -723,7 +828,7 @@ func stepExtractBinary(ctx *installContext) tea.Cmd {
 		bin, err := update.ExtractBinary(ctx.archivePath, runtime.GOOS, ctx.finalBinPath)
 		if err != nil {
 			os.Remove(ctx.archivePath) //nolint:errcheck
-			return msgs.UpdateInstallResultMsg{Err: fmt.Errorf("extract: %w", err)}
+			return ctx.result(fmt.Errorf("extract: %w", err))
 		}
 		ctx.tempBinPath = bin
 		return msgs.UpdateInstallProgressMsg{
@@ -737,11 +842,11 @@ func stepReplaceBinary(ctx *installContext) tea.Cmd {
 	return func() tea.Msg {
 		defer os.Remove(ctx.archivePath) //nolint:errcheck
 		if err := update.Replace(ctx.tempBinPath, ctx.finalBinPath); err != nil {
-			return msgs.UpdateInstallResultMsg{Err: fmt.Errorf("replace binary: %w", err)}
+			return ctx.result(fmt.Errorf("replace binary: %w", err))
 		}
 		return msgs.UpdateInstallProgressMsg{
 			Step:    "Replaced binary: " + ctx.finalBinPath,
-			NextCmd: func() tea.Msg { return msgs.UpdateInstallResultMsg{} },
+			NextCmd: func() tea.Msg { return ctx.result(nil) },
 		}
 	}
 }
@@ -773,22 +878,30 @@ func formatBytes(n int64) string {
 	}
 }
 
-// CheckForUpdates looks up the latest release from S3 when updates.s3_bucket
-// is configured, and otherwise from the GitHub release feed (the releases API
-// with GITHUB_TOKEN or a GitHub Enterprise server).
-func CheckForUpdates(cfg *config.UpdatesConfig, logger *applog.Logger) tea.Cmd {
+// Check looks up the release to offer: from S3 when updates.s3_bucket is
+// configured, and otherwise from the GitHub release feed (the releases API with
+// GITHUB_TOKEN or a GitHub Enterprise server), under the channel, the pin and
+// this machine's skip list.
+func (m Model) Check() tea.Cmd {
+	src, cfg, current, prefsPath, logger := m.source(), m.updatesCfg, m.version, m.prefsPath, m.logger
 	return func() tea.Msg {
-		src := update.NewSource(cfg)
 		where := src.Location()
 		logger.Trace("update check [" + where + "]: looking up the latest release")
 		start := time.Now()
+		prefs, err := update.LoadPrefs(prefsPath)
+		if err != nil {
+			// The skip list is a convenience; a broken one must not stop the check.
+			logger.Warn("update check: " + err.Error() + " — checking without the skip list")
+		}
 		c, cancel := context.WithTimeout(context.Background(), checkTimeout)
 		defer cancel()
-		rel, err := src.Latest(c, runtime.GOOS, runtime.GOARCH)
+		res, err := src.Check(c, runtime.GOOS, runtime.GOARCH, current, update.NewPolicy(cfg, prefs))
 		logger.Trace(fmt.Sprintf("update check [%s]: done in %dms", where, time.Since(start).Milliseconds()))
 		if err != nil {
 			return msgs.UpdateCheckResultMsg{Err: err}
 		}
-		return msgs.UpdateCheckResultMsg{Latest: rel.Version, URL: rel.URL, Notes: rel.Notes, Release: rel}
+		rel := res.Offer
+		return msgs.UpdateCheckResultMsg{Latest: rel.Version, URL: rel.URL, Notes: rel.Notes, Release: rel,
+			Releases: res.Index, Why: res.Why}
 	}
 }

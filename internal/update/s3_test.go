@@ -128,9 +128,9 @@ func TestS3Index(t *testing.T) {
 	if _, err := src.Index(ctx, "linux", "amd64"); !errors.Is(err, ErrNoIndex) {
 		t.Fatalf("err = %v, want ErrNoIndex", err)
 	}
-	offer, index, err := src.Check(ctx, "linux", "amd64", "1.7.0", Policy{})
-	if err != nil || offer.Version != "v1.7.2" || index != nil {
-		t.Fatalf("check = %s, %v, %v", offer.Version, index, err)
+	res, err := src.Check(ctx, "linux", "amd64", "1.7.0", Policy{})
+	if err != nil || res.Offer.Version != "v1.7.2" || res.Index != nil {
+		t.Fatalf("check = %+v, %v", res, err)
 	}
 	if _, err := src.Releases(ctx, "linux", "amd64"); !errors.Is(err, ErrNoIndex) || !strings.Contains(err.Error(), "copy releases.json") {
 		t.Fatalf("err = %v, want what to copy into the mirror", err)
@@ -147,8 +147,8 @@ func TestS3Index(t *testing.T) {
 	if rels[1].URL != "s3://bucket/den/v1.7.2/den_1.7.2_linux_amd64.tar.gz" || !src.CanInstall(rels[1]) {
 		t.Errorf("v1.7.2 = %+v", rels[1])
 	}
-	if offer, _, err := src.Check(ctx, "linux", "amd64", "1.7.0", Policy{Channel: ChannelPrerelease}); err != nil || offer.Version != "v1.8.0-rc.1" {
-		t.Fatalf("check = %s, %v", offer.Version, err)
+	if res, err := src.Check(ctx, "linux", "amd64", "1.7.0", Policy{Channel: ChannelPrerelease}); err != nil || res.Offer.Version != "v1.8.0-rc.1" {
+		t.Fatalf("check = %s, %v", res.Offer.Version, err)
 	}
 }
 

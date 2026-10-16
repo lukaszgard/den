@@ -131,15 +131,27 @@ type UpdateCheckStartedMsg struct{}
 
 // UpdateCheckResultMsg carries the result of a release check.
 type UpdateCheckResultMsg struct {
-	Latest  string
+	Latest  string // the version offered; the running one when there is nothing to install
 	URL     string // release page (GitHub) or archive location (S3)
 	Notes   string // release notes (markdown text)
 	Release update.Release
-	Err     error
+	// Releases is the source's releases.json, newest first, which the version
+	// picker opens on; nil when the source publishes none.
+	Releases []update.Release
+	Why      string // why Latest was offered rather than the newest release; often empty
+	Err      error
+}
+
+// UpdateReleasesMsg carries the releases the version picker asked for.
+type UpdateReleasesMsg struct {
+	Releases []update.Release // newest first
+	Err      error
 }
 
 // UpdateInstallStartedMsg is sent immediately when the user triggers auto-install.
-type UpdateInstallStartedMsg struct{}
+type UpdateInstallStartedMsg struct {
+	Version string // the version being installed, older than the running one on a downgrade
+}
 
 // UpdateInstallProgressMsg carries one completed install step and the next cmd to run.
 type UpdateInstallProgressMsg struct {
@@ -156,7 +168,8 @@ type UpdateDownloadProgressMsg struct {
 
 // UpdateInstallResultMsg carries the final outcome of an auto-install attempt.
 type UpdateInstallResultMsg struct {
-	Err error
+	Version string
+	Err     error
 }
 
 // UpdateRestartMsg is sent when the user confirms restarting into the version

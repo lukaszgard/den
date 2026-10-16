@@ -141,11 +141,21 @@ func (s Source) Named(version, goos, goarch string) (Release, bool) {
 // installed.
 func (s Source) CanInstall(rel Release) bool { return s.UsesS3() || rel.ArchiveURL != "" }
 
-// Check is the update check: the release to offer under p, and the index it
-// came from, or nil when the source publishes none. Without an index the
-// check reads latest.json as it always has, plus the pinned release by name,
-// so it never costs an API call per start.
-func (s Source) Check(ctx context.Context, goos, goarch, current string, p Policy) (Release, []Release, error) {
+// CheckResult is what an update check found.
+type CheckResult struct {
+	// Offer is the release to install; the running version when there is
+	// nothing to install, which SameVersion then reports.
+	Offer Release
+	// Index is the source's releases.json, newest first; nil when it has none.
+	Index []Release
+	// Why says why Offer is not simply the newest release; often empty.
+	Why string
+}
+
+// Check is the update check: the release to offer under p. Without an index
+// the check reads latest.json as it always has, plus the pinned release by
+// name, so it never costs an API call per start.
+func (s Source) Check(ctx context.Context, goos, goarch, current string, p Policy) (CheckResult, error) {
 	rels, err := s.Index(ctx, goos, goarch)
 	index := rels
 	if errors.Is(err, ErrNoIndex) {
@@ -161,10 +171,13 @@ func (s Source) Check(ctx context.Context, goos, goarch, current string, p Polic
 		}
 	}
 	if err != nil {
-		return Release{}, nil, err
+		return CheckResult{}, err
 	}
 	offer, err := Offer(rels, current, p)
-	return offer, index, err
+	if err != nil {
+		return CheckResult{}, err
+	}
+	return CheckResult{Offer: offer, Index: index, Why: Why(rels, current, offer, p)}, nil
 }
 
 // listURL is the releases API listing next to the releases/latest URL.

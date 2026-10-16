@@ -225,6 +225,12 @@ func TestViewFitsThePane(t *testing.T) {
 			m, _ := available(h).Update(testkeys.Press("s"), true)
 			return m
 		}, "esc/s: close"},
+		{"version picker", func(t *testing.T, h int) Model {
+			return press(pickerPane(t, nil).SetSize(100, h), "v")
+		}, "enter: install"},
+		{"version picker confirm", func(t *testing.T, h int) Model {
+			return press(pickerPane(t, &config.UpdatesConfig{Pin: "v1.7.2"}).SetSize(100, h), "v", "down", "down", "enter")
+		}, "y: install"},
 	}
 	for _, tc := range cases {
 		for _, height := range []int{12, 21, 40} {

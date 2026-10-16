@@ -276,6 +276,9 @@ type Options struct {
 	RunbookState string
 	// RunbookDrafts keeps the requests typed for an agent; nil keeps none.
 	RunbookDrafts *runbook.Drafts
+	// UpdatePrefs is the file of the versions skipped in update checks; ""
+	// keeps none, which is what tests want.
+	UpdatePrefs string
 }
 
 // New creates the root model over mgr's services.
@@ -337,7 +340,7 @@ func New(mgr *service.Manager, opts Options) *AppModel {
 		configPane:      configview.New(opts.ConfigPath, rw, rh).SetProblems(opts.ConfigProblems),
 		logsPane:        applogs.New(logger, rw, rh),
 		helpPane:        help.New(rw, rh),
-		updatesPane:     updates.New(opts.Version, cfg.UpdatesSettings(), logger, closedByRestart(mgr, terminals, runbookTabs), rw, rh),
+		updatesPane:     updates.New(opts.Version, cfg.UpdatesSettings(), logger, closedByRestart(mgr, terminals, runbookTabs), rw, rh).WithPrefs(opts.UpdatePrefs),
 		vpnUp:           map[string]bool{},
 		terminals:       terminals,
 		startTerminal:   startClient,
@@ -438,7 +441,6 @@ func (m *AppModel) paneIndexOf(id paneID) int {
 
 func (m *AppModel) Init() tea.Cmd {
 	m.logger.Trace("app launched — version " + m.version)
-	cfg := m.updatesPane.UpdatesConfig()
 	cmds := []tea.Cmd{
 		tickCmd(tickInterval),
 		// The reply decides the markdown, help and form palettes; panes draw the
@@ -450,7 +452,7 @@ func (m *AppModel) Init() tea.Cmd {
 		// den was closed would otherwise read as expired for a minute.
 		func() tea.Msg { return ssoRenewMsg{} },
 		func() tea.Msg { return msgs.UpdateCheckStartedMsg{} },
-		updates.CheckForUpdates(cfg, m.logger),
+		m.updatesPane.Check(),
 	}
 	// The note about den.yaml's warnings is the only sign of them on the first
 	// screen; the update check goes on without a flash of its own rather than
@@ -676,9 +678,9 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else if msg.Latest == "" {
 			m.logger.Warn("update check: no release tag returned by API")
 		} else if update.SameVersion(msg.Latest, m.updatesPane.Version()) {
-			m.logger.Info("update check: up to date (" + msg.Latest + ")")
+			m.logger.Info("update check: up to date (" + msg.Latest + ")" + whyNote(msg.Why))
 		} else {
-			m.logger.Info("update check: new version available → " + msg.Latest)
+			m.logger.Info("update check: new version available → " + msg.Latest + whyNote(msg.Why))
 		}
 		if msg.Err == nil {
 			m.latestVersion = msg.Latest
@@ -689,7 +691,7 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// ── auto-install started ───────────────────────────────────────────────
 	case msgs.UpdateInstallStartedMsg:
-		m.logger.Info("auto-install: starting installation of " + m.latestVersion)
+		m.logger.Info("auto-install: starting installation of " + msg.Version)
 		var c tea.Cmd
 		m.updatesPane, c = m.updatesPane.Update(msg, false)
 		cmds = append(cmds, c)
@@ -706,14 +708,23 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Err != nil {
 			m.logger.Error("auto-install failed: " + msg.Err.Error())
 		} else {
-			m.logger.Info("auto-install: complete — restart den to use the new version")
+			m.logger.Info("auto-install: " + msg.Version + " complete — restart den to use it")
 			// The restart prompt stays in the Updates pane: a modal elsewhere
 			// would take the next key, and a y typed into a search box would
 			// drop every connection.
 			if update.CanReexec && (m.leftFocused || m.currentPane() != paneUpdates) {
-				text := m.latestVersion + " installed — open Updates to restart"
+				text := msg.Version + " installed — open Updates to restart"
 				cmds = append(cmds, func() tea.Msg { return msgs.StatusFlashMsg{Text: text, Hold: 10 * time.Second} })
 			}
+		}
+		var c tea.Cmd
+		m.updatesPane, c = m.updatesPane.Update(msg, false)
+		cmds = append(cmds, c)
+
+	// ── the version picker's release list ──────────────────────────────────
+	case msgs.UpdateReleasesMsg:
+		if msg.Err != nil {
+			m.logger.Warn("update: could not list the releases: " + msg.Err.Error())
 		}
 		var c tea.Cmd
 		m.updatesPane, c = m.updatesPane.Update(msg, false)
@@ -1492,6 +1503,14 @@ func renewSSO(ctx context.Context, sessions []service.Service) tea.Cmd {
 		}
 		return nil
 	}
+}
+
+// whyNote is a check's why as the end of a log line.
+func whyNote(why string) string {
+	if why == "" {
+		return ""
+	}
+	return " — " + why
 }
 
 // waitForUpdate blocks until the manager has a service event and delivers it.
