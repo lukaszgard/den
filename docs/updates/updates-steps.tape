@@ -2,9 +2,10 @@
 # updates-hd.tape (the site video), so the two cannot drift. Sourced after their
 # Output line and settings; it has neither of its own.
 
-# Needs a den build older than the latest release, and access to the release
-# source (GitHub Releases, or GITHUB_TOKEN for a private fork). Build one first:
-#   go build -ldflags "-X main.version=0.0.1" -o /tmp/den-old/den ./cmd/den
+# Needs a den build older than the latest release, with releases below it too
+# so the version picker shows downgrades, and access to the release source
+# (GitHub Releases, or GITHUB_TOKEN for a private fork). Build one first:
+#   go build -ldflags "-X main.version=1.7.0" -o /tmp/den-old/den ./cmd/den
 # The install replaces /tmp/den-old/den, not the den on PATH.
 #
 # Kept under a minute: answering the restart prompt "later" and reopening it
@@ -44,8 +45,25 @@ Sleep 3.5s   # Look: the new version, the install steps
 Sleep 1s     # Act: s opens the notes
 Type "s"
 Sleep 3.5s   # Look: the notes
-PageDown
-Sleep 2.5s   # Read: the next page
+Escape
+Sleep 1s     # Back
+
+# ── Every version ─────────────────────────────────────────────────────────────
+# Notice: every release, newest first, and what installing each would be; an
+# older one is a downgrade, and enter asks first, saying what that means.
+Sleep 1s     # Act: v opens the version picker
+Type "v"
+Wait+Screen@30s /downgrade/
+Sleep 3.5s   # Look: the releases, the cursor on the running one
+Down
+Sleep 700ms  # Transit
+Down
+Sleep 1s     # Act: enter on an older release
+Enter
+Wait+Screen@5s /Install\?/
+Sleep 5s     # Read: a downgrade, the older den's limits, the skip box
+Type "n"
+Sleep 1s     # Back
 Escape
 Sleep 1s     # Back
 

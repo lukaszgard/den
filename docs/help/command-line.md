@@ -23,6 +23,7 @@ Every den command, and what it is for
 - `den doctor [--for F,…] [--os OS] [--deep] [--json] [--explain]`: check what den needs and print how to install what is missing. `den check-install` is the same command.
 - `den mcp`: serve den to AI agents over the Model Context Protocol, on stdin and stdout.
 - `den vpn install-helper|status|uninstall-helper`: start the VPN without a password prompt, see whether that works, or undo it.
+- `den update [--json]`: what the update check offers and why; `den update list [--all]` lists every release, `den update install [VERSION] [--yes] [--skip-current]` installs one, older ones too, and `den update skip|unskip VERSION` keeps a version from being offered on this machine.
 - `den completion bash|zsh|fish|powershell`: shell completion; `den --version` prints the version, commit and build date.
 
 ## Before you start
@@ -43,3 +44,4 @@ Every den command, and what it is for
 - Runbook sources
 - AI agents (MCP)
 - Doctor
+- Updates
