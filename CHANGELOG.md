@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.7.1] - 2026-10-16
+
+**Secrets no longer say "SSO login expired" while the AWS pane shows hours left.** With an
+`[sso-session]` the access token in `~/.aws/sso/cache` lasts an hour, and the AWS CLI and the SDKs
+swap in a new one from the refresh token until the IAM Identity Center session ends. The Secrets
+pane and `den doctor` read only that token, so whenever it ran out with nothing using AWS, every
+secret on the session was blocked, while the AWS pane, which reads den's own record, counted down
+the hours still left.
+
+### 🔧 Configuration and checks
+
+- den renews a session's access token once it runs out, at start and then every minute, and on `r`
+  in the Connect list. It never opens a browser, and the renewed file keeps working for secrets,
+  `den doctor` and tools outside den.
+- The AWS pane, the Secrets pane and `den doctor` decide in one place whether a login is live, so
+  they can no longer disagree: a login counts while its token is valid or can still be refreshed.
+  After `aws sso logout`, which leaves den's record behind, the AWS pane no longer counts down a
+  login that is gone.
+- When IAM Identity Center refuses a renewal, because the session ended or was revoked, every pane
+  and `den doctor` read the session as expired until the next login, and its log says why. A
+  renewal that fails on the way, or that another den or the CLI beat to the refresh token,
+  changes nothing.
+- A login made outside den that only its refresh token keeps alive reads
+  `logged in · token renews on next use` in the AWS pane until den renews it.
+
 ## [1.7.0] - 2026-10-16
 
 **Click a link to open it.** Since den took the mouse in 1.3.0, the terminal's own ⌘-click never

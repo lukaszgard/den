@@ -178,7 +178,8 @@ func TestSSOSessions(t *testing.T) {
 	cfg := awsHome(t,
 		"[sso-session live]\nsso_start_url = https://live\nsso_region = eu-central-1\n"+
 			"[sso-session stale]\nsso_start_url = https://stale\n"+
-			"[sso-session never]\nsso_start_url = https://never\n", "")
+			"[sso-session never]\nsso_start_url = https://never\n"+
+			"[sso-session renews]\nsso_start_url = https://renews\n", "")
 	cache := config.SSOCacheDir(cfg.AWS.ConfigPath)
 	if err := os.MkdirAll(cache, 0o700); err != nil {
 		t.Fatal(err)
@@ -191,6 +192,13 @@ func TestSSOSessions(t *testing.T) {
 	}
 	write("a.json", "live", now.Add(time.Hour).Format(time.RFC3339))
 	write("b.json", "stale", now.Add(-time.Hour).Format(time.RFC3339))
+	// The access token ran out, but the refresh token renews it on the next
+	// call: the login is alive.
+	refreshable := `{"startUrl":"https://renews","accessToken":"x","expiresAt":"` + now.Add(-10*time.Minute).Format(time.RFC3339) +
+		`","refreshToken":"r","registrationExpiresAt":"` + now.AddDate(0, 3, 0).Format(time.RFC3339) + `"}`
+	if err := os.WriteFile(config.SSOTokenPath(cache, "renews"), []byte(refreshable), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	r := Run(context.Background(), Input{ConfigPath: "den.yaml", Config: cfg}, fakeDeps(nil, ""))
 	if got := find(t, r, "SSO live"); got.Status != OK {
@@ -201,6 +209,9 @@ func TestSSOSessions(t *testing.T) {
 	}
 	if got := find(t, r, "SSO never"); got.Status != Warn || !strings.Contains(got.Fix, "aws sso login --sso-session never") {
 		t.Errorf("never: %+v", got)
+	}
+	if got := find(t, r, "SSO renews"); got.Status != OK || got.Detail != "logged in (den renews its token)" {
+		t.Errorf("renews: %+v", got)
 	}
 }
 

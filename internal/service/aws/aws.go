@@ -12,6 +12,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/credentials/ssocreds"
+	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
+	"github.com/aws/aws-sdk-go-v2/service/ssooidc/types"
+
 	"github.com/lukaszgard/den/internal/config"
 	"github.com/lukaszgard/den/internal/process"
 	"github.com/lukaszgard/den/internal/service"
@@ -36,6 +40,14 @@ type Service struct {
 	updates     chan service.StatusUpdate
 	cancel      context.CancelFunc
 	logs        *process.RingBuffer
+
+	// newOIDC is IAM Identity Center's token API in a region; tests swap in a
+	// fake. CreateToken is unsigned, so it needs no credentials.
+	newOIDC func(region string) ssocreds.CreateTokenAPIClient
+	// renewMu makes renewals take turns: a refresh token can be spent once,
+	// so two at the same moment would fail one of them.
+	renewMu  sync.Mutex
+	renewErr string // the last renewal failure logged
 }
 
 // New creates an AWS SSO service. It reads the token cache on creation so the
@@ -56,6 +68,9 @@ func New(name, session, description, startURL, ssoRegion, awsCfgPath, ssoCacheDi
 		updates:     make(chan service.StatusUpdate, 32),
 		state:       service.RuntimeState{Status: service.StatusIdle},
 		logs:        process.NewRingBuffer(200),
+		newOIDC: func(region string) ssocreds.CreateTokenAPIClient {
+			return ssooidc.New(ssooidc.Options{Region: region})
+		},
 	}
 	s.checkToken()
 	return s
@@ -99,12 +114,109 @@ func (s *Service) ConnectCommand() string {
 	return fmt.Sprintf("aws sso login --sso-session %s", s.session)
 }
 
-// RefreshToken re-reads the SSO token cache and updates the displayed state.
-// It does NOT trigger a new SSO login.
-func (s *Service) RefreshToken(_ context.Context) error {
+// RefreshToken renews an expired access token from the refresh token, then
+// re-reads the SSO token cache and updates the displayed state. It never
+// starts a new login: one that cannot be renewed stays expired.
+func (s *Service) RefreshToken(ctx context.Context) error {
+	// A login in progress owns the state: the TUI asks every minute, and the
+	// cache holds no new token until the browser step is done.
+	if s.State().Status == service.StatusConnecting {
+		return nil
+	}
+	s.renew(ctx)
 	s.checkToken()
 	s.sendUpdate()
 	return nil
+}
+
+// renewTimeout bounds one CreateToken call, so a hung one does not hold
+// renewMu over the renewals after it.
+const renewTimeout = 30 * time.Second
+
+// renew swaps the session's expired access token for a new one while the
+// refresh token is good, as the CLI and SDKs do on their next call. The token
+// lasts an hour, and when nothing used AWS in that hour the file stayed
+// expired: every reader of it (the Secrets pane, den doctor, tools outside
+// den) took the login for over. It never opens a browser.
+//
+// The SDK rewrites the file in the CLI's format. It only refreshes a token
+// that has expired, which is why this waits for the expiry.
+func (s *Service) renew(ctx context.Context) {
+	if s.session == "" {
+		return
+	}
+	path := config.SSOTokenPath(s.ssoCacheDir, s.session)
+	s.renewMu.Lock()
+	defer s.renewMu.Unlock()
+	// Read under the lock: the renewal before this one spent the refresh
+	// token in the file it read, and rewrote the file.
+	tok, ok := config.LoadSSOToken(path)
+	now := time.Now()
+	if !ok || !now.After(tok.ExpiresAt) || !tok.RefreshableUntil.After(now) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, renewTimeout)
+	defer cancel()
+	bearer, err := ssocreds.NewSSOTokenProvider(s.newOIDC(s.ssoRegion), path).RetrieveBearerToken(ctx)
+	if err != nil {
+		if sessionEnded(err) {
+			s.recordEnd(path, tok)
+		}
+		// A session that ended fails the same way every minute, so it is
+		// logged once.
+		if msg := err.Error(); msg != s.renewErr {
+			s.renewErr = msg
+			s.log("could not renew the SSO token: " + msg)
+		}
+		return
+	}
+	s.renewErr = ""
+	s.log("renewed the SSO token, valid until " + bearer.Expires.Local().Format("15:04"))
+}
+
+// sessionEnded reports whether IAM Identity Center refused the refresh token
+// or the client it was issued to: the session is over until the next login.
+// A failure on the way (no network, a timeout, a throttle) says nothing about
+// the session.
+func sessionEnded(err error) bool {
+	var (
+		grant        *types.InvalidGrantException
+		expired      *types.ExpiredTokenException
+		unauthorized *types.UnauthorizedClientException
+		client       *types.InvalidClientException
+	)
+	return errors.As(err, &grant) || errors.As(err, &expired) ||
+		errors.As(err, &unauthorized) || errors.As(err, &client)
+}
+
+// recordEnd ends den's record of the session at the refused token's expiry.
+// The file alone cannot say the session is over: it keeps a refresh token
+// and a client registration that lasts months, so every reader took it for a
+// live login. config.FindSSOLogin counts a login whose record of den's ran
+// out, and whose file was not written since, as over; a new login, by den or
+// the CLI, writes the file and counts again.
+//
+// tok is the file as read before the renewal. When the file changed since,
+// another den or the CLI renewed the login and spent the refresh token den
+// sent, which is why it was refused: that is not the end.
+func (s *Service) recordEnd(path string, tok config.SSOToken) {
+	again, ok := config.LoadSSOToken(path)
+	if !ok || !again.IssuedAt.Equal(tok.IssuedAt) || !again.ExpiresAt.Equal(tok.ExpiresAt) {
+		return
+	}
+	// FindSSOLogin compares the file's mod time with the record's end, so the
+	// end is no earlier than the last write.
+	end := tok.ExpiresAt
+	if tok.IssuedAt.After(end) {
+		end = tok.IssuedAt
+	}
+	issued := tok.IssuedAt
+	if entry, ok := config.ReadDenCache(s.ssoCacheDir).Sessions[s.session]; ok {
+		issued = entry.IssuedAt
+	}
+	if err := config.WriteDenCache(s.ssoCacheDir, s.session, issued, end); err != nil {
+		s.log("could not record the end of the SSO session: " + err.Error())
+	}
 }
 
 func (s *Service) Start(ctx context.Context) (<-chan service.StatusUpdate, error) {
@@ -203,18 +315,16 @@ func (s *Service) tokenMonitorLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			s.mu.RLock()
-			expires := s.state.TokenExpires
-			s.mu.RUnlock()
-
-			if expires != nil && time.Until(*expires) <= 0 {
-				s.log("SSO token expired")
-				s.setState(service.RuntimeState{Status: service.StatusIdle})
-				return
-			}
+			// Renewed before the cache is read: past den's record of the
+			// login, the state comes from the hour-long access token.
+			s.renew(ctx)
 			// Re-read cache in case token was refreshed externally
 			s.checkToken()
 			s.sendUpdate()
+			if s.State().Status != service.StatusConnected {
+				s.log("SSO token expired")
+				return
+			}
 		}
 	}
 }
@@ -231,31 +341,37 @@ const defaultTokenTTL = 12 * time.Hour
 // nearly two orders of magnitude for an SSO token. setState replaces the whole
 // RuntimeState, so run() wipes both on StatusConnecting and checkToken puts them
 // back after login.
+//
+// Whether the login is live is config.FindSSOLogin's answer, the rule the
+// Secrets pane and den doctor use. The pane once read den's record first, so
+// after `aws sso logout` it counted down hours while every secret said the
+// login had expired. A live login with no known end (a refresh token, no
+// record of den's) is connected without an expiry.
 func (s *Service) checkToken() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Try den cache first (more precise expiry)
-	denCache := config.ReadDenCache(s.ssoCacheDir)
-	if entry, ok := denCache.Sessions[s.session]; ok && time.Until(entry.ExpiresAt) > 0 {
-		s.state.TokenExpires = &entry.ExpiresAt
-		s.state.TokenTTL = tokenTTL(entry.IssuedAt, entry.ExpiresAt)
-		s.state.Status = service.StatusConnected
-		return
-	}
-
-	// Fall back to AWS SSO cache
-	tok := config.ReadSSOToken(s.session, s.startURL, s.ssoCacheDir)
-	if tok != nil && time.Until(tok.ExpiresAt) > 0 {
-		s.state.TokenExpires = &tok.ExpiresAt
-		s.state.TokenTTL = tokenTTL(tok.IssuedAt, tok.ExpiresAt)
-		s.state.Status = service.StatusConnected
-		return
-	}
-
+	den := config.ReadDenCache(s.ssoCacheDir)
+	login := config.FindSSOLogin(s.session, s.startURL, config.ListSSOTokens(s.ssoCacheDir), den, time.Now())
 	s.state.TokenExpires = nil
 	s.state.TokenTTL = 0
-	s.state.Status = service.StatusIdle
+	if !login.Live {
+		s.state.Status = service.StatusIdle
+		return
+	}
+	s.state.Status = service.StatusConnected
+	if login.Until.IsZero() {
+		return
+	}
+	until := login.Until
+	s.state.TokenExpires = &until
+	if entry, ok := den.Sessions[s.session]; ok && entry.ExpiresAt.Equal(until) {
+		s.state.TokenTTL = tokenTTL(entry.IssuedAt, until)
+	} else if tok := config.ReadSSOToken(s.session, s.startURL, s.ssoCacheDir); tok != nil {
+		s.state.TokenTTL = tokenTTL(tok.IssuedAt, until)
+	} else {
+		s.state.TokenTTL = defaultTokenTTL
+	}
 }
 
 // tokenTTL is the token's full lifetime, used to scale the TTL bar. The issue

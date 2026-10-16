@@ -15,6 +15,7 @@ The AWS panel lists the SSO sessions of your AWS config, how long each login has
 - Edit your AWS config and credentials files in `$EDITOR`.
 - Choose which sessions den shows, in which order and under which names, with `aws.sessions`.
 - Watch secrets and other panels follow a login by themselves: those waiting for it turn ready without a reload.
+- Stay logged in for as long as your IAM Identity Center session lasts: den renews a session's one-hour access token once it runs out, without a browser, so secrets, `den doctor` and tools outside den keep finding a valid login.
 - Keys: press `h` in the AWS panel.
 
 ## Before you start
@@ -68,12 +69,15 @@ aws:
 - A profile without `sso_session` (static keys, `credential_process`) is listed, but there is nothing to log in to.
 - A login needs a browser; it cannot happen in `den mcp` or a headless shell.
 - An entry naming a session that is not in the AWS config is skipped, with a warning in the Logs panel.
+- den cannot see when the IAM Identity Center session ends. The AWS panel, secrets and `den doctor` count a login as live while it can be refreshed; when IAM Identity Center refuses a renewal, the session's log says why and the session reads as expired everywhere until you log in again.
+- After a login made outside den, the token bar shows the current access token's hour and starts over at each renewal. Until den first renews it, the row says `logged in · token renews on next use`.
 
 ## When it goes wrong
 
 - Only one entry although you have many profiles: your AWS config defines one `[sso-session]`; that is expected.
 - A profile says it has no session: it sets no `sso_session`, or its session was curated away with `aws.sessions`.
 - `unknown AWS profile` elsewhere in den: the profile is not in the file at `config_path`.
+- A session reads as expired while its login had time left: IAM Identity Center refused to renew it, because the session was ended early or revoked. The session's log names the refusal; log in again.
 
 ## See also
 

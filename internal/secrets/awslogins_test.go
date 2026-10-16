@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/lukaszgard/den/internal/config"
 )
 
 const expiredReason = "SSO login expired — log in from the AWS pane"
@@ -46,6 +48,23 @@ func login(t *testing.T, awsConfig, url string, exp, mod time.Time) {
 	t.Helper()
 	file := filepath.Join(filepath.Dir(awsConfig), "sso", "cache", filepath.Base(filepath.Dir(url))+".json")
 	tok := fmt.Sprintf(`{"startUrl":%q,"accessToken":"x","expiresAt":%q}`, url, exp.UTC().Format(time.RFC3339))
+	if err := os.WriteFile(file, []byte(tok), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(file, mod, mod); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// loginRefreshable writes session's own cached login as the CLI does for an
+// sso-session: the access token runs out at exp, and the refresh token can
+// renew it until the client registration runs out, months later.
+func loginRefreshable(t *testing.T, awsConfig, session, url string, exp, mod time.Time) {
+	t.Helper()
+	file := config.SSOTokenPath(config.SSOCacheDir(awsConfig), session)
+	tok := fmt.Sprintf(`{"startUrl":%q,"accessToken":"x","expiresAt":%q,"clientId":"c","clientSecret":"s",`+
+		`"registrationExpiresAt":%q,"refreshToken":"r"}`,
+		url, exp.UTC().Format(time.RFC3339), exp.AddDate(0, 3, 0).UTC().Format(time.RFC3339))
 	if err := os.WriteFile(file, []byte(tok), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -205,5 +224,43 @@ func TestAWSLoginsStamp(t *testing.T) {
 	login(t, home, legacyURL, now.Add(time.Hour), now)
 	if got := a.Check("legacy", now); got != "" {
 		t.Errorf("legacy profile after its login: Check = %q", got)
+	}
+}
+
+// The access token of an sso-session lasts an hour, and the SDK swaps in a new
+// one from the refresh token on its next call. One that ran out ten minutes
+// ago, with nothing using AWS since, is still a login: reading it as expired
+// blocked every secret until an aws command happened to renew it.
+func TestAWSLoginsRefreshableLogin(t *testing.T) {
+	now := time.Now()
+	home := awsHome(t)
+	cache := config.SSOCacheDir(home)
+	loginRefreshable(t, home, "corp", corpURL, now.Add(-10*time.Minute), now.Add(-70*time.Minute))
+	a := NewAWSLogins(home)
+	if got := a.Check("sso-prof", now); got != "" {
+		t.Fatalf("Check = %q, want a usable login", got)
+	}
+
+	// den logged in: its record says when the AWS pane shows the login ending.
+	if err := config.WriteDenCache(cache, "corp", now.Add(-7*time.Hour), now.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if got := a.Check("sso-prof", now); got != "" {
+		t.Fatalf("while den's login runs: Check = %q", got)
+	}
+	// Past it, with the file not written since, the secrets say what the AWS
+	// pane says. Nothing on disk changed, so the stamp has to move by itself.
+	stamp := a.Stamp(now)
+	if got := a.Check("sso-prof", now.Add(2*time.Hour)); got != expiredReason {
+		t.Errorf("after den's login ran out: Check = %q, want %q", got, expiredReason)
+	}
+	if a.Stamp(now.Add(2*time.Hour)) == stamp {
+		t.Error("den's login running out must change the stamp")
+	}
+
+	// A new login rewrites the file.
+	loginRefreshable(t, home, "corp", corpURL, now.Add(3*time.Hour), now.Add(90*time.Minute))
+	if got := a.Check("sso-prof", now.Add(2*time.Hour)); got != "" {
+		t.Errorf("after a new login: Check = %q", got)
 	}
 }

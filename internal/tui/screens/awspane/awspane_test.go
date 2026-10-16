@@ -119,3 +119,24 @@ func TestNarrowPaneDropsTheClock(t *testing.T) {
 		}
 	}
 }
+
+// A login kept alive by its refresh token, with no record of den's, has no
+// known end. The Secrets pane counts it as live, so the row must not say "No
+// active token" and send the user to log in again.
+func TestSessionRowWithoutAKnownEnd(t *testing.T) {
+	renewable := &fakeSession{name: "bmwssorow", state: service.RuntimeState{Status: service.StatusConnected}}
+	m := newPane(t, renewable, &fakeSession{name: "den-corp"})
+
+	view := ansi.Strip(m.View(117, 40, false))
+
+	row := rowOf(t, view, "bmwssorow")
+	if strings.Contains(row, "No active token") || !strings.Contains(row, "logged in") {
+		t.Errorf("live row with no known end: %q", row)
+	}
+	if strings.Contains(row, "until") || strings.Contains(row, "remaining") {
+		t.Errorf("row with no known end shows a time: %q", row)
+	}
+	if row = rowOf(t, view, "den-corp"); !strings.Contains(row, "No active token") {
+		t.Errorf("row of a session never logged in: %q", row)
+	}
+}

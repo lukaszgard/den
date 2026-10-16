@@ -403,18 +403,23 @@ func checkTool(ctx context.Context, n toolNeed, env prereq.Env) Result {
 func checkSSO(cfg *config.Config, profiles []config.AWSProfile, d Deps) []Result {
 	sessions, _ := config.ResolveSSOSessions(profiles, cfg.AWSSessions())
 	cacheDir := config.SSOCacheDir(cfg.AWSConfigPath())
+	tokens, den := config.ListSSOTokens(cacheDir), config.ReadDenCache(cacheDir)
 	var out []Result
 	for _, s := range sessions {
 		check := "SSO " + s.Name
 		fix := "aws sso login --sso-session " + s.Name + " (or Enter on it in the AWS pane)"
-		tok := config.ReadSSOToken(s.Name, s.StartURL, cacheDir)
+		// The hour-long access token running out is not the end of the login:
+		// the CLI and SDKs renew it until the IAM Identity Center session ends.
+		login := config.FindSSOLogin(s.Name, s.StartURL, tokens, den, d.Now())
 		switch {
-		case tok == nil:
+		case !login.Found:
 			out = append(out, Result{Check: check, Status: Warn, Detail: "not logged in", Fix: fix})
-		case !tok.ExpiresAt.After(d.Now()):
-			out = append(out, Result{Check: check, Status: Warn, Detail: "login expired at " + tok.ExpiresAt.Local().Format("Jan 2 15:04"), Fix: fix})
+		case !login.Live:
+			out = append(out, Result{Check: check, Status: Warn, Detail: "login expired at " + login.Until.Local().Format("Jan 2 15:04"), Fix: fix})
+		case login.Until.IsZero():
+			out = append(out, Result{Check: check, Status: OK, Detail: "logged in (den renews its token)"})
 		default:
-			out = append(out, Result{Check: check, Status: OK, Detail: "logged in until " + tok.ExpiresAt.Local().Format("Jan 2 15:04")})
+			out = append(out, Result{Check: check, Status: OK, Detail: "logged in until " + login.Until.Local().Format("Jan 2 15:04")})
 		}
 	}
 	return out

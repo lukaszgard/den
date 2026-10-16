@@ -2,6 +2,8 @@ package config
 
 import (
 	"bufio"
+	"crypto/sha1" //nolint:gosec // the AWS CLI names its token files with it
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -120,10 +122,12 @@ func LoadAWSProfiles(cfgPath string) ([]AWSProfile, error) {
 }
 
 type ssoTokenFile struct {
-	SessionName string `json:"sessionName"`
-	StartURL    string `json:"startUrl"`
-	ExpiresAt   string `json:"expiresAt"`
-	AccessToken string `json:"accessToken"`
+	SessionName           string `json:"sessionName"`
+	StartURL              string `json:"startUrl"`
+	ExpiresAt             string `json:"expiresAt"`
+	AccessToken           string `json:"accessToken"`
+	RefreshToken          string `json:"refreshToken"`
+	RegistrationExpiresAt string `json:"registrationExpiresAt"`
 }
 
 // ssoTimeLayouts lists the formats used by the AWS CLI for token expiry.
@@ -134,19 +138,34 @@ var ssoTimeLayouts = []string{
 	"2006-01-02T15:04:05+0000",
 }
 
+// parseSSOTime reads a time the AWS CLI wrote in any of ssoTimeLayouts.
+func parseSSOTime(s string) (time.Time, bool) {
+	for _, layout := range ssoTimeLayouts {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
+}
+
 // SSOTokenInfo holds the expiry and issue time of an SSO access token.
 // IssuedAt is derived from the cache file's modification time, which reflects
-// when aws sso login last ran.
+// when aws sso login last ran, or when the token was last renewed.
 type SSOTokenInfo struct {
 	ExpiresAt time.Time
 	IssuedAt  time.Time
+	// RefreshableUntil is when the client registration that swaps the refresh
+	// token for a new access token runs out: zero when the file has no refresh
+	// token, or a registration expiry den cannot read.
+	RefreshableUntil time.Time
 }
 
 // SSOToken is one cached SSO login: whose it is and when it runs out. The
-// access token itself is never kept.
+// access and refresh tokens themselves are never kept.
 type SSOToken struct {
 	SessionName string
 	StartURL    string
+	File        string // the cache file's name; SSOTokenPath says whose it is
 	SSOTokenInfo
 }
 
@@ -170,32 +189,108 @@ func ListSSOTokens(ssoCacheDir string) []SSOToken {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
 			continue
 		}
-		fpath := filepath.Join(ssoCacheDir, e.Name())
-		data, err := os.ReadFile(fpath)
-		if err != nil {
-			continue
-		}
-		var tok ssoTokenFile
-		if err := json.Unmarshal(data, &tok); err != nil {
-			continue
-		}
-		if tok.AccessToken == "" {
-			continue
-		}
-		for _, layout := range ssoTimeLayouts {
-			t, err := time.Parse(layout, tok.ExpiresAt)
-			if err != nil {
-				continue
-			}
-			info := SSOTokenInfo{ExpiresAt: t}
-			if fi, err := os.Stat(fpath); err == nil {
-				info.IssuedAt = fi.ModTime()
-			}
-			out = append(out, SSOToken{SessionName: tok.SessionName, StartURL: tok.StartURL, SSOTokenInfo: info})
-			break
+		if tok, ok := LoadSSOToken(filepath.Join(ssoCacheDir, e.Name())); ok {
+			out = append(out, tok)
 		}
 	}
 	return out
+}
+
+// LoadSSOToken reads the login in one cache file, with the file's mod time as
+// IssuedAt. It reports false for a file that is not a login or whose expiry
+// cannot be read.
+func LoadSSOToken(path string) (SSOToken, bool) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return SSOToken{}, false
+	}
+	var tok ssoTokenFile
+	if err := json.Unmarshal(data, &tok); err != nil || tok.AccessToken == "" {
+		return SSOToken{}, false
+	}
+	expires, ok := parseSSOTime(tok.ExpiresAt)
+	if !ok {
+		return SSOToken{}, false
+	}
+	info := SSOTokenInfo{ExpiresAt: expires}
+	if tok.RefreshToken != "" {
+		info.RefreshableUntil, _ = parseSSOTime(tok.RegistrationExpiresAt)
+	}
+	if fi, err := os.Stat(path); err == nil {
+		info.IssuedAt = fi.ModTime()
+	}
+	return SSOToken{SessionName: tok.SessionName, StartURL: tok.StartURL, File: filepath.Base(path), SSOTokenInfo: info}, true
+}
+
+// SSOTokenPath is the file the AWS CLI keeps an sso-session's login in, named
+// after the session's SHA-1. It is the only file the SDK refreshes for the
+// session: another file for the same start URL (a renamed session's) is not.
+func SSOTokenPath(cacheDir, session string) string {
+	sum := sha1.Sum([]byte(session)) //nolint:gosec // the CLI's file name, not a security use
+	return filepath.Join(cacheDir, hex.EncodeToString(sum[:])+".json")
+}
+
+// SSOLogin is one session's login as the caches describe it.
+type SSOLogin struct {
+	Found bool      // the AWS CLI cache holds a login for the session
+	Live  bool      // the CLI and SDKs can still use it, refreshing it if needed
+	Until time.Time // when it runs out; zero when only IAM Identity Center knows
+}
+
+// FindSSOLogin decides whether the login of session (or of startURL, for a
+// legacy profile) is alive. The access token's expiry is not its end: with an
+// sso-session the token lasts an hour, and the CLI and SDKs swap in a new one
+// from the refresh token, without a prompt, until the IAM Identity Center
+// session ends. No file records that end, so a login that can be refreshed
+// counts, unless den's own record of the session (den writes it at a login,
+// with the role credentials' expiry) has run out and the file was not written
+// since: the AWS pane then says the login ended, and a renewal or a new login
+// rewrites the file.
+//
+// Until is den's record while it runs, what the AWS pane shows; otherwise the
+// latest access token's expiry. For a login that is not live, it is the latest
+// expiry known, so the caller can say when it ended.
+func FindSSOLogin(session, startURL string, tokens []SSOToken, den *DenCache, now time.Time) SSOLogin {
+	var entry DenCacheEntry
+	hasEntry := false
+	if den != nil && session != "" {
+		entry, hasEntry = den.Sessions[session]
+	}
+	denRunning := hasEntry && entry.ExpiresAt.After(now)
+	own := ""
+	if session != "" {
+		own = filepath.Base(SSOTokenPath("", session))
+	}
+
+	var login SSOLogin
+	var latest time.Time // the latest access token's expiry
+	for _, tok := range tokens {
+		if !tok.Matches(session, startURL) {
+			continue
+		}
+		login.Found = true
+		if tok.ExpiresAt.After(latest) {
+			latest = tok.ExpiresAt
+		}
+		refreshable := tok.File == own && tok.RefreshableUntil.After(now) &&
+			(!hasEntry || denRunning || tok.IssuedAt.After(entry.ExpiresAt))
+		if tok.ExpiresAt.After(now) || refreshable {
+			login.Live = true
+		}
+	}
+	switch {
+	case !login.Found:
+	case !login.Live:
+		login.Until = latest
+		if hasEntry && !denRunning && entry.ExpiresAt.After(latest) {
+			login.Until = entry.ExpiresAt
+		}
+	case denRunning:
+		login.Until = entry.ExpiresAt
+	case latest.After(now):
+		login.Until = latest
+	}
+	return login
 }
 
 // ReadSSOToken scans ssoCacheDir for the token file matching either
