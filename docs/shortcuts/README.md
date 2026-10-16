@@ -225,11 +225,14 @@ on a link opens it in the browser.
   on its first line. With `M`, the terminal handles links itself (⌘-click or
   Ctrl-click in most).
 - **The hand.** With the mouse over a link the pointer turns into a hand, in a
-  terminal that lets den set it (OSC 22): Ghostty, kitty, foot, iTerm2 3.5 and xterm.
-  Alacritty, GNOME Terminal and Windows Terminal cannot, and keep their own pointer.
-  Terminals name the shapes differently (CSS names in Ghostty, kitty and foot, X11
-  ones in iTerm2 and xterm), so den sends both. It changes as the mouse moves, and a
-  key gives the terminal its own pointer back until the next move, so a program den
+  terminal that lets den set it (OSC 22) while den has the mouse: Ghostty, kitty and
+  foot. Alacritty, GNOME Terminal and Windows Terminal cannot, and keep their own
+  pointer. iTerm2 3.6 and earlier keep theirs, an I-beam in a circle, as long as a
+  program has the mouse; its development version shows the hand. In iTerm2, hold
+  `⌘` over a link for its own hand, and `⌘`-click to open the link. Terminals name
+  the shapes differently (CSS names in Ghostty, kitty and foot, X11 ones in iTerm2
+  and xterm), so den sends both. The pointer changes as the mouse moves, and a key
+  gives the terminal its own pointer back until the next move, so a program den
   starts, or the shell after it, never gets the hand.
 - **Keyboard-only.** Pop-ups, forms and y/n questions take no click, no drag and no
   wheel, so a stray click never answers one; hint lines and the bars at the bottom are

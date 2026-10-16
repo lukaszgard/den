@@ -17,7 +17,7 @@ den reads the mouse as well as the keyboard. A click selects what it lands on, a
 - In a runbook's view, click a run in History or a file in Files, and double-click it to see the run's whole log or the file.
 - Scroll the logs, a runbook's Run and About tabs and a file shown with the wheel, and the shortcuts pop-up (`h`) too.
 - Click a link to open it in the browser: any http(s) address den shows, underlined in blue, in a panel, the logs, a Help topic, a bar or a terminal tab. A drag over it selects it instead.
-- Point at a link and the mouse pointer turns into a hand, as in a browser, in a terminal that lets den set its pointer: Ghostty, kitty, foot, iTerm2 3.5 and xterm do.
+- Point at a link and the mouse pointer turns into a hand, as in a browser, in a terminal that lets den set its pointer while den has the mouse: Ghostty, kitty and foot do.
 - Drag over text to select it, in reverse video: letting go copies it, and the status bar says `copied 3 lines`. A key, a click or the wheel clears the highlight.
 - Press `M` to give the mouse back to the terminal, whose own drag-to-select then works as it always did; `M` again gives it back to den. While the terminal has it, the status bar ends with `M: mouse to den`.
 
@@ -47,6 +47,7 @@ den reads the mouse as well as the keyboard. A click selects what it lands on, a
 - An address cut with `…` is not a link, and one wrapped onto a second line opens only the part on its first line.
 - With `M`, the terminal handles links itself: in most, ⌘-click or Ctrl-click opens one.
 - The hand needs a terminal that can change its pointer (OSC 22); Alacritty, GNOME Terminal and Windows Terminal cannot, and keep their own.
+- iTerm2 3.6 and earlier keep their own pointer, an I-beam in a circle, while den has the mouse; a later iTerm2 shows den's hand. Hold ⌘ over a link for iTerm2's own hand: ⌘-click opens the link too.
 - The pointer changes as the mouse moves: a link that scrolls under a still mouse shows the hand once it moves, and a key brings the terminal's own pointer back until then.
 - The wheel over the menu does nothing, so a notch too many never switches panels.
 - Most panels show their cursor only while they have the focus: the wheel over one while the menu has it moves a cursor you see once you click or tab into the panel.
