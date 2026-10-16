@@ -24,18 +24,29 @@ jobs:
       # The notes on the release page and in latest.json (shown by the Updates
       # pane) are this tag's CHANGELOG.md section, not GoReleaser's commit list:
       # PRs are squash-merged, so that list is a few PR titles. A tag without a
-      # section fails here, before anything is published.
+      # section fails here, before anything is published. A release candidate,
+      # vX.Y.Z-rc.N, has X.Y.Z's section under a line that says what it is;
+      # GoReleaser (prerelease: auto) publishes it as a prerelease.
       - name: Release notes from CHANGELOG.md
         run: |
           version="${GITHUB_REF_NAME#v}"
-          awk -v v="$version" '
+          release="${version%%-*}"
+          awk -v v="$release" '
             index($0, "## [" v "]") == 1 { on = 1; next }
             on && /^## \[/ { exit }
             on { print }
           ' repo/CHANGELOG.md > release-notes.md
           if ! grep -q '[^[:space:]]' release-notes.md; then
-            echo "::error::CHANGELOG.md has no '## [$version]' section; add one before tagging"
+            echo "::error::CHANGELOG.md has no '## [$release]' section; add one before tagging"
             exit 1
+          fi
+          if [ "$release" != "$version" ]; then
+            {
+              # shellcheck disable=SC2016 # the backticks are markdown
+              printf '**Release candidate** of v%s, for testing before it is released: den offers it only with `updates.channel: prerelease`.\n\n' "$release"
+              cat release-notes.md
+            } > rc-notes.md
+            mv rc-notes.md release-notes.md
           fi
 
       # The same setup-go as CI, so both install the toolchain go.mod names.
@@ -56,16 +67,22 @@ jobs:
       # latest.json is what an S3 mirror's Updates check and the install scripts'
       # latest lookup read. It goes up after the archives and before the scripts
       # on purpose: a script that is published must never point at a release
-      # that is not uploaded yet.
+      # that is not uploaded yet. A release candidate has none: a mirror that
+      # copies a release's files must not make an rc everyone's latest.
       - name: Publish latest.json, CHANGELOG.md and the install scripts
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          jq -n \
-            --arg version "${{ github.ref_name }}" \
-            --rawfile notes release-notes.md \
-            '{"version":$version,"notes":$notes}' > latest.json
-          gh release upload "${{ github.ref_name }}" latest.json --repo "${{ github.repository }}" --clobber
+          case "${{ github.ref_name }}" in
+          *-*) ;;
+          *)
+            jq -n \
+              --arg version "${{ github.ref_name }}" \
+              --rawfile notes release-notes.md \
+              '{"version":$version,"notes":$notes}' > latest.json
+            gh release upload "${{ github.ref_name }}" latest.json --repo "${{ github.repository }}" --clobber
+            ;;
+          esac
           gh release upload "${{ github.ref_name }}" repo/CHANGELOG.md repo/scripts/install.sh repo/scripts/install.ps1 \
             --repo "${{ github.repository }}" --clobber
 

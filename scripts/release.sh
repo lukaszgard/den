@@ -8,6 +8,7 @@
 #   release.sh draft   X.Y.Z [REF]  git-cliff draft of the entry, last tag..REF
 #   release.sh prepare X.Y.Z        check this branch can ship as X.Y.Z
 #   release.sh tag     X.Y.Z        tag origin/main as vX.Y.Z and push the tag
+#   release.sh tag     X.Y.Z-rc.N   tag the release PR's branch as a release candidate
 #
 # Only `tag` changes anything outside this checkout, and it asks first.
 set -eu
@@ -20,7 +21,7 @@ die() {
 step() { printf '\n==> %s\n' "$*"; }
 
 usage() {
-	sed -n '2,12s/^# \{0,1\}//p' "$0" >&2
+	sed -n '2,13s/^# \{0,1\}//p' "$0" >&2
 	exit 2
 }
 
@@ -30,8 +31,17 @@ check_version() {
 		die "VERSION must look like 1.2.3 (no v), got '$1'"
 }
 
+# A tag may also be a release candidate, X.Y.Z-rc.N: a GitHub prerelease, offered
+# only on updates.channel: prerelease, its notes X.Y.Z's entry.
+check_tag_version() {
+	printf '%s\n' "$1" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$' ||
+		die "VERSION must look like 1.2.3 or 1.2.3-rc.1 (no v), got '$1'"
+}
+
+# The newest release, never a release candidate: an rc of 1.8.0 must not make
+# the next version 1.9.0, nor 1.8.0 look released.
 last_tag() {
-	git tag --list 'v[0-9]*' | sort -t. -k1.2,1n -k2,2n -k3,3n | tail -n1
+	git tag --list 'v[0-9]*' | grep -v -- - | sort -t. -k1.2,1n -k2,2n -k3,3n | tail -n1
 }
 
 # newer A B: A is a higher X.Y.Z than B.
@@ -42,7 +52,8 @@ newer() {
 
 check_new_tag() {
 	last=$(last_tag)
-	newer "$1" "${last#v}" || die "$1 is not newer than the last tag, $last"
+	# A release candidate comes before its release: X.Y.Z must not be out yet.
+	newer "${1%%-*}" "${last#v}" || die "$1 is not newer than the last tag, $last"
 	git rev-parse -q --verify "refs/tags/v$1" >/dev/null && die "tag v$1 already exists here"
 	if git ls-remote --exit-code --tags origin "refs/tags/v$1" >/dev/null 2>&1; then
 		die "tag v$1 already exists on origin"
@@ -313,14 +324,27 @@ EOF
 
 cmd_tag() {
 	version=$1
-	check_version "$version"
+	check_tag_version "$version"
+	release=${version%%-*}
 
-	step "main"
-	git fetch --quiet --tags origin main
-	[ "$(git branch --show-current)" = main ] ||
-		die "run this on main: git switch main && git pull --ff-only"
-	[ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] ||
-		die "main is not origin/main: git pull --ff-only"
+	if [ "$release" = "$version" ]; then
+		step "main"
+		git fetch --quiet --tags origin main
+		[ "$(git branch --show-current)" = main ] ||
+			die "run this on main: git switch main && git pull --ff-only"
+		[ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] ||
+			die "main is not origin/main: git pull --ff-only"
+	else
+		# A release candidate is the release PR before it merges: its branch,
+		# as pushed, with the entry the release will have.
+		branch=chore/release-v$release
+		step "$branch"
+		[ "$(git branch --show-current)" = "$branch" ] ||
+			die "a release candidate is tagged on the release PR's branch: git switch $branch"
+		git fetch --quiet --tags origin "$branch" || die "no $branch on origin: push it first"
+		[ "$(git rev-parse HEAD)" = "$(git rev-parse "origin/$branch")" ] ||
+			die "$branch is not origin/$branch: push it, or git pull --ff-only"
+	fi
 	git log -1 --format='  %h %s'
 	[ -z "$(git status --porcelain)" ] ||
 		echo "warning: uncommitted changes; they are not part of the tagged commit"
@@ -330,8 +354,8 @@ cmd_tag() {
 
 	# The workflow reads CHANGELOG.md from the tagged commit, not the worktree.
 	step "Release notes (CHANGELOG.md at HEAD)"
-	show_notes "$(git show HEAD:CHANGELOG.md | notes "$version")" \
-		"CHANGELOG.md at HEAD has no $version entry; is the release PR merged?"
+	show_notes "$(git show HEAD:CHANGELOG.md | notes "$release")" \
+		"CHANGELOG.md at HEAD has no $release entry; is the release PR merged (or, for a release candidate, committed)?"
 
 	printf '\nTag %s as v%s and push it to origin? The release workflow starts at once. [y/N] ' \
 		"$(git rev-parse --short HEAD)" "$version"
@@ -342,7 +366,11 @@ cmd_tag() {
 	git push origin "v$version"
 	echo
 	echo "Workflow: $(repo_url)/actions"
-	echo "Then check the release page, latest.json among its assets, and that the previous den offers v$version (Updates pane, i)."
+	if [ "$release" = "$version" ]; then
+		echo "Then check the release page, latest.json among its assets, and that the previous den offers v$version (Updates pane, i)."
+	else
+		echo "Then check the release page says Pre-release, and that a den with updates.channel: prerelease offers v$version (Updates pane, v)."
+	fi
 }
 
 [ $# -ge 1 ] || usage
