@@ -25,6 +25,7 @@ with a person:
 | 2 pick the version | `make release-next [BASE=origin/main]` |
 | 3 draft the entry | `make release-draft VERSION=X.Y.Z [REF=feature/<branch>]` |
 | 4–5 check notes, `make check`, dry run | `make release-prep VERSION=X.Y.Z` |
+| 6a optional: a release candidate | `make release-tag VERSION=X.Y.Z-rc.N` (on `chore/release-vX.Y.Z`, pushed; asks) |
 | 7 tag the merged commit | `make release-tag VERSION=X.Y.Z` (on `main`; asks before pushing) |
 
 If golangci-lint panics because the local Go is newer than it supports, run `release-prep`
@@ -55,12 +56,30 @@ with the toolchain `go.mod` names, e.g. `GOTOOLCHAIN=go1.27.1 make release-prep 
    deleted-afterwards tag writes them to `dist/CHANGELOG.md`.)
 6. Commit, and — only when the user says so — push the branch and open a PR into `main`
    with the `open-pr` skill.
+6a. Optional, for a release worth trying first (an updater change, a new transport): tag
+   a **release candidate** from the pushed release PR branch, on the user's go-ahead:
+   `make release-tag VERSION=X.Y.Z-rc.1`. It checks the branch is
+   `chore/release-vX.Y.Z` and equals its origin, and that `CHANGELOG.md` there has the
+   `## [X.Y.Z]` entry; the workflow publishes a GitHub **prerelease** (its notes are that
+   entry under a "Release candidate" line, and it has no `latest.json`), and the
+   `releases.json` index lists it. Testers with `updates.channel: prerelease` see it
+   in the Updates pane (`v`, or the check) and in `den update`; nobody else does, and
+   `releases/latest` ignores it. A fix found by the rc goes on the branch, pushed, then
+   `-rc.2`. A PR's own snapshot build (CI job `snapshot`, artifact `den-pr-<n>`) is the
+   step before: see `docs/updates/README.md`, "Testing a build before it is released".
 7. After the PR is merged: `git switch main && git pull`, then tag **that** commit and
    push the tag, again only on the user's go-ahead:
    `git tag vX.Y.Z && git push origin vX.Y.Z` — or `make release-tag VERSION=X.Y.Z`,
    which checks `main` is `origin/main` and HEAD has the entry, then asks.
 8. After the workflow: the release page shows the curated notes, the archives and
-   `checksums.txt`; `latest.json` among the assets has the version and the same notes; `den` from
-   the previous version finds, shows and installs the new one (Updates pane, `i`).
+   `checksums.txt`; `latest.json` among the assets has the version and the same notes; the
+   `index` job uploaded `releases.json` to it; `den` from the previous version finds, shows
+   and installs the new one (Updates pane, `i`), and `v` lists it.
+
+A bad release is **yanked**, not deleted: a PR adding `"vX.Y.Z": "what is wrong — use
+vX.Y.W"` to `.github/yanked.json`. Once merged, the `Release index` workflow rebuilds
+`releases.json`; dens from 1.8.0 stop offering it and step a den running it down to the
+newest good release. Older dens read only `latest.json`, so a yank of the newest release
+is followed by a fix release.
 
 Never push tags or branches without the user's explicit go-ahead.

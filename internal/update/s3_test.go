@@ -116,3 +116,46 @@ func TestS3ExpiredLoginNamesTheFix(t *testing.T) {
 		t.Fatalf("err = %v, want the login command", err)
 	}
 }
+
+func TestS3Index(t *testing.T) {
+	root := fakeS3(t)
+	writeFile(t, filepath.Join(root, "bucket", "den", "latest.json"), []byte(`{"version":"v1.7.2","notes":"n"}`))
+	src := Source{S3Bucket: "bucket", S3Prefix: "den/"}
+	ctx := context.Background()
+
+	// A mirror that has not copied releases.json: the check reads latest.json,
+	// and the picker says what to copy.
+	if _, err := src.Index(ctx, "linux", "amd64"); !errors.Is(err, ErrNoIndex) {
+		t.Fatalf("err = %v, want ErrNoIndex", err)
+	}
+	res, err := src.Check(ctx, "linux", "amd64", "1.7.0", Policy{})
+	if err != nil || res.Offer.Version != "v1.7.2" || res.Index != nil {
+		t.Fatalf("check = %+v, %v", res, err)
+	}
+	if _, err := src.Releases(ctx, "linux", "amd64"); !errors.Is(err, ErrNoIndex) || !strings.Contains(err.Error(), "copy releases.json") {
+		t.Fatalf("err = %v, want what to copy into the mirror", err)
+	}
+
+	writeFile(t, filepath.Join(root, "bucket", "den", IndexFile), []byte(indexJSON))
+	rels, err := src.Releases(ctx, "linux", "amd64")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v := versions(rels); v != "v1.8.0-rc.1 v1.7.2 v1.7.0" {
+		t.Fatalf("versions = %s", v)
+	}
+	if rels[1].URL != "s3://bucket/den/v1.7.2/den_1.7.2_linux_amd64.tar.gz" || !src.CanInstall(rels[1]) {
+		t.Errorf("v1.7.2 = %+v", rels[1])
+	}
+	if res, err := src.Check(ctx, "linux", "amd64", "1.7.0", Policy{Channel: ChannelPrerelease}); err != nil || res.Offer.Version != "v1.8.0-rc.1" {
+		t.Fatalf("check = %s, %v", res.Offer.Version, err)
+	}
+}
+
+func TestS3IndexKeepsOtherFailures(t *testing.T) {
+	fakeS3(t)
+	t.Setenv("DEN_FAKE_S3_EXPIRED", "1")
+	if _, err := (Source{S3Bucket: "bucket"}).Index(context.Background(), "linux", "amd64"); err == nil || errors.Is(err, ErrNoIndex) || !strings.Contains(err.Error(), "aws sso login") {
+		t.Fatalf("err = %v, want the login named, not a missing index", err)
+	}
+}

@@ -45,9 +45,11 @@ check: build vet lint race vuln script-test ## Everything CI checks
 
 check-fast: build vet test-short ## Quick pre-commit check
 
-script-test: ## Tests of the shell scripts (release.sh, install.sh, install.ps1, site-lastmod.sh)
+script-test: ## Tests of the shell scripts (release.sh, release-index.sh, install.sh, install.ps1, site-lastmod.sh) and the updater end to end
 	sh scripts/release_test.sh
+	sh scripts/release_index_test.sh
 	sh scripts/install_test.sh
+	sh scripts/update_e2e_test.sh
 	sh scripts/site_lastmod_test.sh
 	@if command -v pwsh >/dev/null 2>&1; then pwsh -NoProfile -File scripts/install_test.ps1; else echo 'skip install.ps1 tests (no pwsh)'; fi
 

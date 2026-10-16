@@ -205,6 +205,20 @@ it repeats, report it, and do not install the archive by hand. A release that pu
 `checksums.txt` installs with a warning that the download was not verified. See
 [Updates](../updates/README.md) and [Install](../install/README.md#troubleshooting).
 
+### A new release broke something
+
+**You see:** something that worked in the previous den fails after an update.
+
+**Why:** a regression in the release, or a change it made on purpose (its notes, `s` in the
+Updates panel, say which).
+
+**Fix:** go back: `v` in the Updates panel, the release you ran before, `enter`, `y`; or
+`den update install vX.Y.Z --skip-current` from a shell. The version you leave is skipped
+on this machine, so the next check does not offer it again; `den update unskip` lets it back.
+For a whole team, pin the good version with `updates.pin`. Report the regression: the
+maintainers can yank the release for everyone. Before 1.8.0, den had no picker; use
+`install.sh --version`. See [Updates › Choosing a version](../updates/README.md#choosing-a-version).
+
 ### den cannot write the update
 
 **You see:** the install fails with a permission error.

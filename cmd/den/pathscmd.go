@@ -16,6 +16,7 @@ import (
 	"github.com/lukaszgard/den/internal/platform"
 	"github.com/lukaszgard/den/internal/runbook"
 	vpnsvc "github.com/lukaszgard/den/internal/service/vpn"
+	"github.com/lukaszgard/den/internal/update"
 )
 
 // pathEntry is one file or folder den reads or writes, for `den paths`.
@@ -101,6 +102,7 @@ func buildPathsReport(explicit string) pathsReport {
 		add("RDS CA bundle", filepath.Join(configDir, "global-bundle.pem"), "file", "downloaded for DocumentDB when needed")
 	}
 	add("state directory", platform.StateDir(), "dir", "run history, runbook trust")
+	add("update preferences", update.PrefsFile(), "file", "versions skipped in update checks")
 	add("runbook drafts", runbook.UserDrafts().Dir(), "dir", "requests typed for an agent; may hold secrets")
 	add("data directory", platform.DataDir(), "dir", "runbook source checkouts, runbook state")
 

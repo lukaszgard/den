@@ -562,6 +562,8 @@ Guide: [docs/updates](../updates/README.md)
 | `s3_prefix` | string | no | e.g. "den/releases/" — no leading slash |
 | `aws_profile` | string | no | uses default AWS profile if omitted |
 | `aws_region` | string | no | e.g. "eu-west-1" |
+| `channel` | string, one of `stable`, `prerelease` | no | which releases the check offers and the version picker lists: stable (the default), or prerelease for release candidates too |
+| `pin` | string | no | hold den on this version, e.g. v1.7.1: the check offers it, older or newer, and nothing else |
 
 ## `mcp`
 

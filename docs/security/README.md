@@ -85,7 +85,11 @@ away](../vpn/README.md#what-you-are-trading-away) lists what is written and how 
 den checks the archive it downloads against the release's `checksums.txt` (SHA-256, published with the
 release) before it touches the installed binary, and stops on a mismatch. A release that publishes no
 `checksums.txt` still installs, with a warning that the download was not verified. `install.sh` and
-`install.ps1` check the same file. See [Updates](../updates/README.md) and [Install](../install/README.md).
+`install.ps1` check the same file. An older version installed from the version picker or with
+`den update install` is checked the same way. Which releases are yanked comes from `releases.json`
+on the project's own latest release, built from `.github/yanked.json` in the repository. The update
+commands are not offered over MCP: an agent cannot replace den's binary. See
+[Updates](../updates/README.md) and [Install](../install/README.md).
 
 ## What each data store needs you to be allowed to do
 

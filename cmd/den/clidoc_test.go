@@ -31,6 +31,7 @@ var cliGuides = map[string]string{
 	"den schema":         "../schema/README.md",
 	"den vpn":            "../vpn/README.md",
 	"den create-env":     "../docker/README.md",
+	"den update":         "../updates/README.md",
 }
 
 // TestCLIReference keeps docs/cli/README.md what the command tree says. It is

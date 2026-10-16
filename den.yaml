@@ -350,3 +350,6 @@ secrets:
 #   s3_prefix: "den/"
 #   aws_profile: "acme-dev"
 #   aws_region: "eu-central-1"
+#   channel: "stable"               # or "prerelease": release candidates too
+#   pin: "v1.7.1"                   # hold the team on this version, older or newer;
+#                                   # the check offers it and nothing else

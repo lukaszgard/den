@@ -181,10 +181,13 @@ menu) is den's manual. All of them are in [docs/shortcuts](docs/shortcuts/README
 ## Update checks
 
 The ↑ Updates panel checks for a newer release when den starts and installs it with `i`, after
-verifying it against the release's `checksums.txt`. Releases come from this project's
+verifying it against the release's `checksums.txt`. `v` lists every release to install any of them,
+an older one too, and `den update` does the same from a shell; a version can be skipped on one
+machine, pinned for a team (`updates.pin`) or yanked for everyone, and `updates.channel: prerelease`
+offers release candidates. Releases come from this project's
 GitHub Releases (no token needed), from a fork or a GitHub Enterprise server (`updates.github_api`)
-or from an S3 mirror you host (`updates.s3_bucket`, using your AWS profile). Setup is in
-[docs/updates](docs/updates/README.md).
+or from an S3 mirror you host (`updates.s3_bucket`, using your AWS profile). Setup, and how to try a
+build before it is released, are in [docs/updates](docs/updates/README.md).
 
 ## More
 

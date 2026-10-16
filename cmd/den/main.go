@@ -81,6 +81,7 @@ func newRootCmd() *cobra.Command {
 		initCmd(),
 		pathsCmd(),
 		mcpCmd(),
+		updateCmd(),
 	)
 	return root
 }
@@ -99,7 +100,7 @@ func runTUI(cmd *cobra.Command, args []string) error {
 
 	opts := tui.Options{ConfigPath: path, Config: cfg, ConfigProblems: problems, Version: version, RunbookHistory: runbook.UserHistory(),
 		RunbookSources: source.UserStore(), RunbookTrust: runbook.UserTrust(), RunbookState: runbook.UserStateRoot(),
-		RunbookDrafts: runbook.UserDrafts()}
+		RunbookDrafts: runbook.UserDrafts(), UpdatePrefs: update.PrefsFile()}
 	if path != "" {
 		opts.ConfigFile = &tui.ConfigFile{
 			Check: func() (*config.Config, config.Problems, error) { return config.LoadChecked(path) },
@@ -194,7 +195,7 @@ func connectCmd() *cobra.Command {
 			}
 			return runProgram(tui.New(mgr, tui.Options{ConfigPath: path, Config: cfg, ConfigProblems: problems, Version: version, RunbookHistory: runbook.UserHistory(),
 				RunbookSources: source.UserStore(), RunbookTrust: runbook.UserTrust(), RunbookState: runbook.UserStateRoot(),
-				RunbookDrafts: runbook.UserDrafts()}))
+				RunbookDrafts: runbook.UserDrafts(), UpdatePrefs: update.PrefsFile()}))
 		},
 	}
 }

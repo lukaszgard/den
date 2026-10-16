@@ -189,6 +189,67 @@ case $out in
 *warning*) fail "check with docs only warned: $out" ;;
 esac
 
+# --- release candidates ---------------------------------------------------
+
+# An rc tag is never the base of the next version.
+repo 1.7.2 1.7.2
+git tag v1.8.0-rc.1
+commit 'feat: a feature'
+expect_next 'an rc tag is not the base' 1.8.0
+
+# rcrepo BRANCH [ENTRY]: a repository with a bare origin, tagged v1.7.2 on main,
+# on BRANCH with ENTRY (none when empty) as its new CHANGELOG.md entry, pushed.
+rcrepo() {
+	repo 1.7.2 1.7.2
+	origin=$(mktemp -d "$work/o.XXXXXX")
+	git init -q --bare "$origin"
+	git remote add origin "$origin"
+	git push -q origin main v1.7.2
+	git switch -q -c "$1" main
+	[ -z "${2:-}" ] || entry "$2"
+	git push -q origin "$1"
+}
+
+# expect_tag_fails NAME VERSION WANT: tag VERSION, answered $answer (y),
+# fails, saying WANT.
+answer=y
+expect_tag_fails() {
+	if out=$(echo "$answer" | sh "$script" tag "$2" 2>&1); then
+		fail "$1: tag $2 succeeded"
+	fi
+	case $out in
+	*"$3"*) ;;
+	*) fail "$1: tag $2 did not say '$3': $out" ;;
+	esac
+}
+
+rcrepo chore/release-v1.8.0 1.8.0
+out=$(echo y | sh "$script" tag 1.8.0-rc.1 2>&1) || fail "tag 1.8.0-rc.1 failed: $out"
+git ls-remote --exit-code --tags origin refs/tags/v1.8.0-rc.1 >/dev/null || fail "v1.8.0-rc.1 was not pushed: $out"
+case $out in
+*'Pre-release'*'updates.channel: prerelease'*) ;;
+*) fail "tag 1.8.0-rc.1 did not say how to check it: $out" ;;
+esac
+expect_tag_fails 'the same rc twice' 1.8.0-rc.1 'already exists'
+git commit -q --allow-empty -m 'fix: found by the rc'
+expect_tag_fails 'a branch ahead of origin' 1.8.0-rc.2 'is not origin/chore/release-v1.8.0'
+git push -q origin chore/release-v1.8.0
+out=$(echo y | sh "$script" tag 1.8.0-rc.2 2>&1) || fail "tag 1.8.0-rc.2 failed: $out"
+git switch -q feature
+expect_tag_fails 'an rc off the release branch' 1.8.0-rc.3 "release PR's branch"
+git switch -q chore/release-v1.8.0
+expect_tag_fails 'not an rc' 1.8.0-beta.1 'must look like 1.2.3 or 1.2.3-rc.1'
+answer=n
+expect_tag_fails 'answered no' 1.8.0-rc.3 'nothing tagged'
+answer=y
+git ls-remote --exit-code --tags origin refs/tags/v1.8.0-rc.3 >/dev/null && fail "a no still pushed v1.8.0-rc.3"
+
+rcrepo chore/release-v1.9.0
+expect_tag_fails 'no entry for the release' 1.9.0-rc.1 'has no 1.9.0 entry'
+
+rcrepo chore/release-v1.7.2 1.7.2
+expect_tag_fails 'an rc of a released version' 1.7.2-rc.1 'not newer than the last tag'
+
 if [ "$failed" -gt 0 ]; then
 	printf '%s script test(s) failed\n' "$failed" >&2
 	exit 1

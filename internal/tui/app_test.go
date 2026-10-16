@@ -473,6 +473,55 @@ func TestHelpSearchTakesTheKeys(t *testing.T) {
 	}
 }
 
+// esc steps out of the version picker one layer at a time: a question in it,
+// then the picker, and only then the pane.
+func TestVersionPickerOwnsEsc(t *testing.T) {
+	h := newHarness(t, managerWith(newSvc(service.TypeRDS, "db")), nil)
+	h.send(msgs.UpdateCheckResultMsg{Latest: "v9.9.9", Releases: []update.Release{
+		{Version: "v9.9.9", ArchiveURL: "https://example.invalid/a"}, {Version: "v0.0.1", ArchiveURL: "https://example.invalid/b"}}})
+	for h.m.currentPane() != paneUpdates {
+		h.press("down")
+	}
+	h.press("right", "v")
+	if !h.m.updatesPane.ShowingPicker() || !strings.Contains(plain(h.m), "Updates › Versions") {
+		t.Fatalf("v should open the picker:\n%s", plain(h.m))
+	}
+	h.press("down", "enter")
+	if !strings.Contains(plain(h.m), "Install v0.0.1?") {
+		t.Fatalf("enter should ask before installing:\n%s", plain(h.m))
+	}
+	h.press("esc")
+	if !h.m.updatesPane.ShowingPicker() || h.m.leftFocused || strings.Contains(plain(h.m), "Install v0.0.1?") {
+		t.Fatal("the first esc should only cancel the question")
+	}
+	h.press("esc")
+	if h.m.updatesPane.ShowingPicker() || h.m.leftFocused {
+		t.Fatal("the second esc should close the picker and keep focus on Updates")
+	}
+	h.press("esc")
+	if !h.m.leftFocused {
+		t.Fatal("the third esc should return to the menu")
+	}
+}
+
+// Without releases.json the check keeps no list, and the picker loads one: the
+// list it gets back must reach the pane through the root model.
+func TestVersionPickerGetsTheListItLoads(t *testing.T) {
+	h := newHarness(t, managerWith(newSvc(service.TypeRDS, "db")), nil)
+	h.send(msgs.UpdateCheckResultMsg{Latest: "v9.9.9"})
+	for h.m.currentPane() != paneUpdates {
+		h.press("down")
+	}
+	h.press("right", "v")
+	if !strings.Contains(plain(h.m), "Loading releases…") {
+		t.Fatalf("v should load the list:\n%s", plain(h.m))
+	}
+	h.send(msgs.UpdateReleasesMsg{Releases: []update.Release{{Version: "v9.9.9"}, {Version: "v0.0.1"}}})
+	if view := plain(h.m); strings.Contains(view, "Loading releases…") || !strings.Contains(view, "v0.0.1") {
+		t.Fatalf("the loaded list should show in the picker:\n%s", view)
+	}
+}
+
 // A release's notes used to be printed into the Updates pane. They are a whole
 // CHANGELOG section, so the frame came out taller than the terminal and Bubble
 // Tea dropped its top rows: the header and the menu were gone.
@@ -891,7 +940,7 @@ func (h *harness) installNow() {
 		h.t.Skip("restart is not offered on this platform")
 	}
 	h.send(msgs.UpdateCheckResultMsg{Latest: "v9.9.9"})
-	h.send(msgs.UpdateInstallResultMsg{})
+	h.send(msgs.UpdateInstallResultMsg{Version: "v9.9.9"})
 }
 
 // A restart is a quit: it must go through the same shutdown, and only after

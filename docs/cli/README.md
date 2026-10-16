@@ -480,6 +480,92 @@ den schema
 
 Guide: [docs/schema](../schema/README.md)
 
+## `den update`
+
+Check for a new den, list releases, install any version
+
+Check whether another release of den is offered, as the Updates panel does at start: the newest release, unless updates.pin in den.yaml holds den on one, a release is yanked (marked bad by its maintainers) or skipped on this machine. updates.channel: prerelease offers release candidates too.
+
+The subcommands list every release, install any of them (an older one too, to get off a bad release), and keep the skip list of this machine. Releases are read where the Updates panel reads them: the GitHub release feed, the releases API with GITHUB_TOKEN or for GitHub Enterprise, or the S3 mirror of updates.s3_bucket.
+
+```text
+den update [flags]
+```
+
+Guide: [docs/updates](../updates/README.md)
+
+Flags:
+
+```text
+--json   print JSON
+```
+
+## `den update install`
+
+Install a release of den, older ones too
+
+Install VERSION, or the release `den update` offers: download it, verify it against the release's checksums.txt and replace this den binary. An older VERSION is a downgrade, the way off a bad release; `--skip-current` then keeps update checks from offering the version you leave again.
+
+It asks first at a terminal; anywhere else it needs `--yes`. It does not restart anything: the next den you start is the new one.
+
+```text
+den update install [VERSION] [flags]
+```
+
+Guide: [docs/updates](../updates/README.md)
+
+Flags:
+
+```text
+    --skip-current   on a downgrade, skip the version you leave in update checks
+-y, --yes            install without asking
+```
+
+## `den update list`
+
+List the published releases of den
+
+List every published release, newest first: its date, whether installing it is an upgrade or a downgrade, and what marks it (rc, pinned, skipped, yanked, no build for this platform). Release candidates are listed with `--all`, or by default on updates.channel: prerelease.
+
+Without a releases.json at the source (every release before the version picker), the list comes from one call to the GitHub releases API.
+
+```text
+den update list [flags]
+```
+
+Guide: [docs/updates](../updates/README.md)
+
+Flags:
+
+```text
+--all    list release candidates too
+--json   print JSON
+```
+
+## `den update skip`
+
+Keep update checks from offering VERSION on this machine
+
+Keep update checks, in the Updates panel and in den update, from offering VERSION again on this machine, as if it were yanked: for a release that broke something here. The list is this machine's own, kept in den's state directory (den paths shows it); den update unskip takes a version off it.
+
+```text
+den update skip VERSION
+```
+
+Guide: [docs/updates](../updates/README.md)
+
+## `den update unskip`
+
+Let update checks offer VERSION again
+
+Take VERSION off this machine's skip list, so update checks offer it again.
+
+```text
+den update unskip VERSION
+```
+
+Guide: [docs/updates](../updates/README.md)
+
 ## `den vpn`
 
 Manage the VPN privilege helper

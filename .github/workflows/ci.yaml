@@ -67,6 +67,51 @@ jobs:
           cache: true
       - run: make vuln
 
+  # The release archives of every pull request, laid out as a mirror install.sh
+  # reads, so a reviewer runs the change before it is merged. The step summary
+  # has the commands; docs/updates/README.md, "Testing a build before it is
+  # released", the rest.
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      # The tags: the snapshot's version is the last release's, patch + 1.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "v2.15"
+          args: release --snapshot --clean --skip=publish
+      - run: scripts/snapshot-mirror.sh dist mirror
+      - uses: actions/upload-artifact@v7
+        with:
+          name: den-pr-${{ github.event.pull_request.number }}
+          path: mirror/
+          retention-days: 7
+      - name: How to install it
+        env:
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          version=$(jq -r .version mirror/latest.json)
+          {
+            echo "### den $version, this pull request's build"
+            echo
+            echo "Not a release: it installs next to your den, not over it."
+            echo
+            echo '```sh'
+            echo "gh run download ${{ github.run_id }} --repo ${{ github.repository }} -n den-pr-$PR -D den-pr-$PR"
+            echo "DEN_INSTALL_BASE=\"file://\$PWD/den-pr-$PR\" sh den-pr-$PR/install.sh --dir den-pr-$PR/bin"
+            echo "den-pr-$PR/bin/den --version"
+            echo '```'
+            echo
+            echo "Kept 7 days. On Windows, den.exe is in den-pr-$PR/$version/den_${version#v}_windows_amd64.zip (or _arm64)."
+          } >> "$GITHUB_STEP_SUMMARY"
+
   # Warns, never fails: the CHANGELOG.md version should match what the commit
   # types call for (feat = minor, fix = patch). See scripts/release.sh.
   release-version:
