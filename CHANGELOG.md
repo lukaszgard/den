@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.8.1] - 2026-10-21
+
+**Built with Go 1.27.3, for a certificate fix.** Go 1.27.2 still trusted intermediate certificates
+known to be compromised wherever the system's trust store had not dropped them (GO-2026-6809,
+CVE-2026-111943). Every HTTPS connection den makes, from the update check and its downloads to the
+AWS APIs, now refuses a certificate chained through one of them. Nothing in den's code, commands
+or `den.yaml` changed; the rest of the release is dependency updates.
+
+### 🖥 The dashboard
+
+- den no longer crashes at start, with `makeslice: len out of range`, in a terminal that reports
+  its size as 0x0, such as a pty opened without one. Bubble Tea 2.1.0, the terminal UI library
+  den is built on, now falls back to a default size there; it also fixes a deadlock in its signal
+  handling while a program shuts down.
+
+### 🔌 Data stores and tunnels
+
+- The AWS SDK for Go (core 1.47.3, `smithy-go` 1.28.5, Secrets Manager 1.50.4, Redshift 1.71.4)
+  keeps the message of an AWS JSON API error whichever casing the service sends it in, keeps a
+  map key whose value is null, and no longer panics on a malformed event-stream header or CBOR
+  length. den uses these clients for `awssm` secrets, Redshift credentials and `den init`.
+- `golang.org/x/sys` 0.49.0, the system calls den uses to run and stop processes.
+
 ## [1.8.0] - 2026-10-16
 
 **Go back to an older den from inside den.** Until now the Updates panel offered one version, the
