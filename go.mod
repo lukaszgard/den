@@ -16,7 +16,7 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.47.3
 	github.com/aws/aws-sdk-go-v2/config v1.33.9
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.9
-	github.com/aws/aws-sdk-go-v2/service/elasticache v1.63.1
+	github.com/aws/aws-sdk-go-v2/service/elasticache v1.64.0
 	github.com/aws/aws-sdk-go-v2/service/memorydb v1.42.2
 	github.com/aws/aws-sdk-go-v2/service/opensearch v1.84.0
 	github.com/aws/aws-sdk-go-v2/service/rds v1.130.1
