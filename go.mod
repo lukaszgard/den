@@ -28,7 +28,7 @@ require (
 	github.com/aws/smithy-go v1.28.5
 	github.com/charmbracelet/colorprofile v0.4.3
 	github.com/charmbracelet/x/ansi v0.11.9
-	github.com/charmbracelet/x/vt v0.0.0-20260927004216-9c77d672503d
+	github.com/charmbracelet/x/vt v0.1.0
 	github.com/charmbracelet/x/xpty v0.1.4
 	github.com/invopop/jsonschema v0.14.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
