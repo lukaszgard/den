@@ -1,6 +1,6 @@
 > den -  **D**eveloper **E**nvironment **N**avigator — reach RDS, Redis, DocumentDB, Redshift, OpenSearch, Neptune and Docker environments via AWS SSM tunnels from a single TUI (Kafka is planned).
 
-<p align="center"> <img src="den.avif" width="400" alt="den" /> </p>
+<p align="center"> <img src="den-anim.avif" width="400" alt="den" /> </p>
 
 Private databases and caches in AWS sit behind a bastion, and reaching one by hand means an `aws ssm start-session` command, a token command and a `~/.pgpass` edit, redone every 15 minutes. den does all three from one dashboard: it opens the tunnel, mints and refreshes the IAM credential, and reconnects when the tunnel drops.
 
