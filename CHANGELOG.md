@@ -1,5 +1,35 @@
 # Changelog
 
+## [1.8.2] - 2026-11-02
+
+**`den doctor --explain` now survives a dropped connection.** A connection lost part-way through
+Claude's reply used to end the explanation with `could not reach the Anthropic API`; it now
+retries. The rest of the release is dependency updates. Nothing in den's code, commands or
+`den.yaml` changed.
+
+### 🔧 Configuration and checks
+
+- `anthropic-sdk-go` 1.84.0 brings the retry above. It also compiles OpenTelemetry's API packages
+  into den. They stay idle: den registers no tracer and no exporter is built in, so it sends no
+  spans or trace headers.
+- Cobra 1.10.2 and `pflag` 1.0.9 change what `den completion` prints: PowerShell completion works
+  in constrained language mode, and bash completion no longer fails on an unset variable under
+  `set -u` when a flag's file filter has no extensions. Flags, help text and error messages are
+  unchanged.
+- Routine update, with nothing to notice in den: `golang.org/x/mod` 0.42.0.
+
+### 🔌 Data stores and tunnels
+
+- `den init` no longer fails reading MemoryDB clusters when AWS returns a list holding a null
+  value (MemoryDB 1.42.5).
+- Routine updates, with nothing to notice in den: the AWS SDK for Go (core 1.47.5, `config` 1.33.9,
+  `credentials` 1.20.9, ElastiCache 1.64.2, SSM 1.80.0, `ssooidc` 1.43.4) and `smithy-go` 1.28.7.
+
+### 🖥 The dashboard
+
+- Routine updates, with nothing to notice in den: the terminal emulator `charmbracelet/x/vt` 0.1.0
+  and `golang.org/x/term` 0.47.0.
+
 ## [1.8.1] - 2026-10-21
 
 **Built with Go 1.27.3, for a certificate fix.** Go 1.27.2 still trusted intermediate certificates
