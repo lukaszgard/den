@@ -303,3 +303,7 @@ release-next` prints it: `last vX (…)`, `bump minor — N feat, N fix, N break
 `next vX.Y.Z`. A breaking change on 0.x gets a `**Breaking:**` line at the top of the
 entry with the migration; 1.0.0 is a separate, later decision. CI's `release-version` job
 only warns when the entry is lower than expected; it never fails the build.
+
+Dependabot's `build:` commits call for no release, so `make release-next` prints `next none`
+after a batch of them, even when the root `go.mod` moved. Shipping such a batch is a person's
+decision and takes a patch: skill `release-deps`.

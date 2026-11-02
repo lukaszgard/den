@@ -36,7 +36,9 @@ with the toolchain `go.mod` names, e.g. `GOTOOLCHAIN=go1.27.1 make release-prep 
    and prints `last vX`, `bump minor — N feat, N fix, N breaking` and `next vX.Y.Z`
    (breaking → minor on 0.x, `feat` → minor, `fix`/`perf` → patch, nothing else → no
    release). Use that version unless the user names a higher one. A breaking change on
-   0.x gets a `**Breaking:**` line at the top of the entry with the migration.
+   0.x gets a `**Breaking:**` line at the top of the entry with the migration. A batch of
+   Dependabot `build:` commits prints `next none`: the skill `release-deps` ships it as a
+   patch.
 3. Draft the entry with git-cliff (`cliff.toml` groups by `feat:`/`fix:`/…):
    - PRs are **squash-merged**, so `main` holds one commit per PR and
      `git cliff --unreleased` only sees PR titles. Draft from the individual commits
