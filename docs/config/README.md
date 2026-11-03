@@ -126,10 +126,21 @@ Guide: [docs/rds](../rds/README.md)
 | `aws_region_code` | string | no | AWS region of the bastion and of the credential calls; required, here or from the service's env |
 | `transport` | object, keys in [`environments.<name>.transport`](#environmentsnametransport) | no | how the network is reached; SSM when unset |
 | `engine` | string, one of `postgres`, `mysql` | no | the database engine; postgres when empty |
-| `update_pgpass` | boolean | no | postgres only |
+| `update_pgpass` | boolean | no | postgres only, and not with auth: a stored password is never written to a file |
 | `rds_host` | string | yes | endpoint to forward to: instance, cluster or RDS Proxy |
 | `db_name` | string | no | optional; the client's own default (PostgreSQL: the user name) when empty |
-| `db_user` | string | yes | the database user the IAM token is minted for |
+| `db_user` | string | no | the database user the IAM token is minted for; required unless auth is set, where it wins over the secret's username |
+| `auth` | object, keys in [`services[].rds.auth`](#servicesrdsauth) | no | log in with a username and password from a secret instead of an IAM token; db_user is required without it |
+
+## `services[].rds.auth`
+
+This block logs a database service in with a username and password read from an entry of secrets:, instead of an IAM token.
+
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `secret` | string | yes | name of an entry under secrets: sops, aws_secretsmanager or one vault secret, not a folder |
+| `username_key` | string | no | the key holding the username, dotted as in the flat view (db.user); username when empty |
+| `password_key` | string | no | the key holding the password, dotted as in the flat view (db.password); password when empty |
 
 ## `services[].kafka`
 

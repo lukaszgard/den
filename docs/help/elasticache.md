@@ -13,6 +13,7 @@ An ElastiCache cache (Valkey or Redis OSS), provisioned or Serverless, reached t
 - Copy the `redis-cli` command, the same command with the token, or the token alone, from the detail view.
 - Open `redis-cli` in a terminal tab inside den, already logged in; the token reaches it through `REDISCLI_AUTH`, not the command line.
 - Reach a cache without IAM auth too: den then opens only the tunnel.
+- Know at once whether the cache takes the token: after connecting and after each renewal, den sends one `PING` with `redis-cli` as a tab would, and the log says `login checked as <user>`.
 - Keys: press `h` in the detail view.
 
 ## Before you start
@@ -83,6 +84,7 @@ services:
 
 ## When it goes wrong
 
+- `connected · login failed` in the Connect panel: the tunnel is up and the cache did not answer den's `PING` with `PONG`. The detail view's log has the answer and what to check; fix it and press `r`. `NOAUTH` from a cache reached without IAM: set `cache_name` and `user_id`.
 - `WRONGPASS invalid username-password pair`: the token reached the cache, which refused it; check the user's authentication mode, its user group, and `elasticache:Connect` on both ARNs.
 - `MOVED … 10.x.x.x:6379`: the key lives on another shard; see Limitations.
 

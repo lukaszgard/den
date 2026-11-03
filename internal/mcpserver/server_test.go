@@ -29,11 +29,20 @@ type fakeSvc struct {
 	production bool // what den.yaml's production: or environment: prod says
 	updates    chan service.StatusUpdate
 
-	mu     sync.Mutex
-	status service.Status
-	token  string
-	logs   []string
-	stops  int
+	// password makes it a service logging in with a secret, as a Tunnel with
+	// auth: is one: it holds this instead of a token.
+	password string
+	// loginErr makes den's login check refuse, a moment after connecting, with
+	// this answer from the database.
+	loginErr string
+
+	mu       sync.Mutex
+	status   service.Status
+	token    string
+	logs     []string
+	stops    int
+	login    service.LoginState
+	loginMsg string
 }
 
 func newFake(name, env string) *fakeSvc {
@@ -46,12 +55,25 @@ func (f *fakeSvc) Info() service.ServiceInfo {
 func (f *fakeSvc) State() service.RuntimeState {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return service.RuntimeState{Status: f.status, Token: f.token, LocalPort: 50111}
+	return service.RuntimeState{Status: f.status, Token: f.token, LocalPort: 50111, Login: f.login, LoginErr: f.loginMsg}
 }
 func (f *fakeSvc) Start(context.Context) (<-chan service.StatusUpdate, error) {
 	f.mu.Lock()
 	f.status, f.token = service.StatusConnected, secretToken
 	f.logs = append(f.logs, "IAM token generated: "+secretToken, "port forwarding established on :50111")
+	if f.password != "" {
+		f.token = f.password
+		f.logs = []string{"client said: bad password " + f.password, "port forwarding established on :50111"}
+	}
+	if f.loginErr != "" {
+		// As a Tunnel does: checking from the moment it is connected.
+		f.login = service.LoginChecking
+		time.AfterFunc(300*time.Millisecond, func() {
+			f.mu.Lock()
+			f.login, f.loginMsg = service.LoginFailed, f.loginErr
+			f.mu.Unlock()
+		})
+	}
 	f.mu.Unlock()
 	return f.updates, nil
 }
@@ -67,6 +89,12 @@ func (f *fakeSvc) ConnectCommand() string {
 	return `psql "host=localhost port=50111 dbname=app user=app sslmode=require"`
 }
 func (f *fakeSvc) HoldsToken() bool { return true }
+func (f *fakeSvc) PasswordLogin() (service.PasswordLogin, bool) {
+	if f.password == "" {
+		return service.PasswordLogin{}, false
+	}
+	return service.PasswordLogin{Secret: "orders-login", Provider: "sops"}, true
+}
 func (f *fakeSvc) Logs() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -182,6 +210,56 @@ func TestListHonoursAllow(t *testing.T) {
 	}
 	if _, isErr := call(t, cs, "service_status", map[string]any{"name": "billing-int"}); !isErr {
 		t.Fatal("a service outside mcp.allow must not be reachable by name")
+	}
+}
+
+// A stored password is short and stays valid, so it cannot be caught by looking
+// like a token, and pointing an agent at pgpass would be wrong: den writes it
+// to no file.
+func TestConnectWithholdsAStoredPassword(t *testing.T) {
+	svc := newFake("app-int", "int")
+	svc.password = "short-pw"
+	cs := start(t, &setup{services: []*fakeSvc{svc}})
+
+	out, isErr := call(t, cs, "connect", map[string]any{"name": "app-int"})
+	if isErr {
+		t.Fatal(out)
+	}
+	if !strings.Contains(out, "withheld") {
+		t.Errorf("connect should say the password is withheld:\n%s", out)
+	}
+	if strings.Contains(out, "pgpass") || strings.Contains(out, "IAM") {
+		t.Errorf("connect points the agent at an IAM login that is not there:\n%s", out)
+	}
+	for _, tool := range []string{"connect", "service_status", "list_services", "service_logs"} {
+		out, _ := call(t, cs, tool, map[string]any{"name": "app-int"})
+		if strings.Contains(out, "short-pw") {
+			t.Errorf("%s leaked the password:\n%s", tool, out)
+		}
+	}
+}
+
+// A tunnel that answers says nothing about the login: connect waits for den's
+// check, and an agent hears that the database refused before it hands the
+// user a command that cannot work.
+func TestConnectReportsARefusedLogin(t *testing.T) {
+	svc := newFake("app-int", "int")
+	svc.loginErr = "FATAL: PAM authentication failed for user app"
+	cs := start(t, &setup{services: []*fakeSvc{svc}})
+
+	out, isErr := call(t, cs, "connect", map[string]any{"name": "app-int"})
+	if isErr {
+		t.Fatal(out)
+	}
+	want := `"login_error":"FATAL: PAM authentication failed for user app"`
+	if !strings.Contains(out, want) {
+		t.Fatalf("connect does not report the refused login:\n%s", out)
+	}
+	if out, _ := call(t, cs, "service_status", map[string]any{"name": "app-int"}); !strings.Contains(out, want) {
+		t.Errorf("service_status does not report the refused login:\n%s", out)
+	}
+	if out, _ := call(t, cs, "list_services", nil); !strings.Contains(out, want) {
+		t.Errorf("list_services does not report the refused login:\n%s", out)
 	}
 }
 

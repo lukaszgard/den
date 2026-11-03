@@ -240,6 +240,31 @@ func TestPortsAndTools(t *testing.T) {
 	}
 }
 
+// A password service mints nothing, so its credential_profile alone must not
+// make the doctor demand the AWS CLI on a machine reaching it over ssh.
+func TestPasswordLoginNeedsNoAWSForItsCredential(t *testing.T) {
+	target := func() config.SSMTarget {
+		return config.SSMTarget{
+			CredentialProfile: "data", AWSRegionCode: "eu-west-1",
+			Transport: &config.TransportSpec{Type: config.TransportSSH, Host: "ops@bastion.example.com"},
+		}
+	}
+	service := func(auth *config.SecretAuth) config.ServiceSpec {
+		return config.ServiceSpec{Name: "orders", Type: config.ServiceTypeRDS, RDS: &config.RDSSpec{
+			SSMTarget: target(), RDSHost: "db.example", DBUser: "app", Auth: auth,
+		}}
+	}
+
+	withToken := collectNeeds(Input{Config: &config.Config{Services: []config.ServiceSpec{service(nil)}}})
+	if !withToken.aws {
+		t.Error("a token is minted through AWS, whatever carries the traffic")
+	}
+	withPassword := collectNeeds(Input{Config: &config.Config{Services: []config.ServiceSpec{service(&config.SecretAuth{Secret: "orders-login"})}}})
+	if withPassword.aws {
+		t.Error("a password login over ssh needs no AWS")
+	}
+}
+
 type fakeItem struct {
 	secrets.Item
 	name, reason string

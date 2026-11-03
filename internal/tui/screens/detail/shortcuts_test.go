@@ -22,6 +22,18 @@ func (s *tokenSvc) ConnectCommandWithSecret() string { return s.cmd + " password
 func (s *tokenSvc) ToggleReconnect() bool            { s.reconnect = !s.reconnect; return s.reconnect }
 func (s *tokenSvc) ReconnectEnabled() bool           { return s.reconnect }
 
+// passwordSvc is a service as RDS is one with auth: it holds a password read
+// from a secret, and cannot inline it into its connect command.
+type passwordSvc struct {
+	*fakeSvc
+	login service.PasswordLogin
+}
+
+func (s *passwordSvc) HoldsToken() bool { return true }
+func (s *passwordSvc) PasswordLogin() (service.PasswordLogin, bool) {
+	return s.login, true
+}
+
 // toggleSvc has the runtime toggles of a tunnel or a VPN.
 type toggleSvc struct {
 	*fakeSvc
@@ -202,6 +214,31 @@ func TestHelpLineKeysAreInTheShortcuts(t *testing.T) {
 			if _, ok := keys[k.k]; !ok {
 				t.Errorf("%s: the help line names %q (%s), the pop-up does not", name, k.k, k.v)
 			}
+		}
+	}
+}
+
+// A password is not minted and does not renew by itself, so the pop-up must not
+// say it does, and Y is gone: it would put a lasting password in a shell's history.
+func TestShortcutsOfAPasswordLogin(t *testing.T) {
+	svc := &passwordSvc{fakeSvc: &fakeSvc{typ: service.TypeRDS, cmd: "psql host=localhost"}}
+	keys := shortcutKeys(svc, false)
+
+	if got := keys["c"]; !strings.Contains(got, "password") || strings.Contains(got, "token") {
+		t.Errorf("c = %q, want it to speak of the password", got)
+	}
+	if got := keys["r"]; !strings.Contains(got, "again") || strings.Contains(got, "token") {
+		t.Errorf("r = %q, want it to say the password is read again", got)
+	}
+	if got := keys["p"]; !strings.Contains(got, "30 s") {
+		t.Errorf("p = %q, want it to say when the clipboard clears", got)
+	}
+	if got, ok := keys["Y"]; ok {
+		t.Errorf("Y = %q, want no such key", got)
+	}
+	for _, g := range shortcutGroups(svc, false) {
+		if strings.Contains(g.Note, "Renewed") || strings.Contains(g.Title, "Token") {
+			t.Errorf("group %q note %q still speaks of a token", g.Title, g.Note)
 		}
 	}
 }

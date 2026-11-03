@@ -12,7 +12,7 @@ current credential.
 ╭──────────────────────────────────────────────────────────────────────────╮
 │  rds  orders-int  Status: ● CONNECTED  Local port: 50111  Reconnect: ●   │
 │ ──────────────────────────────────────────────────────────────────────── │
-│  psql "host=localhost port=50111 dbname=orders user=app_iam …"   y: copy │
+│  psql "host=localhost hostaddr=127.0.0.1 port=50111 dbname=…"    y: copy │
 │ ──────────────────────────────────────────────────────────────────────── │
 │─ Logs │ 1 psql ● │ 2 migration ● │ 3 psql ○                              │
 │ ──────────────────────────────────────────────────────────────────────── │
@@ -55,6 +55,7 @@ knowing:
 |---------------------|----------------------------------------|---------------------------------------------------------------------|
 | RDS `postgres`      | `psql "<the shown connection string>"` | `PGPASSWORD` in the client's environment, so it works with `update_pgpass` off |
 | RDS `mysql`         | the shown `mysql …` command            | den's option file `~/.config/den/mysql/<local_port>.cnf`, which every token refresh rewrites |
+| RDS with `auth:`    | `psql`, or `mysql` without the shown `-p` | `PGPASSWORD` or `MYSQL_PWD` in the client's environment: [a password from a secret](../rds/README.md#a-password-from-a-secret) reaches no file |
 | Redshift            | `psql "<the shown connection string>"` | `PGPASSWORD` in the client's environment, so it works with `update_pgpass` off |
 | ElastiCache, MemoryDB | the shown `redis-cli …` command      | `REDISCLI_AUTH` in the client's environment. Not set for a cache without `user_id`, which has no token |
 | DocumentDB          | the shown `mongosh …` command          | Nothing to hand over: DocumentDB has no token. `AWS_PROFILE` is set in the client's environment and the driver signs the login with that profile |

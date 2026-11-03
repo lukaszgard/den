@@ -12,6 +12,7 @@ An Amazon MemoryDB cluster (Valkey or Redis OSS) reached through a tunnel, logge
 - Log in with IAM: den mints the token and renews it every 13 minutes while connected (a token lives 15).
 - Copy the `redis-cli` command, with the current token, or the token alone, from the detail view.
 - Open `redis-cli` in a terminal tab inside den, already logged in.
+- Know at once whether the cluster takes the token: after connecting and after each renewal, den sends one `PING` with `redis-cli`, and the log says `login checked as <user>`.
 - Keys: press `h` in the detail view.
 
 ## Before you start
@@ -71,6 +72,7 @@ services:
 
 ## When it goes wrong
 
+- `connected · login failed` in the Connect panel: the tunnel is up and the cluster did not answer den's `PING` with `PONG`. The detail view's log has the answer and what to check; fix it and press `r`.
 - `WRONGPASS`: the token was refused. Check the user's authentication mode, that it is in the cluster's access control list, and `memorydb:Connect` on both ARNs.
 - `MOVED` on a write: `redis_host` points at a replica. Find the primary with `aws memorydb describe-clusters --cluster-name NAME --show-shard-details`.
 

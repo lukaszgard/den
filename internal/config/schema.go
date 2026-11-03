@@ -145,6 +145,35 @@ type SecretsConfig struct {
 	Other map[string]any `yaml:",inline"`
 }
 
+// Spec returns the entry called name, whichever provider's group it is in, or
+// nil when there is none. Names are unique across groups.
+func (s *SecretsConfig) Spec(name string) any {
+	if s == nil {
+		return nil
+	}
+	for _, it := range s.SOPS {
+		if it.Name == name {
+			return it
+		}
+	}
+	for _, it := range s.AWSSecretsManager {
+		if it.Name == name {
+			return it
+		}
+	}
+	for _, it := range s.KeePassXC {
+		if it.Name == name {
+			return it
+		}
+	}
+	for _, it := range s.Vault {
+		if it.Name == name {
+			return it
+		}
+	}
+	return nil
+}
+
 // How a secret with nested values is shown in the Secrets pane.
 const (
 	SecretViewTree = "tree" // indented like the YAML it came from (the default)
@@ -569,11 +598,22 @@ const (
 type RDSSpec struct {
 	SSMTarget    `yaml:",inline"`
 	Engine       string `yaml:"engine,omitempty" jsonschema:"enum=postgres,enum=mysql"` // the database engine; postgres when empty
-	UpdatePgpass bool   `yaml:"update_pgpass,omitempty"`                                // postgres only
+	UpdatePgpass bool   `yaml:"update_pgpass,omitempty"`                                // postgres only, and not with auth: a stored password is never written to a file
 
 	RDSHost string `yaml:"rds_host,omitempty" jsonschema:"required"` // endpoint to forward to: instance, cluster or RDS Proxy
 	DBName  string `yaml:"db_name,omitempty"`                        // optional; the client's own default (PostgreSQL: the user name) when empty
-	DBUser  string `yaml:"db_user,omitempty" jsonschema:"required"`  // the database user the IAM token is minted for
+	DBUser  string `yaml:"db_user,omitempty"`                        // the database user the IAM token is minted for; required unless auth is set, where it wins over the secret's username
+
+	Auth *SecretAuth `yaml:"auth,omitempty"` // log in with a username and password from a secret instead of an IAM token; db_user is required without it
+}
+
+// SecretAuth logs a database service in with a username and password read from
+// an entry of secrets:, instead of an IAM token. It names the entry and the
+// keys, never the values, so den.yaml stays safe to commit.
+type SecretAuth struct {
+	Secret      string `yaml:"secret" jsonschema:"required"` // name of an entry under secrets: sops, aws_secretsmanager or one vault secret, not a folder
+	UsernameKey string `yaml:"username_key,omitempty"`       // the key holding the username, dotted as in the flat view (db.user); username when empty
+	PasswordKey string `yaml:"password_key,omitempty"`       // the key holding the password, dotted as in the flat view (db.password); password when empty
 }
 
 // KafkaSpec holds Kafka-specific config.
@@ -739,6 +779,14 @@ func (c *Config) RunbookDirs() []string {
 		return nil
 	}
 	return c.Runbooks.Dirs
+}
+
+// SecretAuth returns how the service logs in with a secret, nil when it does not.
+func (s *ServiceSpec) SecretAuth() *SecretAuth {
+	if s.RDS != nil {
+		return s.RDS.Auth
+	}
+	return nil
 }
 
 // Target returns the SSM connection context of whichever type section is set,

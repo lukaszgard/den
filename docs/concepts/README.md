@@ -45,6 +45,22 @@ ready, writes it where the client looks (`~/.pgpass`, an option file) and renews
 expires, 13 minutes into a 15-minute token. `r` mints one now. See the
 [security model](../security/README.md#where-credentials-are-written).
 
+An RDS service can log in with [a password from a secret](../rds/README.md#a-password-from-a-secret)
+instead. Nothing is minted or renewed by itself then: den reads the password when it connects,
+and it reaches no file.
+
+## Login check
+
+A port that answers says the tunnel works, not that the database takes the credential. So once
+a service is connected, and again after each new credential (the auto-refresh, `r`), den logs
+in once in the background with the client and the credential it hands you: `psql` or `mysql`
+runs `select 1`, `redis-cli` sends `PING`, `mongosh` runs a `ping`. The log says
+`login checked as <user>`. A refusal leaves the tunnel up and shows `connected · login failed`
+in the Connect panel; the log has the database's answer and what to check, and `r` checks
+again once you have fixed it. Without the client installed the log says
+`psql not found — login not checked`, which is not a failure. OpenSearch and Neptune have no
+client of that kind, so they get no check.
+
 ## The panels
 
 `den` opens a dashboard with a menu on the left: Connect, Tunnel, Runbooks, AWS, VPN, Secrets,

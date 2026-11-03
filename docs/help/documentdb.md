@@ -11,6 +11,7 @@ An Amazon DocumentDB cluster reached through a tunnel, logged in to with your AW
 - Connect a cluster from the Connect panel and copy a `mongosh` command that works through the tunnel as written.
 - Open `mongosh` in a terminal tab inside den, with `AWS_PROFILE` set to the identity the cluster knows.
 - Have the Amazon RDS CA bundle downloaded for you the first time, so TLS is verified.
+- Know at once whether the cluster takes your identity: after connecting, den logs in once with `mongosh` and checks that the connection has an authenticated user; the log says `login checked`.
 - Reopen the forward after an idle timeout with `reconnect`.
 - Keys: press `h` in the detail view.
 
@@ -66,6 +67,7 @@ services:
 
 ## When it goes wrong
 
+- `connected · login failed` in the Connect panel: the tunnel is up and den's own `mongosh` login ended without an authenticated user. The detail view's log has mongosh's answer, the profile it signed with, and what to check; fix it, then disconnect and connect again.
 - `MongoServerSelectionError: Server selection timed out`: not an authentication error. Replica-set discovery was turned on; keep `directConnection=true` and leave out `replicaSet`.
 - Logins fail only sometimes: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` or `AWS_SESSION_TOKEN` exported in your shell win over `AWS_PROFILE`; unset them.
 - Connected but `authenticatedUsers` is empty in `db.runCommand({connectionStatus: 1})`: the login did not happen; check the `$external` user.

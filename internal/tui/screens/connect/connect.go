@@ -39,12 +39,12 @@ func (m Model) Shortcuts() []components.ShortcutGroup {
 			{Keys: "↑ ↓", Text: "Select a service (or k, j)"},
 			{Keys: "enter", Text: "Open its detail view: logs, terminals"},
 			{Keys: "/", Text: "Filter by name, type or environment"},
-			{Keys: "c", Text: "Connect: open the tunnel, mint a token"},
+			{Keys: "c", Text: "Connect: open the tunnel, log in"},
 			{Keys: "d", Text: "Disconnect: close the tunnel"},
 			{Keys: "y", Text: "Copy its connect command (no secret)"},
 		}},
-		{Title: "Token and tunnel", Note: "Tokens renew by themselves while connected.", Keys: []components.Shortcut{
-			{Keys: "r", Text: "Mint a new token now"},
+		{Title: "Credential and tunnel", Note: "IAM tokens renew by themselves while connected.", Keys: []components.Shortcut{
+			{Keys: "r", Text: "Renew the token, or re-read the password"},
 			{Keys: "a", Text: "SSM port-forward auto-reconnect on/off"},
 		}},
 	}
@@ -322,6 +322,11 @@ func (m Model) View(width, height int, focused bool) string {
 }
 
 func statusExtra(st service.RuntimeState) string {
+	// In place of the token countdown, which would read as a working
+	// connection: the tunnel is up, the database refused the credential.
+	if st.Status == service.StatusConnected && st.Login == service.LoginFailed {
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("#F5A623")).Render("connected · login failed")
+	}
 	if st.TokenExpires != nil {
 		remaining := time.Until(*st.TokenExpires)
 		if remaining > 0 {

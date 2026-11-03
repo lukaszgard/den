@@ -59,6 +59,20 @@ type Credentialer interface {
 	Credential(ctx context.Context, log func(string)) (Credential, error)
 }
 
+// Preflighter is implemented by engines that can tell, cheaply and before any
+// forward opens, that connecting cannot work. An error fails the attempt with
+// no session started, so the user does not wait for a bastion to learn that a
+// login ran out.
+type Preflighter interface {
+	Preflight() error
+}
+
+// PasswordLoginer is implemented by engines that log in with a password read
+// from a configured secret rather than a credential they mint.
+type PasswordLoginer interface {
+	PasswordLogin() service.PasswordLogin
+}
+
 // Preparer is implemented by engines that need work done between the tunnel
 // coming up and the service being usable — fetching a CA bundle, starting an
 // in-process proxy. An error fails the connection attempt; stop, when non-nil,
@@ -79,4 +93,27 @@ type SecretCommander interface {
 // client reads it without it appearing in the process list.
 type TerminalCommander interface {
 	TerminalCommand(secret string) service.ClientCommand
+}
+
+// LoginChecker is implemented by engines whose client can log in once and
+// exit. The Tunnel runs the probe after each connect and each new credential:
+// a tunnel that answers says nothing about whether the database takes the
+// credential, and without the check a refused one stays hidden until the user
+// opens a client.
+type LoginChecker interface {
+	LoginProbe(secret string) LoginProbe
+}
+
+// LoginProbe is a one-shot login. Build Command from the same parts as the
+// engine's TerminalCommand, so the check logs in exactly as a tab would, with
+// the secret in Env or a file, never in Args.
+type LoginProbe struct {
+	Command service.ClientCommand
+	// Succeeded judges the client's output; nil means exit status 0 is
+	// success. It is consulted only after exit status 0.
+	Succeeded func(output string) bool
+	// User is who the probe logs in as, for the log; "" leaves it out.
+	User string
+	// Hint is what to check when the database refuses, one line per cause.
+	Hint string
 }

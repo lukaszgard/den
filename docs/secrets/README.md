@@ -487,8 +487,9 @@ show the config each one is intended to take.
 - **KeePassXC:** YubiKey challenge-response databases.
 - **Vault:** editing (`vault kv patch`), and other secrets engines than KV
   (for example dynamic database credentials).
-- **Using secrets elsewhere:** let runbook parameters and services read a value
-  from a configured secret.
+- **Using secrets elsewhere:** an [RDS service](../rds/README.md#a-password-from-a-secret)
+  can log in with a username and password from a secret. Other data stores and runbook
+  parameters are planned.
 
 ### Adding a provider
 

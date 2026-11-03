@@ -14,6 +14,7 @@ The Secrets panel opens the secrets you work with without leaving den: SOPS-encr
 - Filter the list by name, description or location, and an open secret by key name (never by value, which would give masked values away).
 - Edit a SOPS file in `$EDITOR`; sops encrypts it again when you save. The other providers are read-only.
 - Log in from den: an AWS SSO login turns the secrets waiting for it ready, and a Vault secret runs its own `login` command.
+- Log an RDS service in with a username and password from a secret: `auth` in its `rds:` section (see RDS and Aurora).
 - Keys: press `h` in the Secrets panel.
 
 ## Before you start

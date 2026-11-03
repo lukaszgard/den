@@ -12,7 +12,7 @@ expects them, and — when you allow it — run runbooks. The agent then queries
 |---|---|
 | `list_services` | services with type, environment, status, local port, connect command, production flag |
 | `service_status` | one service's current state |
-| `connect` | opens the tunnel, waits until usable, returns `localhost`, the port and **how** the client authenticates |
+| `connect` | opens the tunnel, waits until usable and den's [login check](../concepts/README.md#login-check) has answered, returns `localhost`, the port, **how** the client authenticates, and `login_error` when the database refused den's login |
 | `disconnect` | closes it |
 | `service_logs` | recent tunnel log lines, credential-like strings removed |
 | `runbook_guide` | how to write a den runbook, plus this den's runbooks directories, environments (AWS profile, region, production) and taken names; read-only |
@@ -28,7 +28,8 @@ it should do>`), which hands the agent the guide and your request. See
 - **Credentials never leave den.** `connect` says how the client authenticates
   (`~/.pgpass`, the MySQL option file, the AWS profile, the signing proxy) and
   never returns a token. Logs are redacted. A Redis cache using IAM auth therefore
-  cannot be used by the agent directly: its token is withheld.
+  cannot be used by the agent directly: its token is withheld. The same goes for an RDS
+  service with a [password from a secret](../rds/README.md#a-password-from-a-secret).
 - **Production is off by default.** With `allow_production: true`, each
   production connect still asks you in the MCP client. A client that cannot ask
   is refused.

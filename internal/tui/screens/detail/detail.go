@@ -14,6 +14,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // Model is the detail/service view model.
@@ -255,12 +256,21 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			connectCmd := sc.ConnectCommandWithSecret()
 			cmds = append(cmds, components.Copy(connectCmd, "copied with password!"))
 		case "p":
+			_, isPassword := service.PasswordLoginOf(m.svc)
 			token := m.state.Token
-			if token == "" {
+			switch {
+			case token == "" && isPassword:
+				cmds = append(cmds, func() tea.Msg {
+					return msgs.StatusFlashMsg{Text: "no password yet — connect first"}
+				})
+			case token == "":
 				cmds = append(cmds, func() tea.Msg {
 					return msgs.StatusFlashMsg{Text: "no token yet — connect first"}
 				})
-			} else {
+			case isPassword:
+				// Unlike a token it is still good tomorrow, so it does not stay.
+				cmds = append(cmds, components.CopySecret(token, "password"))
+			default:
 				cmds = append(cmds, components.Copy(token, "token copied!"))
 			}
 		}
@@ -400,7 +410,13 @@ func (m Model) upperSection() string {
 		}
 		statusStr = fmt.Sprintf("RECONNECTING (%ds)", secs)
 	}
-	statusLabel := lipgloss.NewStyle().Bold(true).Render(statusStr)
+	labelStyle := lipgloss.NewStyle().Bold(true)
+	if st.Status == service.StatusConnected && st.Login == service.LoginFailed {
+		// The log below carries the database's answer and what to check.
+		statusStr += " · LOGIN FAILED"
+		labelStyle = labelStyle.Foreground(lipgloss.Color("#F5A623"))
+	}
+	statusLabel := labelStyle.Render(statusStr)
 
 	// Header: <icon> name   Status: X   Local port: Y   [Auto-reconnect: ●/○]
 	typeTag := components.TypeBadge(info.Type)
@@ -461,6 +477,9 @@ func (m Model) upperSection() string {
 			" "+bar+"  "+components.Hints(components.HelpKey{Key: "r", Text: "refresh"}),
 		)
 	}
+	if login, ok := service.PasswordLoginOf(m.svc); ok {
+		tokenSection = loginSection(login, st.Status == service.StatusConnected, m.width-4)
+	}
 
 	rule := lipgloss.NewStyle().Foreground(lipgloss.Color("#626262")).Render(strings.Repeat("─", m.width-4))
 	lines := []string{header, rule, connectSection}
@@ -469,6 +488,31 @@ func (m Model) upperSection() string {
 	}
 	lines = append(lines, rule)
 	return strings.Join(lines, "\n")
+}
+
+// loginSection takes the place of the TTL for a password read from a secret:
+// nothing counts down on it, so it says where the password comes from. While not
+// connected den holds none, so there is nothing to copy or read again, and an
+// earlier read time would suggest otherwise.
+func loginSection(login service.PasswordLogin, connected bool, width int) string {
+	title := lipgloss.NewStyle().Foreground(lipgloss.Color("#6C91BF")).Render("─ Login ")
+	when, hints := "read when you connect", ""
+	if connected {
+		when = "read at " + login.ReadAt.Format("15:04")
+		hints = "  " + components.Hints(
+			components.HelpKey{Key: "r", Text: "read again"},
+			components.HelpKey{Key: "p", Text: "copy"},
+		)
+	}
+	// One line whatever the secret is called: the body is sized from what is
+	// above it. The name gives way first, then the provider and the time, since
+	// the keys are what the line is for.
+	room := max(width-1-lipgloss.Width(hints), 1)
+	suffix := fmt.Sprintf(" (%s), %s", login.Provider, when)
+	prefix := "Password from "
+	name := ansi.Truncate(fmt.Sprintf("%q", login.Secret), max(room-len(prefix)-lipgloss.Width(suffix), 8), "…")
+	source := ansi.Truncate(prefix+name+suffix, room, "…")
+	return lipgloss.JoinVertical(lipgloss.Left, title, " "+source+hints)
 }
 
 // toggleTags renders the runtime toggles a service supports as one compact header
@@ -578,7 +622,10 @@ func serviceKeys(svc service.Service) []helpKey {
 		)
 	default:
 		holdsToken := service.HoldsToken(svc)
-		if holdsToken {
+		_, isPassword := service.PasswordLoginOf(svc)
+		if isPassword {
+			keys = append(keys, helpKey{"r", "read again"})
+		} else if holdsToken {
 			keys = append(keys, helpKey{"r", "refresh"})
 		}
 		if _, ok := svc.(service.Reconnectable); ok {
@@ -588,7 +635,9 @@ func serviceKeys(svc service.Service) []helpKey {
 		if _, ok := service.SecretCommand(svc); ok {
 			keys = append(keys, helpKey{"Y", "copy cmd+password"})
 		}
-		if holdsToken {
+		if isPassword {
+			keys = append(keys, helpKey{"p", "copy password"})
+		} else if holdsToken {
 			keys = append(keys, helpKey{"p", "copy token"})
 		}
 	}

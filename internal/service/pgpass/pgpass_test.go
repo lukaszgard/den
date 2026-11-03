@@ -97,3 +97,89 @@ func TestLineWithoutDatabaseUsesTheWildcard(t *testing.T) {
 		t.Errorf("Line = %q, want %q", got, want)
 	}
 }
+
+// A service that moved from an IAM token to a stored password on the same port
+// must not leave the dead token behind: psql would send it instead of asking.
+func TestRemoveDropsOnlyThatPort(t *testing.T) {
+	file := filepath.Join(t.TempDir(), ".pgpass")
+	content := "localhost:50111:orders:app:dead-token\n" +
+		"localhost:50112:orders:app:kept\n" +
+		"db.example:5432:*:me:mine\n"
+	if err := os.WriteFile(file, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PGPASSFILE", file)
+
+	removed, err := Remove(50111)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !removed {
+		t.Error("removed = false, want true")
+	}
+	got, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "localhost:50112:orders:app:kept\ndb.example:5432:*:me:mine\n"
+	if string(got) != want {
+		t.Errorf("file =\n%s\nwant\n%s", got, want)
+	}
+}
+
+// Port 5011 is a prefix of 50111: matching on the number alone would delete
+// another service's entry.
+func TestRemoveDoesNotMatchALongerPort(t *testing.T) {
+	file := filepath.Join(t.TempDir(), ".pgpass")
+	const content = "localhost:50111:orders:app:kept\n"
+	if err := os.WriteFile(file, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PGPASSFILE", file)
+
+	removed, err := Remove(5011)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if removed {
+		t.Error("removed = true, want false")
+	}
+	if got, _ := os.ReadFile(file); string(got) != content {
+		t.Errorf("file = %q, want it unchanged", got)
+	}
+}
+
+// Connecting with a password must not create the file it promises not to use.
+func TestRemoveWithoutAFileCreatesNone(t *testing.T) {
+	file := filepath.Join(t.TempDir(), ".pgpass")
+	t.Setenv("PGPASSFILE", file)
+
+	removed, err := Remove(50111)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if removed {
+		t.Error("removed = true, want false")
+	}
+	if _, err := os.Stat(file); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("Stat = %v, want no file", err)
+	}
+}
+
+// A file with nothing of den's is the user's own: its comments and blank lines
+// stay, and it is not rewritten at all.
+func TestRemoveLeavesAFileWithoutTheEntryUntouched(t *testing.T) {
+	file := filepath.Join(t.TempDir(), ".pgpass")
+	const content = "# my databases\n\ndb.example:5432:*:me:mine\n"
+	if err := os.WriteFile(file, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PGPASSFILE", file)
+
+	if _, err := Remove(50111); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(file); string(got) != content {
+		t.Errorf("file = %q, want it unchanged", got)
+	}
+}

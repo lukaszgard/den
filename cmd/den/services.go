@@ -9,6 +9,8 @@ import (
 	"charm.land/log/v2"
 
 	"github.com/lukaszgard/den/internal/config"
+	"github.com/lukaszgard/den/internal/secrets"
+	"github.com/lukaszgard/den/internal/secrets/providers"
 	"github.com/lukaszgard/den/internal/service"
 	awssvc "github.com/lukaszgard/den/internal/service/aws"
 	"github.com/lukaszgard/den/internal/service/docker"
@@ -24,28 +26,42 @@ import (
 )
 
 // serviceFactories builds a service for each `services:` type. Adding a type
-// means an entry here, next to its config section and its package.
-var serviceFactories = map[config.ServiceType]func(config.ServiceSpec) (service.Service, error){
-	config.ServiceTypeRDS: func(s config.ServiceSpec) (service.Service, error) { return rdssvc.New(s.Name, s.RDS) },
-	config.ServiceTypeKafka: func(s config.ServiceSpec) (service.Service, error) {
+// means an entry here, next to its config section and its package. login is the
+// secret the service's auth: names, nil without one.
+var serviceFactories = map[config.ServiceType]func(s config.ServiceSpec, login secrets.Item) (service.Service, error){
+	config.ServiceTypeRDS: func(s config.ServiceSpec, login secrets.Item) (service.Service, error) {
+		return rdssvc.New(s.Name, s.RDS, login)
+	},
+	config.ServiceTypeKafka: func(s config.ServiceSpec, _ secrets.Item) (service.Service, error) {
 		return kafka.New(s.Name, s.Kafka), nil
 	},
-	config.ServiceTypeRedis: func(s config.ServiceSpec) (service.Service, error) { return redis.New(s.Name, s.Redis) },
-	config.ServiceTypeDocumentDB: func(s config.ServiceSpec) (service.Service, error) {
+	config.ServiceTypeRedis: func(s config.ServiceSpec, _ secrets.Item) (service.Service, error) {
+		return redis.New(s.Name, s.Redis)
+	},
+	config.ServiceTypeDocumentDB: func(s config.ServiceSpec, _ secrets.Item) (service.Service, error) {
 		return documentdbsvc.New(s.Name, s.DocumentDB)
 	},
-	config.ServiceTypeRedshift: func(s config.ServiceSpec) (service.Service, error) {
+	config.ServiceTypeRedshift: func(s config.ServiceSpec, _ secrets.Item) (service.Service, error) {
 		return redshiftsvc.New(s.Name, s.Redshift)
 	},
-	config.ServiceTypeOpenSearch: func(s config.ServiceSpec) (service.Service, error) {
+	config.ServiceTypeOpenSearch: func(s config.ServiceSpec, _ secrets.Item) (service.Service, error) {
 		return opensearchsvc.New(s.Name, s.OpenSearch)
 	},
-	config.ServiceTypeNeptune: func(s config.ServiceSpec) (service.Service, error) {
+	config.ServiceTypeNeptune: func(s config.ServiceSpec, _ secrets.Item) (service.Service, error) {
 		return neptunesvc.New(s.Name, s.Neptune)
 	},
-	config.ServiceTypeDocker: func(s config.ServiceSpec) (service.Service, error) {
+	config.ServiceTypeDocker: func(s config.ServiceSpec, _ secrets.Item) (service.Service, error) {
 		return docker.New(s.Name, s.Docker), nil
 	},
+}
+
+// passwordServiceSpec is what a service logging in with a secret is built from:
+// a reload that changes the entry it reads must rebuild it, or it keeps reading
+// the old one.
+type passwordServiceSpec struct {
+	Service   config.ServiceSpec
+	Secret    any
+	AWSConfig string
 }
 
 // awsSessionSpec is what an AWS SSO session service is built from, so a
@@ -73,16 +89,26 @@ func serviceEntries(cfg *config.Config) (entries []service.Entry, warnings []err
 		return k
 	}
 
+	var loginItems map[string]secrets.Item // built once, for the first service needing one
 	for _, spec := range cfg.Services {
 		build, ok := serviceFactories[spec.Type]
 		if !ok {
 			warnings = append(warnings, fmt.Errorf("service %q: unknown type %q", spec.Name, spec.Type))
 			continue
 		}
+		var login secrets.Item
+		var entrySpec any = spec
+		if auth := spec.SecretAuth(); auth != nil {
+			if loginItems == nil {
+				loginItems = secretItemsByName(cfg)
+			}
+			login = loginItems[auth.Secret]
+			entrySpec = passwordServiceSpec{Service: spec, Secret: cfg.Secrets.Spec(auth.Secret), AWSConfig: cfg.AWSConfigPath()}
+		}
 		entries = append(entries, service.Entry{
 			Key:   key(string(spec.Type), spec.Name),
-			Spec:  spec,
-			Build: func() (service.Service, error) { return build(spec) },
+			Spec:  entrySpec,
+			Build: func() (service.Service, error) { return build(spec, login) },
 		})
 	}
 	for _, spec := range cfg.Tunnels {
@@ -125,6 +151,17 @@ func serviceEntries(cfg *config.Config) (entries []service.Entry, warnings []err
 		})
 	}
 	return entries, warnings
+}
+
+// secretItemsByName builds the secrets: block of cfg, for the services that log
+// in with one. They share one view of the AWS logins, as the items of the
+// Secrets pane do.
+func secretItemsByName(cfg *config.Config) map[string]secrets.Item {
+	items := map[string]secrets.Item{}
+	for _, it := range providers.Items(cfg, secrets.NewAWSLogins(cfg.AWSConfigPath())) {
+		items[it.Name()] = it
+	}
+	return items
 }
 
 // applyConfig makes mgr hold exactly the services cfg describes, keeping the

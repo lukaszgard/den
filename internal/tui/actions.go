@@ -51,7 +51,22 @@ func (m *AppModel) runAction(act serviceAction, svc service.Service) []tea.Cmd {
 		if !refreshesToken(svc) {
 			return nil
 		}
-		return []tea.Cmd{refreshToken(m.ctx, svc), flash("refreshing token...")}
+		// Only a connection holds a credential to renew, and a tunnel refuses
+		// r without one. That refusal came back as an error, which stayed in
+		// the bottom line after the connect that followed. An SSO session
+		// re-reads its cached token whatever its state.
+		if st := svc.State().Status; svc.Info().Type != service.TypeAWS && st != service.StatusConnected {
+			text := svc.Info().Name + " is not connected"
+			if st == service.StatusIdle || st == service.StatusError {
+				text += " — press c first"
+			}
+			return []tea.Cmd{func() tea.Msg { return warnFlash(text) }}
+		}
+		text := "refreshing token..."
+		if _, ok := service.PasswordLoginOf(svc); ok {
+			text = "reading the password again..."
+		}
+		return []tea.Cmd{refreshToken(m.ctx, svc), flash(text)}
 	case actToggleReconnect, actAutoReconnect:
 		r, ok := svc.(service.Reconnectable)
 		if !ok {

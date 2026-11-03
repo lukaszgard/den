@@ -43,6 +43,7 @@ var shellTabWords = map[string]string{
 func shortcutGroups(svc service.Service, tabs bool) []shortcutGroup {
 	typ := svc.Info().Type
 	holdsToken := service.HoldsToken(svc)
+	_, isPassword := service.PasswordLoginOf(svc)
 	_, reconnects := svc.(service.Reconnectable)
 
 	words, ok := connectWords[typ]
@@ -50,6 +51,9 @@ func shortcutGroups(svc service.Service, tabs bool) []shortcutGroup {
 		words.connect, words.disconnect = "Connect: open the tunnel", "Disconnect: close the tunnel"
 		if holdsToken {
 			words.connect = "Connect: open the tunnel, mint a token"
+		}
+		if isPassword {
+			words.connect = "Connect: open tunnel, read the password"
 		}
 		if tabs {
 			words.disconnect = "Disconnect: close tunnel and terminals"
@@ -94,7 +98,13 @@ func shortcutGroups(svc service.Service, tabs bool) []shortcutGroup {
 			connection.Keys = append(connection.Keys, shortcut{Keys: "r", Text: "Re-read the cached SSO token (no login)"})
 		}
 		groups = append(groups, connection)
-		if holdsToken {
+		if isPassword {
+			groups = append(groups, shortcutGroup{
+				Title: "Password",
+				Keys:  []shortcut{{Keys: "r", Text: "Read it from its secret again"}, {Keys: "p", Text: "Copy it (cleared after 30 s)"}},
+				Note:  "A connect and a reconnect read it too.",
+			})
+		} else if holdsToken {
 			groups = append(groups, shortcutGroup{
 				Title: "Token",
 				Keys:  []shortcut{{Keys: "r", Text: "Mint a new token now"}, {Keys: "p", Text: "Copy the token"}},
