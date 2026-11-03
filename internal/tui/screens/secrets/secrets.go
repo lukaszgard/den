@@ -15,12 +15,14 @@ import (
 	"time"
 
 	"github.com/lukaszgard/den/internal/secrets"
+	"github.com/lukaszgard/den/internal/secrets/gitfile"
 	"github.com/lukaszgard/den/internal/tui/components"
 	"github.com/lukaszgard/den/internal/tui/msgs"
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // awsPollEvery is how often the pane, while it is on screen, asks whether the
@@ -33,7 +35,8 @@ const awsPollEvery = 5 * time.Second
 const mask = "••••••••"
 
 // boxHeight is the bordered details box under the item list: room for a
-// description, four details and two toggle rows.
+// description, four details and two toggle rows — for a SOPS file in git,
+// three details, two git rows and Auto reveal.
 const boxHeight = 9
 
 var (
@@ -146,6 +149,19 @@ type Model struct {
 	rechecking   bool
 	recheckAgain bool
 	nextAWSPoll  time.Time
+
+	// Following the secrets kept in a git working copy (WithGit). gitRepos
+	// is each item's working copy ("" for none), gitStates what the last
+	// pass found. A pass runs when the pane is first on screen, after an
+	// edit, an update, f and u; only f and u fetch. gitBusy and gitNext
+	// keep it to one pass at a time, like RecheckAWS.
+	git        GitChecker
+	gitRepos   []string
+	gitStates  map[int]gitfile.FileState
+	gitStarted bool
+	gitBusy    bool
+	gitNext    *gitRequest
+	ask        *gitQuestion // a question about git on screen
 }
 
 // panes numbers the panes built, for Model.gen.
@@ -244,19 +260,24 @@ func (m Model) Shortcuts() []components.ShortcutGroup {
 			{Keys: "L", Text: "Run the secret's login command"},
 			{Keys: "l", Text: "Forget remembered KeePassXC passwords"},
 		}},
+		{Title: "Git", Note: "For a file in a git working copy.", Keys: []components.Shortcut{
+			{Keys: "f", Text: "Fetch its upstream and check again"},
+			{Keys: "u", Text: "Update: fetch, then fast-forward (asks)"},
+		}},
 	}
 }
 
 // Busy reports whether esc belongs to the pane (clearing a filter or closing
 // an open item) rather than moving focus back to the menu.
 func (m Model) Busy() bool {
-	return m.open || m.typing || m.itemQuery != ""
+	return m.open || m.typing || m.itemQuery != "" || m.ask != nil
 }
 
 // Hide closes the open item and drops its decrypted fields. The app calls it
 // whenever the pane loses focus, so plaintext never lingers off screen.
 func (m Model) Hide() Model {
 	m.typing = false
+	m.ask = nil
 	if m.prompting {
 		m.prompting = false
 		m.pwInput.Reset()
@@ -446,7 +467,9 @@ func (m Model) Update(msg tea.Msg, focused bool) (Model, tea.Cmd) {
 			return m, nil
 		}
 		changed, err := ed.EditResult(msg.err)
-		var cmds []tea.Cmd
+		// A save is a change git has not got yet: not committed.
+		m, check := m.recheckGit(localCheck)
+		cmds := []tea.Cmd{check}
 		switch {
 		case err != nil:
 			cmds = append(cmds, flash(err.Error(), true))
@@ -502,13 +525,25 @@ func (m Model) Update(msg tea.Msg, focused bool) (Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case gitCheckedMsg:
+		return m.gitChecked(msg)
+
+	case gitUpdatedMsg:
+		return m.gitUpdated(msg)
+
 	case msgs.TickMsg:
-		// The app sends ticks only while the pane is on screen.
+		// The app sends ticks only while the pane is on screen. The git
+		// check runs once then, offline: den never fetches on a timer.
+		var git tea.Cmd
+		if !m.gitStarted {
+			m, git = m.recheckGit(localCheck)
+		}
 		if msg.Time.Before(m.nextAWSPoll) {
-			return m, nil
+			return m, git
 		}
 		m.nextAWSPoll = msg.Time.Add(awsPollEvery)
-		return m.RecheckAWS()
+		m, aws := m.RecheckAWS()
+		return m, tea.Batch(git, aws)
 
 	case copiedMsg:
 		clear := clearClipMsg{sum: msg.sum, viaTerminal: msg.viaTerminal}
@@ -561,6 +596,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	if m.typing {
 		return m.handleSearchKey(msg)
 	}
+	if m.ask != nil {
+		return m.answerGit(msg)
+	}
 	switch msg.String() {
 	case "/":
 		m.typing = true
@@ -593,7 +631,11 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	case "enter":
 		return m.openSelected()
 	case "e":
-		return m, m.editCmd()
+		return m.edit()
+	case "f":
+		return m.gitKey(false)
+	case "u":
+		return m.gitKey(true)
 	}
 	return m, nil
 }
@@ -934,7 +976,11 @@ func (m Model) handleOpenKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 			return m, copyValue(f.Key, f.Value)
 		}
 	case "e":
-		return m, m.editCmd()
+		return m.edit()
+	case "f":
+		return m.gitKey(false)
+	case "u":
+		return m.gitKey(true)
 	}
 	return m, nil
 }
@@ -1012,11 +1058,19 @@ func (m Model) View(width, height int, focused bool) string {
 		return m.renderOpen(width, height, focused)
 	}
 	listHeight := max(height-boxHeight-1, 1)
+	box := m.renderBox(width, boxHeight)
+	hint := []components.HelpKey{hintKey("↑↓", "navigate"), hintKey("enter", "view"), hintKey("/", "filter"), hintKey("e", "edit")}
+	if i, ok := m.selectedIndex(); ok && m.gitActions(i) {
+		hint = append(hint, hintKey("f", "fetch"), hintKey("u", "update"))
+	}
+	hint = append(hint, hintKey("L", "login"), hintKey("R", "reload"), hintKey("h", "help"))
+	if m.ask != nil {
+		box, hint = m.renderAskBox(width, boxHeight), m.askKeys()
+	}
 	return lipgloss.JoinVertical(lipgloss.Left,
 		m.renderList(width, listHeight, focused),
-		m.renderBox(width, boxHeight),
-		components.HintLine(width, focused, hintKey("↑↓", "navigate"), hintKey("enter", "view"), hintKey("/", "filter"),
-			hintKey("e", "edit"), hintKey("L", "login"), hintKey("R", "reload"), hintKey("h", "help")),
+		box,
+		components.HintLine(width, focused, hint...),
 	)
 }
 
@@ -1058,6 +1112,10 @@ func (m Model) renderList(width, height int, focused bool) string {
 			label = lipgloss.NewStyle().Foreground(colorErr).Render(st.Reason)
 		}
 		line := fmt.Sprintf("  %s %-*s  %s", dot, maxName, truncate(it.Name(), maxName), label)
+		// Readiness and freshness are apart: a file can be readable and outdated.
+		if badge := m.gitBadge(i); badge != "" {
+			line += "   " + badge
+		}
 		if focused && row == m.cursor {
 			line = selectedStyle(width).Render(line)
 		}
@@ -1098,17 +1156,28 @@ func (m Model) renderBox(width, height int) string {
 		if d := it.Description(); d != "" {
 			lines = append(lines, lipgloss.NewStyle().Foreground(colorMuted).Render(truncate(d, innerW)))
 		}
-		for _, d := range it.Details() {
+		detail := func(d secrets.Detail) string {
 			label := lipgloss.NewStyle().Foreground(colorHead).Render(fmt.Sprintf("%-12s", d.Label))
-			lines = append(lines, label+" "+truncate(d.Value, innerW-13))
+			return label + " " + ansi.Truncate(d.Value, max(innerW-13, 1), "…")
+		}
+		for _, d := range it.Details() {
+			lines = append(lines, detail(d))
 		}
 		// Same dot as the VPN and Tunnel toggles: green on, grey off.
-		lines = append(lines, components.ToggleDot(it.AutoReveal())+" Auto reveal")
+		toggles := []string{components.ToggleDot(it.AutoReveal()) + " Auto reveal"}
 		if t, ok := it.(secrets.Toggler); ok {
 			for _, tg := range t.Toggles() {
-				lines = append(lines, components.ToggleDot(tg.On)+" "+tg.Label)
+				toggles = append(toggles, components.ToggleDot(tg.On)+" "+tg.Label)
 			}
 		}
+		// The second git row gives way before a toggle does.
+		i, _ := m.selectedIndex()
+		git := m.gitDetails(i, time.Now())
+		git = git[:max(min(len(git), innerH-len(lines)-len(toggles)), min(len(git), 1))]
+		for _, d := range git {
+			lines = append(lines, detail(d))
+		}
+		lines = append(lines, toggles...)
 	}
 	for len(lines) < innerH {
 		lines = append(lines, "")
@@ -1125,6 +1194,14 @@ func (m Model) renderOpen(width, height int, focused bool) string {
 	}
 	loc := lipgloss.NewStyle().Foreground(colorDim).Padding(0, 2).Render(truncate(location, width-4))
 	rows := []string{"", head, loc}
+	// The values shown are the local ones: say when git has another version.
+	if i, ok := m.selectedIndex(); ok && !m.browsing {
+		if m.ask != nil {
+			rows = append(rows, m.renderAsk(width)...)
+		} else if b := m.gitBanner(i, width); b != "" {
+			rows = append(rows, b)
+		}
+	}
 	if c := m.countLine(); c != "" {
 		rows = append(rows, lipgloss.NewStyle().Foreground(colorMuted).Padding(0, 2).Render(c))
 	}
@@ -1176,9 +1253,12 @@ func (m Model) renderOpen(width, height int, focused bool) string {
 	}
 	// t goes last: a narrow pane cuts the hint from the right, and t is also in
 	// the help bar and on h.
+	// f and u are left to the banner and the shortcuts: the line is full.
 	hint := []components.HelpKey{hintKey("↑↓", "navigate"), hintKey("r", "reveal"), hintKey("a", "reveal all"), hintKey("y", "copy"),
 		hintKey("/", "filter"), hintKey("e", "edit"), hintKey("esc", "close"), hintKey("h", "help"), view}
 	switch {
+	case m.ask != nil:
+		hint = m.askKeys()
 	case m.prompting:
 		hint = []components.HelpKey{hintKey("enter", "unlock"), hintKey("esc", "cancel")}
 	case m.listing():

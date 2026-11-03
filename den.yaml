@@ -325,6 +325,12 @@ secrets:
       file: secrets/eu-prod.yaml
       aws_profile: "acme-prod"
       aws_region: "eu-central-1"
+      # A file in a git working copy shows whether it is up to date with its
+      # upstream (✓ up to date, ↓ outdated, ✎ not committed): f fetches, u
+      # fast-forwards after asking. Found by itself; git: only overrides.
+      # git:
+      #   branch: main                # compare with main's upstream, whatever is checked out
+      #   check: false                # no git state, f or u for this file
 
   aws_secretsmanager:
     - name: "Orders API key - EU DEV"

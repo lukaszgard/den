@@ -15,6 +15,7 @@ import (
 	"github.com/lukaszgard/den/internal/platform"
 	"github.com/lukaszgard/den/internal/prereq"
 	"github.com/lukaszgard/den/internal/secrets"
+	"github.com/lukaszgard/den/internal/secrets/sops"
 	"github.com/lukaszgard/den/internal/service"
 	"github.com/lukaszgard/den/internal/service/vpn"
 )
@@ -432,6 +433,26 @@ func TestRunbookSourcesNeedGit(t *testing.T) {
 	r := Run(context.Background(), Input{ConfigPath: "den.yaml", Config: cfg}, fakeDeps(nil, ""))
 	if got := find(t, r, "git"); got.Status != Warn || !strings.Contains(got.Detail, "runbooks.sources") {
 		t.Errorf("missing git should warn and name runbooks.sources: %+v", got)
+	}
+}
+
+// A SOPS file in a git working copy needs git; one outside, or with
+// git.check: false, does not.
+func TestSOPSFileInGitNeedsGit(t *testing.T) {
+	cfg := awsHome(t, "", "")
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	off := false
+	items := []secrets.Item{
+		sops.New(config.SOPSSecretSpec{Name: "payments dev", File: filepath.Join(repo, "secrets", "dev.enc.yaml")}, nil),
+		sops.New(config.SOPSSecretSpec{Name: "scratch", File: filepath.Join(repo, "s.enc.yaml"), Git: &config.SecretGitSpec{Check: &off}}, nil),
+		sops.New(config.SOPSSecretSpec{Name: "local env", File: filepath.Join(t.TempDir(), "l.enc.env")}, nil),
+	}
+	n := collectNeeds(Input{Config: cfg, Secrets: items})
+	if got := n.tools["git"]; !slices.Equal(got, []string{"payments dev"}) {
+		t.Errorf("git needed by %v, want payments dev alone", got)
 	}
 }
 

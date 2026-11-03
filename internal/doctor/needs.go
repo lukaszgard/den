@@ -8,6 +8,7 @@ import (
 
 	"github.com/lukaszgard/den/internal/config"
 	"github.com/lukaszgard/den/internal/secrets"
+	"github.com/lukaszgard/den/internal/secrets/gitfile"
 )
 
 // needs is what a config depends on outside den, with the services that
@@ -136,6 +137,13 @@ func collectNeeds(in Input) needs {
 		if tu, ok := it.(secrets.ToolUser); ok {
 			for _, t := range tu.Tools() {
 				n.tools[t] = appendOnce(n.tools[t], it.Name())
+			}
+		}
+		// A file in a git working copy is checked against its upstream.
+		// Finding the working copy takes no git, so a missing git is named.
+		if g, ok := it.(secrets.GitTracked); ok {
+			if path, spec := g.GitFile(); spec.On() && gitfile.Find(path) != "" {
+				n.tools["git"] = appendOnce(n.tools["git"], it.Name())
 			}
 		}
 	}

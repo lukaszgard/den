@@ -457,7 +457,7 @@ var Catalog = []Tool{
 	},
 	{
 		ID:          "git",
-		Purpose:     "runbook sources: fetching the repositories in runbooks.sources",
+		Purpose:     "runbook sources (fetching the repositories in runbooks.sources) and SOPS files kept in git (their state against the upstream, f and u in the Secrets panel)",
 		VersionArgs: []string{"--version"},
 		VersionRe:   regexp.MustCompile(`git version (\d+\.\d+\.\d+)`),
 		Install: map[string][]Recipe{

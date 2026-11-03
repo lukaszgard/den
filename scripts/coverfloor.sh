@@ -20,6 +20,7 @@ github.com/lukaszgard/den/internal/process=83 \
 github.com/lukaszgard/den/internal/runbook=84 \
 github.com/lukaszgard/den/internal/runbook/source=75 \
 github.com/lukaszgard/den/internal/secrets=85 \
+github.com/lukaszgard/den/internal/secrets/gitfile=82 \
 github.com/lukaszgard/den/internal/secrets/sops=85 \
 github.com/lukaszgard/den/internal/service=68 \
 github.com/lukaszgard/den/internal/service/ssmfwd=82 \
@@ -31,7 +32,7 @@ github.com/lukaszgard/den/internal/tui/screens/applogs=90 \
 github.com/lukaszgard/den/internal/tui/screens/configview=80 \
 github.com/lukaszgard/den/internal/tui/screens/detail=85 \
 github.com/lukaszgard/den/internal/tui/screens/help=95 \
-github.com/lukaszgard/den/internal/tui/screens/secrets=79 \
+github.com/lukaszgard/den/internal/tui/screens/secrets=85 \
 github.com/lukaszgard/den/internal/tui/screens/updates=74 \
 github.com/lukaszgard/den/internal/update=79"
 

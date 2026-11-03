@@ -1100,6 +1100,10 @@
             "flat"
           ],
           "description": "how this secret opens when its values are nested; secrets.view when empty"
+        },
+        "git": {
+          "$ref": "#/$defs/SecretGitSpec",
+          "description": "Git overrides how den follows the file in its git working copy. Not\nneeded otherwise: den finds the repository, the branch and its\nupstream by itself, and shows whether the file is up to date with it."
         }
       },
       "additionalProperties": false,
@@ -1131,6 +1135,21 @@
         "secret"
       ],
       "description": "SecretAuth logs a database service in with a username and password read from an entry of secrets:, instead of an IAM token."
+    },
+    "SecretGitSpec": {
+      "properties": {
+        "branch": {
+          "type": "string",
+          "description": "Branch is the branch whose upstream the file is compared with and\nupdated from, whatever branch is checked out: main to hear of changes\non main while working on a feature branch. Empty: the branch checked\nout. An update only ever fast-forwards that branch while it is checked out."
+        },
+        "check": {
+          "type": "boolean",
+          "description": "Check shows the file's git state and offers fetch and update. On unless\nset to false."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "SecretGitSpec is how den follows a secret's file in its git working copy."
     },
     "SecretsConfig": {
       "properties": {
