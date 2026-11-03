@@ -13,6 +13,7 @@ FLOORS="\
 github.com/lukaszgard/den/internal/agent=89 \
 github.com/lukaszgard/den/internal/config=87 \
 github.com/lukaszgard/den/internal/doctor=83 \
+github.com/lukaszgard/den/internal/gitcli=95 \
 github.com/lukaszgard/den/internal/platform=73 \
 github.com/lukaszgard/den/internal/prereq=90 \
 github.com/lukaszgard/den/internal/process=83 \
