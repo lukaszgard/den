@@ -6,6 +6,7 @@ package redshift
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -76,7 +77,7 @@ func (e *engine) ConnectCommand() string {
 // ConnectCommandWithSecret puts the password into the conninfo string, for
 // machines where ~/.pgpass is not in play.
 func (e *engine) ConnectCommandWithSecret(password string) string {
-	return fmt.Sprintf(`psql "host=localhost port=%d dbname=%s user=%s password=%s sslmode=require"`,
+	return fmt.Sprintf(`psql "host=localhost hostaddr=127.0.0.1 port=%d dbname=%s user=%s password=%s sslmode=require"`,
 		e.spec.LocalPort, e.spec.DBName, e.dbUser(), password)
 }
 
@@ -93,10 +94,56 @@ func (e *engine) TerminalCommand(password string) service.ClientCommand {
 }
 
 // conninfo is the libpq connection string for the local end of the tunnel.
+// hostaddr=127.0.0.1 because the forward listens on IPv4 only: with localhost
+// alone psql tries ::1 first, and a failed login then also reports
+// "Connection refused", which reads as a dead tunnel. host=localhost stays, as
+// the name pgpass entries are matched on.
 func (e *engine) conninfo() string {
-	return fmt.Sprintf("host=localhost port=%d dbname=%s user=%s sslmode=require",
+	return fmt.Sprintf("host=localhost hostaddr=127.0.0.1 port=%d dbname=%s user=%s sslmode=require",
 		e.spec.LocalPort, e.spec.DBName, e.dbUser())
 }
+
+// LoginProbe logs in once as a tab would, with the password in PGPASSWORD:
+// no psqlrc, no password prompt, one bare value. Options go first, as BSD
+// getopt stops at the first argument that is not one.
+func (e *engine) LoginProbe(password string) ssmfwd.LoginProbe {
+	tab := e.TerminalCommand(password)
+	tab.Args = []string{"-X", "-w", "-A", "-t", "-c", "select 1", tab.Args[0]}
+	return ssmfwd.LoginProbe{Command: tab, User: e.dbUser(), Hint: e.loginHint()}
+}
+
+// loginHint says what to check when Redshift refuses the temporary
+// credentials: who minted them, for which user and where, and the usual causes.
+func (e *engine) loginHint() string {
+	as := "the default AWS credentials"
+	if p := e.env.CredentialProfile; p != "" {
+		as = fmt.Sprintf("AWS profile %q", p)
+	}
+	where := fmt.Sprintf("workgroup %q", e.spec.WorkgroupName)
+	if e.spec.ClusterIdentifier != "" {
+		where = fmt.Sprintf("cluster %q", e.spec.ClusterIdentifier)
+	}
+	// Short lines: the log is as wide as the terminal and cuts the rest.
+	lines := []string{
+		"the temporary credentials were minted as " + as,
+		fmt.Sprintf("for user %q", e.dbUser()),
+		fmt.Sprintf("on %s; check that:", where),
+		fmt.Sprintf("  - database %q exists and the user may use it", e.spec.DBName),
+	}
+	if e.spec.DBUser != "" {
+		lines = append(lines, fmt.Sprintf("  - user %q exists in the cluster: den asks Redshift not to create it", e.spec.DBUser))
+	}
+	ssoLogin := ""
+	if p := e.env.CredentialProfile; p != "" {
+		ssoLogin = " (aws sso login --profile " + p + ")"
+	}
+	lines = append(lines, "  - the profile's credentials have not expired"+ssoLogin)
+	return strings.Join(lines, "\n")
+}
+
+// The Tunnel finds the check by type assertion, so losing the method would
+// drop it silently rather than fail to build.
+var _ ssmfwd.LoginChecker = (*engine)(nil)
 
 // dbUser is the user to log in as. Until credentials have been minted the real
 // name is unknown — Redshift decides it — so the command shows what will be

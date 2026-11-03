@@ -175,6 +175,7 @@ func Validate(cfg *Config) error {
 	}
 	for i, svc := range cfg.Services {
 		add(validateService(i, svc))
+		add(validateSecretAuth(i, svc, cfg.Secrets))
 	}
 	for _, name := range slices.Sorted(maps.Keys(cfg.Environments)) {
 		if err := validateTransport(cfg.Environments[name].Transport); err != nil {
@@ -254,7 +255,7 @@ func validateService(i int, svc ServiceSpec) error {
 		if svc.RDS.RDSHost == "" {
 			return fmt.Errorf("service[%d] %q: rds.rds_host is required", i, svc.Name)
 		}
-		if svc.RDS.DBUser == "" {
+		if svc.RDS.DBUser == "" && svc.RDS.Auth == nil {
 			return fmt.Errorf("service[%d] %q: rds.db_user is required", i, svc.Name)
 		}
 		switch svc.RDS.Engine {
@@ -373,6 +374,34 @@ func validateAutoConnect(a *TunnelAutoConnect, vpns []VPNSpec) error {
 // validSecretView reports whether v is a view: value; empty means inherited.
 func validSecretView(v string) bool {
 	return v == "" || v == SecretViewTree || v == SecretViewFlat
+}
+
+// validateSecretAuth checks what a service's auth: points at, here rather than
+// at connect time, when a wrong name would only show up after opening a tunnel.
+func validateSecretAuth(i int, svc ServiceSpec, s *SecretsConfig) error {
+	if svc.RDS == nil || svc.RDS.Auth == nil {
+		return nil
+	}
+	secret := svc.RDS.Auth.Secret
+	if secret == "" {
+		return fmt.Errorf("service[%d] %q: rds.auth.secret is required", i, svc.Name)
+	}
+	if svc.RDS.UpdatePgpass {
+		return fmt.Errorf("service[%d] %q: rds.update_pgpass cannot be set with rds.auth: a stored password is never written to a file", i, svc.Name)
+	}
+	switch spec := s.Spec(secret).(type) {
+	case nil:
+		return fmt.Errorf("service[%d] %q: rds.auth.secret %q: no such entry in secrets", i, svc.Name, secret)
+	case KeePassXCSecretSpec:
+		// Its master password is asked for in the Secrets pane, and neither a
+		// connect in the background nor den mcp has anywhere to ask.
+		return fmt.Errorf("service[%d] %q: rds.auth.secret %q: a KeePassXC entry cannot be used yet, since den cannot ask for its master password while connecting", i, svc.Name, secret)
+	case VaultSecretSpec:
+		if strings.HasSuffix(spec.Path, "/") {
+			return fmt.Errorf("service[%d] %q: rds.auth.secret %q: a Vault folder holds many secrets, so point at one", i, svc.Name, secret)
+		}
+	}
+	return nil
 }
 
 // validateSecrets checks the secrets: block. Whether the file exists or the

@@ -1,5 +1,70 @@
 # Changelog
 
+## [1.9.0] - 2026-11-03
+
+**den now logs in to see that the database takes the credential, and RDS can log in with a
+password from a secret.** Until now a service read `CONNECTED` once its tunnel answered and a
+credential was minted, so a token the database refused stayed hidden until a client failed with
+`PAM authentication failed`. After each connect and each new credential, den logs in once with the
+client and credential a terminal tab gets, and says when the database refuses and what to check.
+A database or user without IAM auth can now be reached too: an RDS service with `auth:` logs in
+with a username and password from one of your secrets, and writes it to no file.
+
+### 🔌 Data stores and tunnels
+
+- After a service connects, after each renewal and after `r`, den logs in once in the background:
+  `psql` or `mysql` runs `select 1`, `redis-cli` sends `PING` and `mongosh` checks that it is
+  logged in as a user. The log says `login checked as <user>`. A refusal keeps the tunnel up: the
+  Connect panel shows `connected · login failed`, the detail view `CONNECTED · LOGIN FAILED`, and
+  the log has the database's answer, then what to check: the AWS profile the credential was minted
+  as (`aws_profile` when `credential_profile` is not set), the user and host, and the grant and IAM
+  action the login needs. Fix it and press `r` to check again. Without the client installed the log
+  says `psql not found — login not checked`, which is not a failure. OpenSearch and Neptune have no
+  such client and get no check.
+- The check gets the credential the way a terminal tab does, in the client's environment or den's
+  MySQL option file, never on the command line. All it reports is the line that says why a login
+  failed, with the credential replaced by `[redacted]`. A database that audits logins sees one on
+  connect, on each renewal (every 13 minutes for a 15-minute token) and on `r`.
+- The `psql` commands of RDS and Redshift services gain `hostaddr=127.0.0.1`. The tunnel listens on
+  IPv4 only and `psql` tried `::1` first, so every failed login also printed `Connection refused`,
+  which read as a dead tunnel. `host=localhost` stays, so `~/.pgpass` entries still match.
+- An RDS service, PostgreSQL or MySQL, can log in with a username and password from a secret:
+  `auth.secret` names an entry under `secrets:` (`sops`, `aws_secretsmanager` or one `vault`
+  secret). den checks that the secret is ready before it opens a session, so an expired login shows
+  up first, and reads it on connect, reconnect and `r`; nothing re-reads it by itself. KeePassXC is
+  not supported yet: den cannot ask for its master password while connecting.
+- The password reaches no file. A terminal tab gets it through `PGPASSWORD` or `MYSQL_PWD`, and the
+  `y` command run elsewhere asks for it. A `~/.pgpass` line left on that port from IAM is removed,
+  since `psql` would send the dead token instead of asking.
+
+### 🖥 The dashboard
+
+- A service with a password shows a Login section in the detail view in place of the token bar:
+  the secret, its provider and when den read it. `p` copies the password and clears the clipboard
+  after 30 seconds. `Y` is not offered, since its command would land in a shell's history still
+  valid.
+- `r` on a service that is not connected says `<name> is not connected — press c first`. It used
+  to fail with an error that stayed in the bottom line after the connect that followed.
+- The Connect panel's shortcuts list `r` and `a` under "Credential and tunnel".
+
+### 🔧 Configuration and checks
+
+- `rds.auth` takes `secret`, `username_key` and `password_key`, the keys dotted as in the Secrets
+  pane's flat view and `username` and `password` by default, as in a secret RDS manages for you.
+  `db_user` is no longer required with `auth`, and wins over the secret's username when set.
+  `den config --check` refuses an `auth.secret` that names no entry, a KeePassXC entry or a Vault
+  folder, and `update_pgpass` together with `auth`.
+- `den doctor` no longer asks for the AWS CLI for a service that logs in with a password and is
+  reached over SSH or kubectl: nothing is minted for it.
+
+### 🤖 AI agents
+
+- `den list --json` and `den mcp` report a refused login as `login_error`. The `connect` tool waits
+  for the check before it answers, and the den skill tells an agent to stop and show you the error
+  rather than try another user, profile or password.
+- An agent can open the tunnel of a service with a password and is never given the password; the
+  skill asks it to have you run the query from a terminal tab instead.
+
 ## [1.8.2] - 2026-11-02
 
 **`den doctor --explain` now survives a dropped connection.** A connection lost part-way through

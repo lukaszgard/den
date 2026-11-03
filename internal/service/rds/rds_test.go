@@ -21,11 +21,11 @@ func TestPostgresCommandsUnchanged(t *testing.T) {
 	e := newEngine(config.RDSSpec{Environment: "INT", LocalPort: 50111, DBName: "orders", DBUser: "app"})
 
 	if got, want := e.ConnectCommand(),
-		`psql "host=localhost port=50111 dbname=orders user=app sslmode=require"`; got != want {
+		`psql "host=localhost hostaddr=127.0.0.1 port=50111 dbname=orders user=app sslmode=require"`; got != want {
 		t.Errorf("ConnectCommand =\n%s\nwant\n%s", got, want)
 	}
 	if got, want := e.ConnectCommandWithSecret("tok"),
-		`psql "host=localhost port=50111 dbname=orders user=app sslmode=require password=tok"`; got != want {
+		`psql "host=localhost hostaddr=127.0.0.1 port=50111 dbname=orders user=app sslmode=require password=tok"`; got != want {
 		t.Errorf("ConnectCommandWithSecret =\n%s\nwant\n%s", got, want)
 	}
 	if e.remotePort() != 5432 {
@@ -57,7 +57,7 @@ func TestMySQLCommands(t *testing.T) {
 
 func TestNoDatabaseNameIsLeftToTheClient(t *testing.T) {
 	pg := newEngine(config.RDSSpec{LocalPort: 50111, DBUser: "app"})
-	if got, want := pg.ConnectCommand(), `psql "host=localhost port=50111 user=app sslmode=require"`; got != want {
+	if got, want := pg.ConnectCommand(), `psql "host=localhost hostaddr=127.0.0.1 port=50111 user=app sslmode=require"`; got != want {
 		t.Errorf("ConnectCommand =\n%s\nwant\n%s", got, want)
 	}
 	my := newEngine(config.RDSSpec{LocalPort: 50131, Engine: config.RDSEngineMySQL, DBUser: "app_iam"})
@@ -101,7 +101,7 @@ func TestPostgresTerminalCommand(t *testing.T) {
 	got := e.TerminalCommand("tok-1")
 	want := service.ClientCommand{
 		Tool: "psql",
-		Args: []string{"host=localhost port=50111 dbname=orders user=app sslmode=require"},
+		Args: []string{"host=localhost hostaddr=127.0.0.1 port=50111 dbname=orders user=app sslmode=require"},
 		Env:  []string{"PGPASSWORD=tok-1"},
 	}
 	if !reflect.DeepEqual(got, want) {

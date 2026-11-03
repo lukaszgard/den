@@ -86,11 +86,18 @@ The `env:` reference supplies the bastion, `aws_profile` (opens the SSM session)
 ## Usage
 
 1. Launch `den`, open **Connect**, select the Redshift service and press `c`. den opens
-   the tunnel, checks the local port, then mints the credentials.
+   the tunnel, checks the local port, then mints the credentials and logs in once with
+   them (`psql -X -w -A -t -c "select 1"`, the password in `PGPASSWORD`) to see that
+   Redshift takes them. The log says `login checked as IAMR:dev-role`; a refusal leaves
+   the tunnel up and shows `connected · login failed` (see Troubleshooting). Each renewal
+   and `r` check again.
 2. Press `y` to copy the command. The password comes from `~/.pgpass`:
    ```bash
-   psql "host=localhost port=50151 dbname=dev user=IAMR:dev-role sslmode=require"
+   psql "host=localhost hostaddr=127.0.0.1 port=50151 dbname=dev user=IAMR:dev-role sslmode=require"
    ```
+   `hostaddr=127.0.0.1` because the tunnel listens on IPv4 only: with `localhost` alone
+   `psql` tries `::1` first, and a failed login then also reports `Connection refused`.
+   `host=localhost` stays, as the name `~/.pgpass` entries are matched on.
 3. In the detail view, `Y` copies the command with the password inline, `p` copies only
    the password, and `r` re-mints now.
 4. Or skip the copying: in the detail view, `t` runs `psql` in a
@@ -103,6 +110,11 @@ Redshift picks the name only when it mints the credentials.
 
 ## Troubleshooting
 
+- **`connected · login failed`:** the tunnel is up and Redshift refused den's own login
+  with the credentials it hands you. The detail view's log has Redshift's answer, then who
+  minted the credentials, for which user and on which cluster or workgroup, and what to
+  check. Fix it and press `r`: den mints new credentials and checks again. Without `psql`
+  installed the log says `psql not found — login not checked` instead.
 - **`password authentication failed for user "IAMR:…"`:** the credentials expired, or
   `~/.pgpass` is not in use (`update_pgpass` off, or the file is group-readable). Press
   `r`, or use `Y` to pass the password inline.

@@ -96,8 +96,9 @@ func collectNeeds(in Input) needs {
 		if err != nil {
 			continue // Validate reports it
 		}
-		// The credential is minted through AWS whatever carries the traffic.
-		if env.CredentialProfile != "" {
+		// A token is minted through AWS whatever carries the traffic. A password
+		// is not; a secret read through AWS says so itself, below.
+		if env.CredentialProfile != "" && spec.SecretAuth() == nil {
 			n.aws = true
 		}
 		switch env.Transport.TypeOrDefault() {

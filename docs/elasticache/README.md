@@ -73,7 +73,11 @@ the [configuration reference](../config/README.md#servicesredis).
 ## Usage
 
 1. Launch `den`, open **Connect**, select the cache and press `c`. den opens the
-   tunnel, checks the local port accepts connections, then mints the token.
+   tunnel, checks the local port accepts connections, then mints the token and sends
+   one `PING` with it, as a terminal tab would (`redis-cli … PING`, the token in
+   `REDISCLI_AUTH`), to see that the cache takes it. The log says
+   `login checked as app-iam-user`; anything but `PONG` leaves the tunnel up and shows
+   `connected · login failed` (see Troubleshooting). Each renewal and `r` check again.
 2. Press `y` to copy the connect command. The token is not in it:
    ```bash
    redis-cli -h localhost -p 16379 --tls --user app-iam-user
@@ -99,6 +103,11 @@ the [configuration reference](../config/README.md#servicesredis).
 
 ## Troubleshooting
 
+- **`connected · login failed`:** the tunnel is up and the cache did not answer den's
+  `PING` with `PONG`. The detail view's log has the cache's answer, then who the token was
+  minted as, for which user and cache, and what to check; fix it and press `r` to mint a
+  token and check again. A cache reached without IAM auth that requires `AUTH` answers
+  `NOAUTH`: set `cache_name` and `user_id`.
 - **`WRONGPASS invalid username-password pair`:** the token reached the cache, which
   refused it. Check the user's authentication mode, that its user group is attached to
   the cache, and `elasticache:Connect` on both ARNs. For MemoryDB, check

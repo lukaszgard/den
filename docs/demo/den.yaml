@@ -272,6 +272,16 @@ services:
   #     services: [postgres, redis, kafka]
   #     env_file: ./.env.local
 
+  - name: "EU DEV Legacy DB (password)"  # a password from a secret — docs/rds
+    type: rds
+    env: eu-dev
+    rds:
+      local_port: 50132
+      rds_host: "legacy.abcdefghijkl.eu-central-1.rds.amazonaws.com"
+      db_name: legacy
+      auth:
+        secret: "Legacy DB login"
+
 secrets:
   # view: tree                      # nested values: tree (default, as in the file)
   #                                 # or flat (db.password); a secret's own view:
@@ -295,6 +305,11 @@ secrets:
       aws_region: "eu-central-1"
 
   aws_secretsmanager:
+    - name: "Legacy DB login"       # the password of the rds recording's last scene
+      description: "Login of the legacy DB for EU DEV"
+      secret_id: "/acme/legacy/dev/db-login"
+      aws_profile: "acme-dev"
+      aws_region: "eu-central-1"
     - name: "Orders API key - EU DEV"
       description: "API client key for EU DEV"
       secret_id: "/acme/orders/dev/api-key"

@@ -27,8 +27,11 @@ store is on `localhost` and any normal client works — `psql`, `mysql`, `redis-
 
 1. Call `list_services`. Pick the service by name, type and environment; every
    entry says whether it is `production`.
-2. Call `connect` with the exact name. It waits until the tunnel is usable and returns
-   `host` (always `localhost`), `port`, `connect_command` and `credential`.
+2. Call `connect` with the exact name. It waits until the tunnel is usable and den has
+   logged in once to check the credential, and returns `host` (always `localhost`),
+   `port`, `connect_command` and `credential`. If `service.login_error` is set, the
+   tunnel is up but the database refused that login: stop, show the user the error and
+   the hint lines from `service_logs`, and do not query or retry around it.
 3. Run the query with the returned command or the equivalent client call, pointed at
    `localhost` and that port. Read-only queries unless the user asked for changes.
 4. Call `disconnect` when finished. Tunnels also close when the session ends.
@@ -42,6 +45,7 @@ The `credential` field says how the client authenticates, never the secret itsel
 | AWS profile (DocumentDB) | run `mongosh` as given; it signs with that profile |
 | proxy signs requests (OpenSearch, Neptune) | send plain HTTP to `localhost:port` |
 | token withheld (Redis with IAM auth, or no `~/.pgpass`) | stop and ask the user to copy the full command from den's TUI detail view (`Y`) or run the query themselves |
+| stored password withheld (RDS with `auth:`) | stop and ask the user to run the query themselves, from a terminal tab in den's TUI detail view (`t`) |
 
 ## Rules
 
@@ -54,6 +58,8 @@ The `credential` field says how the client authenticates, never the secret itsel
 - **Runbooks run real scripts.** Run one only when the user asked for that runbook,
   pass parameters exactly as declared (`list_runbooks` shows them), and report its
   exit status and output as they came back.
+- **A refused login is the user's to fix.** `login_error` names an IAM grant, a policy
+  or a profile on their side; report it, never try another user, profile or password.
 - **SSO logins and VPNs need a browser.** When `connect` or `den doctor` reports an
   expired or missing login, tell the user the command it suggests
   (e.g. `aws sso login --sso-session NAME`) instead of trying it yourself.

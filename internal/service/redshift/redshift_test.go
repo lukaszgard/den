@@ -3,6 +3,7 @@ package redshift
 import (
 	"context"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -93,12 +94,12 @@ func TestFetchCredentialsInputs(t *testing.T) {
 
 func TestCommandsUseReturnedUser(t *testing.T) {
 	e := &engine{spec: &config.RedshiftSpec{LocalPort: 55431, DBName: "dev", DBUser: "analyst"}}
-	if got, want := e.ConnectCommand(), `psql "host=localhost port=55431 dbname=dev user=IAM:analyst sslmode=require"`; got != want {
+	if got, want := e.ConnectCommand(), `psql "host=localhost hostaddr=127.0.0.1 port=55431 dbname=dev user=IAM:analyst sslmode=require"`; got != want {
 		t.Errorf("before minting:\n%s\nwant\n%s", got, want)
 	}
 
 	e.user = "IAMR:dev-role"
-	if got, want := e.ConnectCommandWithSecret("pw"), `psql "host=localhost port=55431 dbname=dev user=IAMR:dev-role password=pw sslmode=require"`; got != want {
+	if got, want := e.ConnectCommandWithSecret("pw"), `psql "host=localhost hostaddr=127.0.0.1 port=55431 dbname=dev user=IAMR:dev-role password=pw sslmode=require"`; got != want {
 		t.Errorf("with secret:\n%s\nwant\n%s", got, want)
 	}
 	// The returned user carries a colon, which pgpass must escape.
@@ -116,7 +117,7 @@ func TestTerminalCommandKeepsThePasswordOutOfTheArguments(t *testing.T) {
 	got := e.TerminalCommand("pw-1")
 	want := service.ClientCommand{
 		Tool: "psql",
-		Args: []string{"host=localhost port=55431 dbname=dev user=IAMR:dev-role sslmode=require"},
+		Args: []string{"host=localhost hostaddr=127.0.0.1 port=55431 dbname=dev user=IAMR:dev-role sslmode=require"},
 		Env:  []string{"PGPASSWORD=pw-1"},
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -125,5 +126,60 @@ func TestTerminalCommandKeepsThePasswordOutOfTheArguments(t *testing.T) {
 	// The command den shows and the one it runs must reach the same database.
 	if shown := e.ConnectCommand(); shown != `psql "`+got.Args[0]+`"` {
 		t.Fatalf("the shown command %s does not match the run one %q", shown, got.Args)
+	}
+}
+
+// The check logs in as a tab would, plus what makes psql answer once and exit;
+// options first, as BSD getopt stops at the first argument that is not one.
+func TestLoginProbe(t *testing.T) {
+	e := &engine{spec: &config.RedshiftSpec{LocalPort: 55431, DBName: "dev", ClusterIdentifier: "c1"}}
+	e.user = "IAMR:dev-role"
+
+	p := e.LoginProbe("pw-1")
+	tab := e.TerminalCommand("pw-1")
+	want := service.ClientCommand{
+		Tool: "psql",
+		Args: []string{"-X", "-w", "-A", "-t", "-c", "select 1", tab.Args[0]},
+		Env:  tab.Env,
+	}
+	if !reflect.DeepEqual(p.Command, want) {
+		t.Fatalf("probe =\n%+v\nwant\n%+v", p.Command, want)
+	}
+	if p.User != "IAMR:dev-role" || p.Succeeded != nil {
+		t.Errorf("User = %q, Succeeded set: %v", p.User, p.Succeeded != nil)
+	}
+}
+
+func TestLoginHint(t *testing.T) {
+	e := &engine{
+		spec: &config.RedshiftSpec{LocalPort: 55431, DBName: "sales", ClusterIdentifier: "c1", DBUser: "analyst"},
+		env:  config.EnvMapping{CredentialProfile: "acme-int"},
+		ttl:  15 * time.Minute,
+	}
+	e.user = "IAM:analyst"
+	hint := e.LoginProbe("pw").Hint
+	for _, want := range []string{`AWS profile "acme-int"`, `"IAM:analyst"`, `cluster "c1"`, `database "sales"`, `"analyst" exists`, "aws sso login --profile acme-int"} {
+		if !strings.Contains(hint, want) {
+			t.Errorf("hint has no %q:\n%s", want, hint)
+		}
+	}
+	sls := &engine{spec: &config.RedshiftSpec{LocalPort: 55431, DBName: "dev", WorkgroupName: "wg"}}
+	if hint := sls.LoginProbe("pw").Hint; !strings.Contains(hint, `workgroup "wg"`) || strings.Contains(hint, "exists in") {
+		t.Errorf("serverless hint:\n%s", hint)
+	}
+}
+
+// The hint is read in the detail view's log, which shows 104 runes of a line
+// at 120 columns and cuts the rest.
+func TestLoginHintLinesFitTheLog(t *testing.T) {
+	e := &engine{
+		spec: &config.RedshiftSpec{LocalPort: 55431, DBName: "analytics", WorkgroupName: "cn-e2e-analytics"},
+		env:  config.EnvMapping{CredentialProfile: "acme-cn-e2e-analytics-reader"},
+	}
+	e.user = "IAMR:AWSReservedSSO_AnalyticsReader_0123456789abcdef"
+	for line := range strings.Lines(e.LoginProbe("pw").Hint) {
+		if n := len([]rune(strings.TrimRight(line, "\n"))); n > 104 {
+			t.Errorf("a line of %d runes:\n%s", n, line)
+		}
 	}
 }

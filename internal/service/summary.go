@@ -15,6 +15,9 @@ type Summary struct {
 	ConnectCommand string     `json:"connect_command,omitempty"`
 	TokenExpires   *time.Time `json:"token_expires,omitempty"`
 	Production     bool       `json:"production"`
+	// LoginError is the database's answer when it refused den's login with
+	// the credential it hands the user: the tunnel is up, the login is not.
+	LoginError string `json:"login_error,omitempty"`
 }
 
 // Summarize describes svc as it is now.
@@ -32,6 +35,9 @@ func Summarize(svc Service) Summary {
 	}
 	if st.Error != nil {
 		s.Error = st.Error.Error()
+	}
+	if st.Login == LoginFailed {
+		s.LoginError = st.LoginErr
 	}
 	if d, ok := svc.(Describer); ok {
 		s.Description = d.Description()

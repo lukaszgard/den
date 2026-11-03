@@ -13,6 +13,7 @@ An Amazon Redshift cluster or Redshift Serverless workgroup reached through a tu
 - Choose how long the credentials live, 15 minutes to an hour; den renews them two minutes before they expire.
 - Copy the `psql` command, the same command with the password, or the password alone, from the detail view.
 - Open `psql` in a terminal tab inside den, already logged in, even with `update_pgpass` off.
+- Know at once whether Redshift takes the credentials: after connecting and after each renewal, den logs in once with `psql` as a tab would, and the log says `login checked as <user>`.
 - Keys: press `h` in the detail view.
 
 ## Before you start
@@ -88,6 +89,7 @@ services:
 
 ## When it goes wrong
 
+- `connected · login failed` in the Connect panel: the tunnel is up and Redshift refused den's own login. The detail view's log has the answer, who minted the credentials, for which user and cluster or workgroup, and what to check; fix it and press `r`.
 - `password authentication failed for user "IAMR:…"`: the credentials expired, or `~/.pgpass` is not in use; mint new ones, or copy the command with the password inlined.
 - `permission denied for schema …` right after logging in: the login worked; the IAM user has no grants yet.
 - `AccessDenied … GetClusterCredentialsWithIAM`: the policy allows only the older `GetClusterCredentials`; add the `WithIAM` action, or set `db_user`.

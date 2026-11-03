@@ -93,6 +93,47 @@ func update(path string, localPort int, dbName, dbUser, password string) error {
 	return nil
 }
 
+// Remove drops the entry for localPort from Path, if there is one, and reports
+// whether it did. A service that moved from an IAM token to a stored password
+// on the same port needs this: psql would send the dead token left behind
+// instead of asking for the password. Ports belong to den here as they do in
+// Update, one entry for each.
+func Remove(localPort int) (bool, error) {
+	p := Path()
+	if p == "" {
+		return false, nil
+	}
+	return remove(p, localPort)
+}
+
+func remove(path string, localPort int) (bool, error) {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("read pgpass: %w", err)
+	}
+	prefix := fmt.Sprintf("localhost:%d:", localPort)
+	var kept strings.Builder
+	removed := false
+	// SplitAfter keeps every other line as it was, comments and blanks included.
+	for _, line := range strings.SplitAfter(string(data), "\n") {
+		if strings.HasPrefix(line, prefix) {
+			removed = true
+			continue
+		}
+		kept.WriteString(line)
+	}
+	if !removed {
+		return false, nil
+	}
+	if err := os.WriteFile(path, []byte(kept.String()), 0o600); err != nil {
+		return false, fmt.Errorf("write pgpass: %w", err)
+	}
+	return true, nil
+}
+
 // Line formats one pgpass entry. The user is escaped as well as the password:
 // Redshift IAM users look like "IAMR:role", and an unescaped colon there would
 // shift every following field. An empty dbName becomes the wildcard: libpq reads

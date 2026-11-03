@@ -3,8 +3,10 @@ package detail
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lukaszgard/den/internal/service"
+	"github.com/lukaszgard/den/internal/tui/components"
 	"github.com/lukaszgard/den/internal/tui/msgs"
 	"github.com/lukaszgard/den/internal/tui/testkeys"
 
@@ -92,5 +94,78 @@ func TestTickRefreshesTheLogs(t *testing.T) {
 	m, _ = m.Update(msgs.ServiceEventMsg{Update: service.StatusUpdate{Info: svc.Info(), State: svc.State()}})
 	if !strings.Contains(m.View(), "third line") {
 		t.Fatalf("a service event did not bring the new line:\n%s", m.View())
+	}
+}
+
+// flatten runs cmd and every command it batches, and returns the messages.
+func flatten(cmd tea.Cmd) []tea.Msg {
+	if cmd == nil {
+		return nil
+	}
+	switch msg := cmd().(type) {
+	case tea.BatchMsg:
+		var out []tea.Msg
+		for _, c := range msg {
+			out = append(out, flatten(c)...)
+		}
+		return out
+	case nil:
+		return nil
+	default:
+		return []tea.Msg{msg}
+	}
+}
+
+// p on a password login must not leave it on the clipboard: unlike a token it
+// is still good tomorrow.
+func TestCopyingAPasswordClearsTheClipboardAfterwards(t *testing.T) {
+	var contents string
+	var writes []string
+	savedWrite, savedRead, savedAfter := components.WriteClipboard, components.ReadClipboard, components.ClipboardClearAfter
+	components.WriteClipboard = func(s string) error { contents = s; writes = append(writes, s); return nil }
+	components.ReadClipboard = func() (string, error) { return contents, nil }
+	components.ClipboardClearAfter = time.Millisecond
+	t.Cleanup(func() {
+		components.WriteClipboard, components.ReadClipboard, components.ClipboardClearAfter = savedWrite, savedRead, savedAfter
+	})
+
+	svc := &passwordSvc{fakeSvc: &fakeSvc{typ: service.TypeRDS, cmd: "psql", state: service.RuntimeState{Status: service.StatusConnected, Token: "hunter2"}}}
+	m := New(svc, nil, 120, 30)
+
+	_, cmd := m.Update(testkeys.Text("p"))
+	flatten(cmd)
+
+	if len(writes) != 2 || writes[0] != "hunter2" || contents != "" {
+		t.Fatalf("writes = %q, contents = %q: want the password copied and then cleared", writes, contents)
+	}
+}
+
+// A token copied the same way stays: it dies by itself, and docs/security says
+// p copies it on purpose.
+func TestCopyingATokenLeavesTheClipboardAlone(t *testing.T) {
+	var writes []string
+	saved := components.WriteClipboard
+	components.WriteClipboard = func(s string) error { writes = append(writes, s); return nil }
+	t.Cleanup(func() { components.WriteClipboard = saved })
+
+	svc := &tokenSvc{fakeSvc: &fakeSvc{typ: service.TypeRDS, cmd: "psql", state: service.RuntimeState{Status: service.StatusConnected, Token: "tok"}}}
+	m := New(svc, nil, 120, 30)
+
+	_, cmd := m.Update(testkeys.Text("p"))
+	flatten(cmd)
+
+	if len(writes) != 1 || writes[0] != "tok" {
+		t.Fatalf("writes = %q, want the token once", writes)
+	}
+}
+
+func TestPWithoutAPasswordYetSaysToConnect(t *testing.T) {
+	svc := &passwordSvc{fakeSvc: &fakeSvc{typ: service.TypeRDS, cmd: "psql"}}
+	m := New(svc, nil, 120, 30)
+
+	_, cmd := m.Update(testkeys.Text("p"))
+
+	if got := flashOf(cmd); !strings.Contains(got, "no password yet") {
+		t.Fatalf("flash = %q", got)
 	}
 }

@@ -130,7 +130,7 @@ request's last row) moves from the request to the Agent row; on the name it does
 
 | Panel    | Groups                                                                           |
 |----------|----------------------------------------------------------------------------------|
-| Connect  | Services (`Enter`, `/`, `c`, `d`, `y`), Token and tunnel (`r`, `a`)              |
+| Connect  | Services (`Enter`, `/`, `c`, `d`, `y`), Credential and tunnel (`r`, `a`)         |
 | Tunnel   | Tunnels (`c`, `d`, `Enter`, `y`), Runtime toggles (`r`, `m`, `H`, `v`)           |
 | VPN      | VPN (`c`, `d`, `Enter`), Runtime toggles (`r`, `H`)                              |
 | AWS      | SSO sessions (`Enter` / `c`, `d`, `o`, `/`), AWS files (`e`, `E`)                |

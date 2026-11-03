@@ -135,7 +135,11 @@ func (s *Server) allowed(sum service.Summary) bool {
 }
 
 func summarize(svc service.Service) service.Summary {
-	return service.Summarize(svc)
+	sum := service.Summarize(svc)
+	// The database's answer, which den redacts already; a client that echoes
+	// something credential-like gets the agent's treatment too.
+	sum.LoginError = redact(sum.LoginError, svc.State().Token)
+	return sum
 }
 
 // find returns the allowed service called name.
@@ -221,6 +225,9 @@ func redact(line, token string) string {
 // credentialHint says how a client authenticates to a connected service,
 // without the credential itself.
 func credentialHint(svc service.Service, sum service.Summary) string {
+	if _, ok := service.PasswordLoginOf(svc); ok {
+		return "a stored password: withheld from agents and written to no file, so the user logs in from den's TUI (detail view, t) or runs the query themselves"
+	}
 	switch sum.Type {
 	case service.TypeRDS, service.TypeRedshift:
 		if strings.HasPrefix(sum.ConnectCommand, "mysql") {

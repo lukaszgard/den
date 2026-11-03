@@ -2,6 +2,9 @@
 // IAM database auth tokens. For PostgreSQL the token is kept in the pgpass file
 // (~/.pgpass, %APPDATA%\postgresql\pgpass.conf on Windows) so psql picks it
 // up; for MySQL/MariaDB it goes into a per-service option file.
+//
+// A service with auth: logs in with a username and password read from a
+// configured secret instead (password.go).
 package rds
 
 import (
@@ -9,18 +12,26 @@ import (
 	"fmt"
 
 	"github.com/lukaszgard/den/internal/config"
+	"github.com/lukaszgard/den/internal/secrets"
 	"github.com/lukaszgard/den/internal/service"
 	"github.com/lukaszgard/den/internal/service/pgpass"
 	"github.com/lukaszgard/den/internal/service/ssmfwd"
 )
 
-// New creates an RDS service from its spec.
-func New(name string, spec *config.RDSSpec) (*ssmfwd.Tunnel, error) {
+// New creates an RDS service from its spec. loginSecret is the entry spec.Auth
+// names, nil for a service that logs in with an IAM token.
+func New(name string, spec *config.RDSSpec, loginSecret secrets.Item) (*ssmfwd.Tunnel, error) {
 	env, err := spec.ResolveEnv()
 	if err != nil {
 		return nil, err
 	}
-	e := &engine{spec: spec, env: env}
+	var e ssmfwd.Engine = &engine{spec: spec, env: env}
+	if spec.Auth != nil {
+		if loginSecret == nil {
+			return nil, fmt.Errorf("rds.auth.secret %q: no such entry in secrets", spec.Auth.Secret)
+		}
+		e = newPasswordEngine(spec, loginSecret)
+	}
 	return ssmfwd.New(ssmfwd.Options{
 		Name:        name,
 		Environment: spec.Environment,
@@ -81,13 +92,27 @@ func (e *engine) TerminalCommand(token string) service.ClientCommand {
 	}
 }
 
-// conninfo is the libpq connection string for the local end of the tunnel.
 func (e *engine) conninfo() string {
-	info := fmt.Sprintf("host=localhost port=%d", e.spec.LocalPort)
-	if e.dbName() != "" {
-		info += " dbname=" + e.dbName()
+	return conninfo(e.spec.LocalPort, e.dbName(), e.dbUser())
+}
+
+// conninfo is the libpq connection string for the local end of the tunnel. An
+// empty user is left out: a password login does not know it until the secret
+// has been read.
+//
+// hostaddr=127.0.0.1 because the forward listens on IPv4 only: with localhost
+// alone psql tries ::1 first, and every failed login then also reports
+// "Connection refused", which reads as a dead tunnel. host=localhost stays, as
+// the name pgpass entries are matched on.
+func conninfo(localPort int, dbName, user string) string {
+	info := fmt.Sprintf("host=localhost hostaddr=127.0.0.1 port=%d", localPort)
+	if dbName != "" {
+		info += " dbname=" + dbName
 	}
-	return info + fmt.Sprintf(" user=%s sslmode=require", e.dbUser())
+	if user != "" {
+		info += " user=" + user
+	}
+	return info + " sslmode=require"
 }
 
 // Credential generates an IAM token and stores it where the client looks:

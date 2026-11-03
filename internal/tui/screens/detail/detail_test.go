@@ -679,3 +679,103 @@ func TestTheWheelScrollsTheLogs(t *testing.T) {
 		t.Fatal("the wheel over a client's screen scrolled the logs under it")
 	}
 }
+
+func loginView(t *testing.T, st service.RuntimeState, login service.PasswordLogin, width, height int) string {
+	t.Helper()
+	svc := &passwordSvc{fakeSvc: &fakeSvc{typ: service.TypeRDS, cmd: "psql", logs: logLines(200), state: st}, login: login}
+	m := New(svc, nil, width, height)
+	view := m.View()
+	assertFrame(t, view, height)
+	return ansi.Strip(view)
+}
+
+// Nothing counts down on a password, so the place of the TTL says where the
+// password comes from, and offers what can be done with it.
+func TestConnectedPasswordLoginShowsItsSecretInsteadOfATTL(t *testing.T) {
+	readAt := time.Date(2026, 11, 2, 14, 2, 0, 0, time.Local)
+	view := loginView(t,
+		service.RuntimeState{Status: service.StatusConnected, Token: "hunter2"},
+		service.PasswordLogin{Secret: "orders-login", Provider: "sops", ReadAt: readAt}, 120, 30)
+
+	for _, want := range []string{"Login", `"orders-login"`, "sops", "read at 14:02", "r: read again", "p: copy"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("the view lacks %q:\n%s", want, view)
+		}
+	}
+	for _, not := range []string{"Token TTL", "hunter2"} {
+		if strings.Contains(view, not) {
+			t.Errorf("the view shows %q:\n%s", not, view)
+		}
+	}
+}
+
+// Before a connect, and after a disconnect, den holds no password: the line must
+// offer nothing to copy or read again, and an old read time would suggest it can.
+func TestPasswordLoginWhileNotConnected(t *testing.T) {
+	view := loginView(t,
+		service.RuntimeState{Status: service.StatusIdle},
+		service.PasswordLogin{Secret: "orders-login", Provider: "sops", ReadAt: time.Date(2026, 11, 2, 14, 2, 0, 0, time.Local)}, 120, 30)
+
+	var line string
+	for l := range strings.SplitSeq(view, "\n") {
+		if strings.Contains(l, "Password from") {
+			line = l
+		}
+	}
+	if !strings.Contains(line, "read when you connect") {
+		t.Errorf("the login line does not say when it is read: %q", line)
+	}
+	for _, not := range []string{"read at", "r: read again", "p: copy"} {
+		if strings.Contains(line, not) {
+			t.Errorf("the login line shows %q while not connected: %q", not, line)
+		}
+	}
+}
+
+// A long name must stay on one line: the body is sized from what is above it,
+// and a wrapped line would push the frame past the terminal.
+func TestLongSecretNameKeepsTheFrame(t *testing.T) {
+	for _, width := range []int{120, 70, 45} {
+		view := loginView(t,
+			service.RuntimeState{Status: service.StatusConnected, Token: "hunter2"},
+			service.PasswordLogin{Secret: strings.Repeat("orders-login-", 12), Provider: "aws secrets manager", ReadAt: time.Now()}, width, 30)
+		if !strings.Contains(view, "r: read again") {
+			t.Errorf("width %d: the hints fell off the line:\n%s", width, view)
+		}
+	}
+}
+
+func TestHelpLineOfAPasswordLogin(t *testing.T) {
+	view := loginView(t, service.RuntimeState{Status: service.StatusConnected, Token: "hunter2"},
+		service.PasswordLogin{Secret: "orders-login", Provider: "sops", ReadAt: time.Now()}, 200, 30)
+	if !strings.Contains(view, "copy password") {
+		t.Errorf("the help line does not offer copying the password:\n%s", view)
+	}
+	for _, not := range []string{"copy token", "copy cmd+password"} {
+		if strings.Contains(view, not) {
+			t.Errorf("the help line offers %q:\n%s", not, view)
+		}
+	}
+}
+
+// The tunnel is up and the database refused: the header says both, and the
+// log under it carries the database's answer and what to check.
+func TestHeaderSaysTheLoginFailed(t *testing.T) {
+	svc := &fakeSvc{cmd: "redis-cli", logs: logLines(3)}
+	m := New(svc, nil, 120, 30)
+	connected := func(login service.LoginState) string {
+		m, _ = m.Update(msgs.ServiceEventMsg{Update: service.StatusUpdate{
+			Info:  svc.Info(),
+			State: service.RuntimeState{Status: service.StatusConnected, Login: login, LoginErr: "FATAL: refused"},
+		}})
+		return ansi.Strip(m.View())
+	}
+	if view := connected(service.LoginFailed); !strings.Contains(view, "CONNECTED · LOGIN FAILED") {
+		t.Fatalf("header does not say the login failed:\n%s", view)
+	}
+	for _, login := range []service.LoginState{service.LoginOK, service.LoginChecking, service.LoginUnchecked} {
+		if view := connected(login); strings.Contains(view, "LOGIN FAILED") || !strings.Contains(view, "CONNECTED") {
+			t.Errorf("login %v: header =\n%s", login, view)
+		}
+	}
+}

@@ -94,12 +94,30 @@ type RuntimeState struct {
 	StartedAt    *time.Time
 	TokenExpires *time.Time    // set by services holding an expiring credential
 	TokenTTL     time.Duration // full lifetime of that credential, for the TTL bar; zero means 15 min
-	Token        string        // last minted credential (IAM auth token, temporary password)
+	Token        string        // current credential (IAM auth token, temporary password, a password read from a secret)
 	LocalPort    int
 	ConnectCmd   string
 	ReconnectAt  *time.Time // set when StatusReconnecting; TUI renders countdown from this
 	Reconnect    bool       // current runtime reconnect setting
+	// Login is what den's own login with the credential found, for a
+	// connected service whose client it can run; LoginErr is the database's
+	// answer when it refused. A new connection starts unchecked.
+	Login    LoginState
+	LoginErr string
 }
+
+// LoginState is the outcome of the login den makes after connecting and after
+// each new credential, with the client and credential it hands the user.
+type LoginState int
+
+const (
+	// LoginUnchecked: no check ran, or none could (the client is not installed).
+	LoginUnchecked LoginState = iota
+	LoginChecking
+	LoginOK
+	// LoginFailed: the tunnel is up and the database refused the credential.
+	LoginFailed
+)
 
 // StatusUpdate is sent by a service when its state changes.
 type StatusUpdate struct {
@@ -198,10 +216,27 @@ type LeftoverAware interface {
 	Leftovers(ctx context.Context) *Leftovers
 }
 
-// TokenHolder is implemented by services that hold an expiring credential the
-// user can refresh (r) and copy (p).
+// TokenHolder is implemented by services that hold a credential the user can
+// refresh (r) and copy (p).
 type TokenHolder interface {
 	HoldsToken() bool
+}
+
+// PasswordLogin says where a service's stored password comes from. It holds
+// nothing secret, so views and agents may read it.
+type PasswordLogin struct {
+	Secret   string    // the entry's name under secrets:
+	Provider string    // the secret's provider, e.g. "sops"
+	ReadAt   time.Time // when den last read it; zero before the first read
+}
+
+// PasswordHolder is implemented by services that may log in with a password
+// read from a configured secret rather than a credential den mints. Such a
+// password has no lifetime to show and nothing renews it by itself, so views
+// and agents treat it differently from a token.
+type PasswordHolder interface {
+	// PasswordLogin reports the login, and false when the service does not use one.
+	PasswordLogin() (PasswordLogin, bool)
 }
 
 // SecretCommander is implemented by services whose connect command can carry
@@ -245,6 +280,15 @@ type TerminalOpener interface {
 func HoldsToken(svc Service) bool {
 	h, ok := svc.(TokenHolder)
 	return ok && h.HoldsToken()
+}
+
+// PasswordLoginOf returns the stored-password login of svc, if it has one.
+func PasswordLoginOf(svc Service) (PasswordLogin, bool) {
+	h, ok := svc.(PasswordHolder)
+	if !ok {
+		return PasswordLogin{}, false
+	}
+	return h.PasswordLogin()
 }
 
 // SecretCommand returns svc as a SecretCommander when it can embed its credential.

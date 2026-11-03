@@ -52,6 +52,35 @@ Sleep 2s     # Read: idle again
 Escape       # detail view -> list
 Sleep 1s     # Back
 
+# ── A password from a secret ──────────────────────────────────────────────────
+# Notice: no token bar. The Login section says which secret the password comes from, and t logs in with nothing written to a file. Needs the secret /acme/legacy/dev/db-login in the demo account.
+Escape       # clears the filter
+Sleep 1s     # Back
+Type "/"
+Type "password"
+Sleep 1.5s   # Type: the filter result
+Sleep 1s     # Act: enter opens the detail view
+Enter
+Sleep 3.5s   # Look: the Login section instead of the token bar
+Sleep 1s     # Act: c connects
+Type "c"
+Wait+Screen@60s /Status: \S+ CONNECTED/
+Sleep 4.5s   # Read: the log says the password was read, the Login section when
+Sleep 1s     # Act: t opens the client
+Type "t"
+Wait+Screen@20s /=>/
+Sleep 4s     # Read: psql is logged in, nobody typed a password
+Escape       # keyboard back to den
+Sleep 1s     # Back
+Sleep 1s     # Act: d disconnects, and asks first while the client runs
+Type "d"
+Sleep 1s     # Act: y confirms
+Type "y"
+Wait+Screen@20s /Status: \S+ IDLE/
+Sleep 2s     # Read: idle again
+Escape       # detail view -> list
+Sleep 1s     # Back
+
 # ── End ───────────────────────────────────────────────────────────────────────
 Hide
 Type "q"

@@ -8,7 +8,7 @@ Let Claude Code, Codex or Cursor use den, safely
 
 ## What you can do
 
-- Let an agent list services, connect and disconnect them, and read their status and logs.
+- Let an agent list services, connect and disconnect them, and read their status and logs; `connect` waits for den's login check and reports a database that refused it.
 - Have it write a runbook from a description, checked by den before you run it (the `new_runbook` prompt, or `den runbook new NAME --agent`).
 - Limit which services agents see, by name with wildcards.
 - Keep production off limits, or allow it with your confirmation on every connect.
@@ -58,7 +58,7 @@ ai:
 
 ## Limitations
 
-- Agents never get a token or password: `connect` says how a client authenticates (`~/.pgpass`, the MySQL option file, the AWS profile, the signing proxy). A cache with IAM auth is therefore out of an agent's reach.
+- Agents never get a token or password: `connect` says how a client authenticates (`~/.pgpass`, the MySQL option file, the AWS profile, the signing proxy). A cache with IAM auth, and an RDS service with a password from a secret, are therefore out of an agent's reach.
 - AWS SSO logins and VPNs need a browser and stay in the dashboard.
 - Production means `environment: prod`; a production stage under another name is not protected.
 - Tunnels end with the agent's session; they are not shared with a dashboard running at the same time.
@@ -68,6 +68,7 @@ ai:
 - A production connect is refused although `allow_production` is on: the client cannot ask you to confirm; use one with elicitation support.
 - The agent sees no services: `allow` matches none of their names; patterns match whole names.
 - A connect fails with an expired login: log in from the dashboard's AWS SSO panel, then let the agent try again.
+- The agent reports a `login_error`: the tunnel is up and the database refused den's own login with the credential. The service's log in the dashboard has the answer and what to check; fix it there and let the agent connect again.
 
 ## See also
 

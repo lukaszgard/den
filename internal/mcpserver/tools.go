@@ -85,7 +85,8 @@ func (s *Server) addTools() {
 	mcp.AddTool(s.mcp, &mcp.Tool{
 		Name: "connect",
 		Description: "Open the tunnel to a service and wait until it is usable. Returns localhost and the port " +
-			"to use and how the client authenticates. Production services need the user's confirmation.",
+			"to use and how the client authenticates. den logs in once to check the credential: a service.login_error " +
+			"means the tunnel is up but the database refused it. Production services need the user's confirmation.",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false), OpenWorldHint: new(true)},
 	}, s.connect)
 	mcp.AddTool(s.mcp, &mcp.Tool{
@@ -167,20 +168,28 @@ func (s *Server) connect(ctx context.Context, req *mcp.CallToolRequest, in nameI
 	return nil, connectOutput{Service: sum, Host: "localhost", Port: sum.LocalPort, Credential: credentialHint(svc, sum)}, nil
 }
 
-// waitConnected polls svc until it is connected, fails, or timeout passes.
+// waitConnected polls svc until it is connected and den's login check has
+// answered, it fails, or timeout passes. The check is what says whether the
+// database takes the credential, so an agent should not go on without it.
 func waitConnected(ctx context.Context, svc service.Service, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for {
 		st := svc.State()
 		switch st.Status {
 		case service.StatusConnected:
-			return nil
+			if st.Login != service.LoginChecking {
+				return nil
+			}
 		case service.StatusError:
 			return fmt.Errorf("connect failed: %v", st.Error)
 		case service.StatusIdle:
 			return errors.New("the service stopped before connecting")
 		}
 		if time.Now().After(deadline) {
+			if st.Status == service.StatusConnected {
+				// The tunnel is up; the summary says the login is unchecked.
+				return nil
+			}
 			return fmt.Errorf("still %s after %s; check service_logs", st.Status, timeout)
 		}
 		select {

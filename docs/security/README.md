@@ -8,11 +8,12 @@ permission of its own, and the sections below say where it stops short of using 
 
 - **Through `den mcp` and `--json`.** The state of a service (`den list --json`, and what an
   agent is told) is a fixed set of fields, the name, type, status, local port, connect
-  command, token expiry and whether the environment is production, and none of them is a
-  credential. `connect` tells an agent how its client authenticates (`~/.pgpass`, the MySQL
+  command, token expiry, whether the environment is production and why the database refused
+  den's login, if it did, and none of them is a credential. `connect` tells an agent how its client authenticates (`~/.pgpass`, the MySQL
   option file, the AWS profile, the signing proxy) and never returns a token. A Redis or
   MemoryDB cache using IAM auth therefore cannot be used by an agent directly: its token is
-  withheld.
+  withheld. The same goes for an RDS service logging in with a password from a secret: an
+  agent can open its tunnel and is not given the password.
 - **In the logs an agent reads.** Before den hands a log to an agent it removes the service's
   current token, signed-URL parameters and any long opaque string, and strips terminal escape
   codes. A runbook's output is redacted the same way, and a runbook parameter marked `secret`
@@ -30,18 +31,37 @@ permission of its own, and the sections below say where it stops short of using 
 ## Where credentials are written
 
 den mints IAM credentials with your AWS login and puts each where its client looks, with
-owner-only permissions:
+owner-only permissions. A password read from a secret goes further than a token left behind
+would, since it stays valid after a leak, so it reaches no file at all:
 
 | Credential | Written to | Lifetime |
 |---|---|---|
 | RDS / Aurora (PostgreSQL) token, Redshift credentials | `~/.pgpass` (mode 0600; `%APPDATA%\postgresql\pgpass.conf` on Windows, or `$PGPASSFILE` when set), when `update_pgpass` is on | 15 minutes (Redshift 15 minutes to 1 hour), renewed while connected |
 | RDS / Aurora (MySQL, MariaDB) token | `~/.config/den/mysql/<local_port>.cnf` (mode 0600, in a 0700 folder) | 15 minutes, renewed while connected |
 | ElastiCache / MemoryDB token | nowhere: handed to `redis-cli` in a terminal tab through `REDISCLI_AUTH`, or shown with `Y` / `p` | 15 minutes |
+| RDS / Aurora password from a secret (`auth:`) | nowhere: held in memory while connected, handed to `psql` or `mysql` in a terminal tab through `PGPASSWORD` or `MYSQL_PWD`, or copied with `p` | until the password is rotated; den reads it again on connect, reconnect and `r` |
 | DocumentDB, OpenSearch, Neptune | no token: `mongosh` signs with the AWS profile, and den's local proxy signs each request | the AWS session |
 
 `Y` and `p` in a service's detail view copy a token to the clipboard on purpose; `y` copies the
-connect command, which never contains one. Everything else a credential touches is your own AWS
-login (`~/.aws`), which den reads and never writes.
+connect command, which never contains one. A service with a password from a secret has no `Y`,
+since that command would end up in a shell's history still valid, and its `p` clears the
+clipboard after 30 seconds. Everything else a credential touches is your own AWS login
+(`~/.aws`), which den reads and never writes.
+
+A shared password is also harder to take back than an IAM role: removing one person means
+rotating it for everyone. Prefer IAM auth where the database supports it.
+
+### The login check
+
+After connecting, and after each new credential, den logs in once with the client and the
+credential it hands you, to tell a refused credential from a working one
+([Login check](../concepts/README.md#login-check)). The credential travels as it does to a
+terminal tab: in the client's environment (`PGPASSWORD`, `MYSQL_PWD`, `REDISCLI_AUTH`) or in
+den's MySQL option file, never on the command line, where other users of the machine could see
+it. The client runs `select 1` (`PING`, a `ping` for `mongosh`) and exits; nothing is written.
+What it printed stays in den, apart from the line that says why a login failed, with the
+credential replaced by `[redacted]`. A database that audits logins sees one each time: on
+connect, on each renewal (every 13 minutes for a 15-minute token) and on `r`.
 
 ## Production and AI agents
 
@@ -99,7 +119,7 @@ the tunnel, the `aws_profile` identity. The store pages have the policies and th
 | Store | Permission | Page |
 |---|---|---|
 | Any SSM tunnel | `aws_profile`: start a port-forwarding session on the bastion (the SSM Session Manager plugin, with the AWS CLI) | [Environments](../environments/README.md#prerequisites) |
-| RDS / Aurora | `rds-db:connect` on `arn:aws:rds-db:<region>:<account>:dbuser:<resource-id>/<db_user>`, and IAM authentication enabled with the user set up for it | [RDS](../rds/README.md#prerequisites) |
+| RDS / Aurora | `rds-db:connect` on `arn:aws:rds-db:<region>:<account>:dbuser:<resource-id>/<db_user>`, and IAM authentication enabled with the user set up for it. With a password from a secret: none of that, only read access to the secret | [RDS](../rds/README.md#prerequisites) |
 | ElastiCache | `elasticache:Connect` on the cache **and** the user | [ElastiCache](../elasticache/README.md#prerequisites) |
 | MemoryDB | `memorydb:Connect` on the cluster **and** the user | [MemoryDB](../memorydb/README.md#prerequisites) |
 | DocumentDB | none in IAM: the SSO role is registered in `$external` on the cluster, and authorization is database-side | [DocumentDB](../documentdb/README.md#prerequisites) |

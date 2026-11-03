@@ -113,7 +113,7 @@ orders=> select count(*) from orders;
 connect command, which never contains the credential:
 
 ```bash
-psql "host=localhost port=50111 dbname=orders user=app_iam sslmode=require"
+psql "host=localhost hostaddr=127.0.0.1 port=50111 dbname=orders user=app_iam sslmode=require"
 ```
 
 `d` disconnects, `h` lists the keys of the panel you are in, and `q` quits and stops every

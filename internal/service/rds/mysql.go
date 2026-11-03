@@ -73,6 +73,25 @@ func mysqlArgs(optionFile string, localPort int, user, dbName, password string) 
 	return args
 }
 
+// mysqlPasswordArgs builds the client's arguments for a password read from a
+// secret. It has neither the option file nor --enable-cleartext-plugin, which
+// only IAM auth needs. prompt adds -p, for a command the user runs: with it the
+// client asks, and in a tab that would win over MYSQL_PWD.
+func mysqlPasswordArgs(localPort int, user, dbName string, prompt bool) []string {
+	args := []string{"-h", "127.0.0.1", "-P", fmt.Sprint(localPort)}
+	if user != "" {
+		args = append(args, "-u", user)
+	}
+	args = append(args, "--ssl-mode=REQUIRED")
+	if prompt {
+		args = append(args, "-p")
+	}
+	if dbName != "" {
+		args = append(args, dbName)
+	}
+	return args
+}
+
 // mysqlCommand is the mysql invocation as a line to copy into a shell.
 func mysqlCommand(optionFile string, localPort int, user, dbName, password string) string {
 	return "mysql " + strings.Join(mysqlArgs(optionFile, localPort, user, dbName, password), " ")

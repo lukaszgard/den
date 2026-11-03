@@ -8,7 +8,6 @@ package secrets
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"strings"
@@ -22,11 +21,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/atotto/clipboard"
 )
-
-// clipboardClearAfter is how long a copied value stays on the clipboard.
-const clipboardClearAfter = 30 * time.Second
 
 // awsPollEvery is how often the pane, while it is on screen, asks whether the
 // AWS logins changed. A login made outside den (`aws sso login` in another
@@ -518,12 +513,12 @@ func (m Model) Update(msg tea.Msg, focused bool) (Model, tea.Cmd) {
 	case copiedMsg:
 		clear := clearClipMsg{sum: msg.sum, viaTerminal: msg.viaTerminal}
 		return m, tea.Batch(
-			flash(fmt.Sprintf("copied %s — clipboard clears in %s", msg.key, clipboardClearAfter), false),
-			tea.Tick(clipboardClearAfter, func(time.Time) tea.Msg { return clear }),
+			flash(fmt.Sprintf("copied %s — clipboard clears in %s", msg.key, components.ClipboardClearAfter), false),
+			tea.Tick(components.ClipboardClearAfter, func(time.Time) tea.Msg { return clear }),
 		)
 
 	case clearClipMsg:
-		return m, clearClipboard(msg)
+		return m, components.ClearCopied(msg.sum, msg.viaTerminal, clipClearedMsg{})
 
 	case tea.KeyPressMsg:
 		if !focused {
@@ -994,38 +989,10 @@ func (m Model) itemNamed(name string) (secrets.Item, bool) {
 // copyValue puts value on the clipboard. Only its hash travels on in the
 // message, so the value itself is not kept alive for the clear timer.
 func copyValue(key, value string) tea.Cmd {
-	sum := digest(value)
+	sum := components.Digest(value)
 	return components.CopyThen(value, func(viaTerminal bool) tea.Msg {
 		return copiedMsg{key: key, sum: sum, viaTerminal: viaTerminal}
 	})
-}
-
-// clearClipboard empties the clipboard, unless the user has since copied
-// something else, which is theirs to keep. A value that went through the
-// terminal cannot be checked, since the terminal's clipboard cannot be read:
-// the secret should not outlive its time, so that one is emptied the same way
-// it was set.
-func clearClipboard(c clearClipMsg) tea.Cmd {
-	if c.viaTerminal {
-		return tea.Batch(
-			tea.SetClipboard(""),
-			func() tea.Msg { return clipClearedMsg{} },
-		)
-	}
-	sum := c.sum
-	return func() tea.Msg {
-		cur, err := clipboard.ReadAll()
-		if err != nil || digest(cur) != sum {
-			return nil
-		}
-		_ = components.WriteClipboard("")
-		return clipClearedMsg{}
-	}
-}
-
-func digest(s string) string {
-	h := sha256.Sum256([]byte(s))
-	return string(h[:])
 }
 
 func flash(text string, warn bool) tea.Cmd {

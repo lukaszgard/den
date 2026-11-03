@@ -33,6 +33,7 @@ New to den? The [Quickstart](docs/quickstart/README.md) goes from a fresh machin
 |---------|------|------|
 | **RDS / Aurora** (PostgreSQL) | IAM auth token, refreshed every 13 min, written to `~/.pgpass` | [docs/rds](docs/rds/README.md) |
 | **RDS / Aurora** (MySQL, MariaDB) | IAM auth token in a per-service option file (`engine: mysql`) | [docs/rds](docs/rds/README.md) |
+| **RDS / Aurora** with a password | Username and password from a secret (`auth:`: SOPS, Secrets Manager, Vault), written to no file | [docs/rds](docs/rds/README.md#a-password-from-a-secret) |
 | **ElastiCache** (Redis OSS, Valkey) | ElastiCache IAM auth token, refreshed every 13 min | [docs/elasticache](docs/elasticache/README.md) |
 | **MemoryDB** | MemoryDB IAM auth token (`memorydb: true`) | [docs/memorydb](docs/memorydb/README.md) |
 | **DocumentDB** | mongosh `MONGODB-AWS` — no token, no refresh | [docs/documentdb](docs/documentdb/README.md) |

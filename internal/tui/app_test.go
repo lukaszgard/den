@@ -84,6 +84,14 @@ type fakeTokenSvc struct{ *fakeSvc }
 
 func (fakeTokenSvc) HoldsToken() bool { return true }
 
+// fakePasswordSvc logs in with a password read from a secret.
+type fakePasswordSvc struct{ *fakeSvc }
+
+func (fakePasswordSvc) HoldsToken() bool { return true }
+func (fakePasswordSvc) PasswordLogin() (service.PasswordLogin, bool) {
+	return service.PasswordLogin{Secret: "orders-login", Provider: "sops"}, true
+}
+
 // fakeTunnel has the tunnel's runtime toggles.
 type fakeTunnel struct {
 	*fakeSvc
@@ -580,9 +588,52 @@ func TestConnectPaneServiceActions(t *testing.T) {
 		t.Fatalf("d stopped the service %d times, want 1", stops)
 	}
 
-	h.press("down", "r")
+	h.press("down", "c", "r")
 	if _, _, refreshes := tok.counts(); refreshes != 1 {
 		t.Fatalf("r refreshed the token %d times, want 1", refreshes)
+	}
+}
+
+// r reads a stored password again, which is not what renewing a token is, and
+// the flash should not call it that.
+func TestRefreshFlashSaysWhatRIsDoing(t *testing.T) {
+	tok := fakeTokenSvc{newSvc(service.TypeRDS, "token")}
+	pw := fakePasswordSvc{newSvc(service.TypeRDS, "password")}
+	h := newHarness(t, managerWith(tok, pw), nil)
+
+	h.press("right", "c", "r")
+	if !strings.Contains(h.m.flashMsg, "refreshing token") {
+		t.Errorf("token: flash = %q", h.m.flashMsg)
+	}
+	h.press("down", "c", "r")
+	if !strings.Contains(h.m.flashMsg, "reading the password again") {
+		t.Errorf("password: flash = %q", h.m.flashMsg)
+	}
+	if _, _, refreshes := pw.counts(); refreshes != 1 {
+		t.Errorf("r reached the password service %d times, want 1", refreshes)
+	}
+}
+
+// r before a connect has nothing to renew, and a running tunnel refuses it.
+// That refusal came back as an error, which stayed in the bottom line after
+// the connect that followed; a warning says what to do and goes away.
+func TestRBeforeConnectingWarnsInsteadOfFailing(t *testing.T) {
+	for _, status := range []service.Status{service.StatusIdle, service.StatusError} {
+		pw := fakePasswordSvc{newSvc(service.TypeRDS, "orders")}
+		pw.status = status
+		h := newHarness(t, managerWith(pw), nil)
+
+		h.press("right", "r")
+
+		if _, _, refreshes := pw.counts(); refreshes != 0 {
+			t.Errorf("%v: r reached the service %d times, want none", status, refreshes)
+		}
+		if !strings.Contains(h.m.flashMsg, "orders is not connected — press c first") {
+			t.Errorf("%v: flash = %q", status, h.m.flashMsg)
+		}
+		if h.m.err != "" {
+			t.Errorf("%v: error line = %q, want none", status, h.m.err)
+		}
 	}
 }
 

@@ -629,7 +629,7 @@
         },
         "update_pgpass": {
           "type": "boolean",
-          "description": "postgres only"
+          "description": "postgres only, and not with auth: a stored password is never written to a file"
         },
         "rds_host": {
           "type": "string",
@@ -641,14 +641,17 @@
         },
         "db_user": {
           "type": "string",
-          "description": "the database user the IAM token is minted for"
+          "description": "the database user the IAM token is minted for; required unless auth is set, where it wins over the secret's username"
+        },
+        "auth": {
+          "$ref": "#/$defs/SecretAuth",
+          "description": "log in with a username and password from a secret instead of an IAM token; db_user is required without it"
         }
       },
       "additionalProperties": false,
       "type": "object",
       "required": [
-        "rds_host",
-        "db_user"
+        "rds_host"
       ],
       "description": "RDSSpec holds RDS-specific config."
     },
@@ -1106,6 +1109,28 @@
         "file"
       ],
       "description": "SOPSSecretSpec is one SOPS-encrypted file."
+    },
+    "SecretAuth": {
+      "properties": {
+        "secret": {
+          "type": "string",
+          "description": "name of an entry under secrets: sops, aws_secretsmanager or one vault secret, not a folder"
+        },
+        "username_key": {
+          "type": "string",
+          "description": "the key holding the username, dotted as in the flat view (db.user); username when empty"
+        },
+        "password_key": {
+          "type": "string",
+          "description": "the key holding the password, dotted as in the flat view (db.password); password when empty"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "secret"
+      ],
+      "description": "SecretAuth logs a database service in with a username and password read from an entry of secrets:, instead of an IAM token."
     },
     "SecretsConfig": {
       "properties": {

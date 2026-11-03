@@ -55,7 +55,13 @@ The `env:` reference supplies the bastion, `aws_profile` (opens the SSM session)
 
 ## Usage
 
-1. Launch `den`, open **Connect**, select the MemoryDB service and press `c`.
+1. Launch `den`, open **Connect**, select the MemoryDB service and press `c`. Once the
+   token is minted den sends one `PING` with it (`redis-cli … PING`, the token in
+   `REDISCLI_AUTH`) to see that the cluster takes it. The log says
+   `login checked as iam-user-01`; anything but `PONG` leaves the tunnel up and shows
+   `connected · login failed`, with the cluster's answer and what to check in the detail
+   view's log: `memorydb:Connect` on the cluster and the user, the user in the cluster's
+   ACL with IAM authentication, and the profile's login. Each renewal and `r` check again.
 2. Press `y` to copy the command. It includes the current token:
    ```bash
    redis-cli -h localhost -p 50181 --tls --user iam-user-01 -a "<token>"

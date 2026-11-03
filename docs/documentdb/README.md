@@ -130,7 +130,10 @@ Two consequences worth knowing:
 1. Launch `den`, open **Connect**, and select the `docdb` entry.
 2. Press `c`. den opens the SSM tunnel, verifies the local port genuinely accepts
    connections (retrying up to 3×), downloads the CA bundle if it is not cached,
-   and turns the status dot green.
+   and turns the status dot green. Then it logs in once with `mongosh`, as a terminal
+   tab would, and fails the check unless the connection has an authenticated user (the
+   test of the next section). The log says `login checked`; a refusal leaves the tunnel
+   up and shows `connected · login failed` (see Troubleshooting).
 3. Press `y` to copy the command, then paste it into a terminal:
 
 ```bash
@@ -181,6 +184,13 @@ Three parameters are load-bearing and should not be "tidied up":
 | `authSource=$external`       | IAM users live in `$external`, not `admin`. Single-quote it — `$` expands in most shells |
 
 ## Troubleshooting
+
+**`connected · login failed`** — the tunnel is up and den's own `mongosh` login did not
+end with an authenticated user. The detail view's log has mongosh's answer, the profile
+it signed with, and what to check: the `$external` user, exported AWS keys, the profile's
+login, the mongosh version. Fix it and press `c` again after `d`: DocumentDB has no
+credential for `r` to renew. Without `mongosh` installed the log says
+`mongosh not found — login not checked`.
 
 **`MongoServerSelectionError: Server selection timed out`** — this is *not* an
 auth error; authentication was never attempted. It means replica-set discovery

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -67,11 +68,13 @@ type Options struct {
 var (
 	_ service.Reconnectable  = (*Tunnel)(nil)
 	_ service.TerminalOpener = (*Tunnel)(nil)
+	_ service.PasswordHolder = (*Tunnel)(nil)
 )
 
 // Tunnel implements service.Service for any Engine reached through SSM
 // port-forwards. It also implements service.Reconnectable,
-// service.TokenHolder, service.SecretCommander and service.TerminalOpener.
+// service.TokenHolder, service.SecretCommander, service.TerminalOpener and
+// service.PasswordHolder.
 type Tunnel struct {
 	mu     sync.RWMutex
 	opts   Options
@@ -97,6 +100,14 @@ type Tunnel struct {
 	// renewed wakes the refresh loop after RefreshToken minted a credential,
 	// so it renews that one rather than the one it was armed for.
 	renewed chan struct{}
+
+	// conn is the context of the current connection, cancelled when it ends;
+	// a login check runs under it, whoever starts it. Guarded by mu.
+	conn context.Context
+	// loginCancel ends the running login check and loginDone is closed once it
+	// has exited; nil before the first. Guarded by mu.
+	loginCancel context.CancelFunc
+	loginDone   chan struct{}
 }
 
 // New creates a Tunnel driving engine.
@@ -165,6 +176,15 @@ func (t *Tunnel) ReconnectEnabled() bool {
 func (t *Tunnel) HoldsToken() bool {
 	_, ok := t.engine.(Credentialer)
 	return ok
+}
+
+// PasswordLogin reports the engine's stored-password login, if it uses one.
+func (t *Tunnel) PasswordLogin() (service.PasswordLogin, bool) {
+	p, ok := t.engine.(PasswordLoginer)
+	if !ok {
+		return service.PasswordLogin{}, false
+	}
+	return p.PasswordLogin(), true
 }
 
 // HasSecretCommand reports whether the connect command can carry the credential inline.
@@ -348,6 +368,13 @@ func (t *Tunnel) runOnce(ctx context.Context) bool {
 	if len(fwds) == 0 {
 		return fail(fmt.Errorf("no forwards to open"))
 	}
+	if p, ok := t.engine.(Preflighter); ok {
+		if err := p.Preflight(); err != nil {
+			// With no session there is nothing else in the log to say why.
+			t.log(err.Error())
+			return fail(err)
+		}
+	}
 
 	// A port something else already listens on would pass the readiness check
 	// for the wrong process: den would report connected and mint a credential
@@ -383,7 +410,7 @@ func (t *Tunnel) runOnce(ctx context.Context) bool {
 	if hasCred {
 		cred, err = c.Credential(ctx, t.log)
 		if err != nil {
-			t.log(fmt.Sprintf("token generation failed: %v", err))
+			t.log(fmt.Sprintf("getting the credential failed: %v", err))
 			return fail(err)
 		}
 	}
@@ -392,6 +419,21 @@ func (t *Tunnel) runOnce(ctx context.Context) bool {
 	// call back into State().
 	connectCmd := t.engine.ConnectCommand()
 
+	// The connection's own context: a login check runs under it, so a drop,
+	// a reconnect or Stop ends the check with the connection. The loop does
+	// not move on until the check has exited.
+	connCtx, endConn := context.WithCancel(ctx)
+	defer func() {
+		endConn()
+		t.mu.RLock()
+		checking := t.loginDone
+		t.mu.RUnlock()
+		if checking != nil {
+			<-checking
+		}
+	}()
+
+	_, checksLogin := t.engine.(LoginChecker)
 	now := time.Now()
 	t.mu.Lock()
 	t.state = service.RuntimeState{
@@ -406,8 +448,15 @@ func (t *Tunnel) runOnce(ctx context.Context) bool {
 		t.state.TokenExpires = &expires
 		t.state.TokenTTL = time.Until(expires).Round(time.Minute)
 	}
+	if checksLogin {
+		// Set with CONNECTED, so nobody reads "connected, not checked" for a
+		// check about to start.
+		t.state.Login = service.LoginChecking
+	}
+	t.conn = connCtx
 	t.mu.Unlock()
 	t.sendUpdate()
+	t.checkLogin(cred.Secret)
 
 	if hasCred && expiring(cred) {
 		// Auto-refresh goroutine, scoped to this connection: on reconnect runOnce
@@ -642,6 +691,81 @@ func (t *Tunnel) applyCredential(cred Credential) {
 	}
 	t.mu.Unlock()
 	t.sendUpdate()
+	t.checkLogin(cred.Secret)
+}
+
+// checkLogin logs in once with secret, in the background, over the current
+// connection. A check still running is cancelled first: the newer credential
+// is the one the user gets, so the older answer no longer matters.
+func (t *Tunnel) checkLogin(secret string) {
+	lc, ok := t.engine.(LoginChecker)
+	if !ok {
+		return
+	}
+	// Built before the lock is taken: engines may call back into State().
+	probe := lc.LoginProbe(secret)
+
+	t.mu.Lock()
+	if t.conn == nil || t.conn.Err() != nil || t.state.Status != service.StatusConnected {
+		t.mu.Unlock()
+		return
+	}
+	if t.loginCancel != nil {
+		t.loginCancel()
+	}
+	prev := t.loginDone
+	ctx, cancel := context.WithCancel(t.conn)
+	done := make(chan struct{})
+	t.loginCancel, t.loginDone = cancel, done
+	t.state.Login, t.state.LoginErr = service.LoginChecking, ""
+	t.mu.Unlock()
+	t.sendUpdate()
+
+	go func() {
+		defer close(done)
+		defer cancel()
+		if prev != nil {
+			<-prev // one client at a time per tunnel
+		}
+		err := runProbe(ctx, probe, secret, loginTimeout)
+		t.loginChecked(ctx, probe, err)
+	}()
+}
+
+// loginChecked records what the check found, unless it was cancelled: then a
+// newer check or a new connection owns the state.
+func (t *Tunnel) loginChecked(ctx context.Context, p LoginProbe, err error) {
+	t.mu.Lock()
+	if ctx.Err() != nil || t.state.Status != service.StatusConnected {
+		t.mu.Unlock()
+		return
+	}
+	switch {
+	case err == nil:
+		t.state.Login = service.LoginOK
+	case errors.Is(err, errNoClient):
+		t.state.Login = service.LoginUnchecked
+	default:
+		t.state.Login, t.state.LoginErr = service.LoginFailed, err.Error()
+	}
+	t.mu.Unlock()
+	t.sendUpdate()
+
+	switch {
+	case err == nil:
+		msg := "login checked"
+		if p.User != "" {
+			msg += " as " + p.User
+		}
+		t.log(msg)
+	case errors.Is(err, errNoClient):
+		t.log(p.Command.Tool + " not found — login not checked")
+	default:
+		t.log("login failed: " + err.Error())
+		for line := range strings.Lines(p.Hint) {
+			t.log(strings.TrimRight(line, "\n"))
+		}
+	}
 }
 
 // supervisors returns one supervisor per forward, the primary first.

@@ -268,6 +268,18 @@ services:
   #     rds_host: "orders.cluster-abcdefghijkl.eu-central-1.rds.amazonaws.com"
   #     db_user: app_iam
   #
+  # - name: "EU DEV Legacy DB"         # a password from a secret instead of an IAM token — docs/rds
+  #   type: rds
+  #   env: eu-dev
+  #   rds:
+  #     local_port: 50132
+  #     rds_host: "legacy.abcdefghijkl.eu-central-1.rds.amazonaws.com"
+  #     db_name: legacy
+  #     auth:
+  #       secret: "Legacy DB login"     # the name of an entry under secrets:, never the value
+  #       username_key: username        # optional; dotted as in the flat view (db.user)
+  #       password_key: password        # optional; dotted as in the flat view (db.password)
+  #
   # - name: "EU DEV MemoryDB"         # docs/memorydb
   #   type: redis
   #   env: eu-dev
