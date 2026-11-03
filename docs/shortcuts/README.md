@@ -134,7 +134,7 @@ request's last row) moves from the request to the Agent row; on the name it does
 | Tunnel   | Tunnels (`c`, `d`, `Enter`, `y`), Runtime toggles (`r`, `m`, `H`, `v`)           |
 | VPN      | VPN (`c`, `d`, `Enter`), Runtime toggles (`r`, `H`)                              |
 | AWS      | SSO sessions (`Enter` / `c`, `d`, `o`, `/`), AWS files (`e`, `E`)                |
-| Secrets  | Secrets (`Enter`, `/`, `Esc`), Values (`r`, `a`, `t`, `y`, `e`), Access (`L`, `l`) |
+| Secrets  | Secrets (`Enter`, `/`, `Esc`), Values (`r`, `a`, `t`, `y`, `e`), Access (`L`, `l`), Git (`f`, `u`) |
 | Runbooks | Runbooks (`Enter`, `r`, `x`, `n`, `m`, `D`, `s`, `/`, `w`)                        |
 | Help     | Topics (`↑` `↓`, `Enter`, `/`, `Esc`), or Topic (scroll, `/`, `n` `N`, `Esc`) in an open one |
 | all seven | den (`Tab`, `R`, `M`, `h` `?`, `Esc`, `q`)                                      |
