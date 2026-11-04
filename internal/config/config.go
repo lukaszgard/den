@@ -407,6 +407,15 @@ func validateSecretAuth(i int, svc ServiceSpec, s *SecretsConfig) error {
 // validateSecrets checks the secrets: block. Whether the file exists or the
 // sops binary is installed is not checked here: that is shown per item in the
 // Secrets pane, and a missing file must not stop den from starting.
+// validBranchName is a plausible git branch name. git has the last word;
+// this keeps out what would reach it as an option or a range (-x, a..b), or
+// could never be a ref name.
+func validBranchName(b string) bool {
+	return !strings.HasPrefix(b, "-") && !strings.HasPrefix(b, "/") && !strings.HasSuffix(b, "/") &&
+		!strings.HasSuffix(b, ".lock") && !strings.Contains(b, "..") && !strings.Contains(b, "@{") &&
+		!strings.ContainsAny(b, " \t\n~^:?*[\\\x7f")
+}
+
 func validateSecrets(s *SecretsConfig) []error {
 	if s == nil {
 		return nil
@@ -449,6 +458,9 @@ func validateSecrets(s *SecretsConfig) []error {
 			}
 			if it.File == "" {
 				return fmt.Errorf("%s %q: file is required", where, it.Name)
+			}
+			if g := it.Git; g != nil && g.Branch != "" && !validBranchName(g.Branch) {
+				return fmt.Errorf("%s %q: git.branch %q is not a branch name", where, it.Name, g.Branch)
 			}
 			return checkView(where, it.Name, it.View)
 		}())

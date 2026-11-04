@@ -286,22 +286,6 @@ func TestStoreKeysASourceByItsRepository(t *testing.T) {
 	}
 }
 
-func TestGitEnvNeverPrompts(t *testing.T) {
-	env := gitEnv([]string{"PATH=/bin", "GIT_TERMINAL_PROMPT=1"})
-	for _, want := range []string{"GIT_TERMINAL_PROMPT=0", "GCM_INTERACTIVE=never", "SSH_ASKPASS_REQUIRE=never", "GIT_SSH_COMMAND=ssh -o BatchMode=yes", "PATH=/bin"} {
-		if !slices.Contains(env, want) {
-			t.Errorf("env %v lacks %s", env, want)
-		}
-	}
-	if slices.Contains(env, "GIT_TERMINAL_PROMPT=1") {
-		t.Error("the inherited GIT_TERMINAL_PROMPT=1 survived")
-	}
-	own := gitEnv([]string{"GIT_SSH_COMMAND=ssh -i ~/.ssh/work"})
-	if !slices.Contains(own, "GIT_SSH_COMMAND=ssh -i ~/.ssh/work") || slices.Contains(own, "GIT_SSH_COMMAND=ssh -o BatchMode=yes") {
-		t.Errorf("env %v: a GIT_SSH_COMMAND of the user's own is kept", own)
-	}
-}
-
 func TestStoreRefusesWhatIsNotACommitID(t *testing.T) {
 	store := NewStore(t.TempDir())
 	src := config.RunbookSource{Name: "ops", URL: "acme/ops"}

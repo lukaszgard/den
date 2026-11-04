@@ -1,5 +1,47 @@
 # Changelog
 
+## [1.10.0] - 2026-11-03
+
+**A SOPS file kept in git now says when a teammate pushed a newer version, and `u` updates it.**
+Until now den read the file from disk and knew nothing of git: when your clone was behind, the old
+values opened as `ready` and you found out when a login failed. For a file in a git working copy,
+the Secrets panel now shows whether it is up to date with its upstream, and reminds you when your
+own change is not committed or not pushed. Files outside a repository look and work as before, and
+nothing needs configuring.
+
+### 🖥 The dashboard
+
+- A SOPS file in a git working copy gets a second status beside `ready`: `↓ outdated`, `⇅
+  diverged`, `✎ not committed`, `↑ not pushed`, `✓ up to date`, `no upstream`, `! check failed`,
+  or `not in git` for an untracked or ignored file. The comparison is per file, the file at `HEAD`
+  against the file on the upstream, so commits that leave it alone keep it up to date.
+- The details box names the repository, the branch and its upstream, when the clone last fetched
+  (`fetched 2h ago`, or `never fetched`), and for an outdated file the number of newer commits and
+  the newest one: its subject, author and age. An open file shows a line under its path when git
+  has another version than the values on screen.
+- The state comes from the refs your clone already has, so a fetch by your shell or your editor
+  counts too. den works it out in the background when the panel is first shown and after an edit,
+  an update, a fetch or a reload, and never fetches on its own.
+- `f` fetches the selected file's upstream (that branch only, 30 s at most) and checks every secret
+  in that repository again. `u` fetches the same way, then asks `Fast-forward infra (main) by 7
+  commits? This updates the whole branch, not only this file.` On `y` the branch moves, every
+  secret is checked again, and an open file shows the new values.
+- `e` on an outdated file asks first, since editing the old version makes a change an encrypted
+  file cannot merge: `u` updates first, `e` edits anyway.
+- The update only ever runs `git merge --ff-only` on the branch checked out: never a rebase, a
+  merge commit, a stash, a checkout, a commit or a push. It refuses, saying why, for a diverged
+  file, a detached HEAD, a merge or rebase in progress, a branch other than `git.branch`'s, or a
+  branch with commits the upstream lacks, and names your local changes when git stops because the
+  update would overwrite them. git never asks for a passphrase or a password: a key that needs one
+  shows `check failed` with git's message.
+
+### 🔧 Configuration and checks
+
+- `secrets.sops[].git` is needed only to override what den finds: `branch: main` compares the file
+  with `main`'s upstream whatever branch is checked out, and `check: false` turns the git status
+  off for that file. `den config --check` refuses a `branch` that is not a branch name.
+- `den doctor` asks for `git` when one of your SOPS files is in a git working copy.
+
 ## [1.9.0] - 2026-11-03
 
 **den now logs in to see that the database takes the credential, and RDS can log in with a

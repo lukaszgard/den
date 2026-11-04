@@ -314,9 +314,9 @@ func (p secretsAdapter) update(msg tea.Msg, focused bool) (c tea.Cmd) {
 func (p secretsAdapter) view(w, h int, f bool) string { return p.m.View(w, h, f) }
 func (p secretsAdapter) setSize(w, h int)             { *p.m = p.m.SetSize(w, h) }
 func (p secretsAdapter) searching() bool              { return p.m.Searching() }
-func (secretsAdapter) modal() bool                    { return false }
+func (p secretsAdapter) modal() bool                  { return p.m.Asking() }
 
-// esc closes an open file first.
+// esc closes an open file first, or answers a question about git.
 func (p secretsAdapter) ownsBack(msg tea.KeyPressMsg) bool     { return isBack(msg) && p.m.Busy() }
 func (secretsAdapter) selected() (service.Service, bool)       { return nil, false }
 func (secretsAdapter) keys() map[string]serviceAction          { return nil }
@@ -324,8 +324,8 @@ func (p secretsAdapter) shortcuts() []components.ShortcutGroup { return p.m.Shor
 func (p secretsAdapter) click(id string) tea.Cmd               { *p.m = p.m.Click(id); return nil }
 func (secretsAdapter) help() []helpEntry {
 	return []helpEntry{{"tab", "switch panel"}, {"↑↓", "navigate"}, {"enter", "view"}, {"/", "filter"},
-		{"r", "reveal"}, {"a", "reveal all"}, {"t", "tree"}, {"y", "copy"}, {"e", "edit"}, {"l", "lock"}, {"L", "login"},
-		{"esc", "close"}, {"q", "quit"}}
+		{"r", "reveal"}, {"a", "reveal all"}, {"t", "tree"}, {"y", "copy"}, {"e", "edit"}, {"f", "fetch"}, {"u", "update"},
+		{"l", "lock"}, {"L", "login"}, {"esc", "close"}, {"q", "quit"}}
 }
 
 // An SSO login, logout or expiry changes which secrets can be read.

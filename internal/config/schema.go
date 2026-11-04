@@ -190,7 +190,26 @@ type SOPSSecretSpec struct {
 	AWSRegion   string `yaml:"aws_region,omitempty"`                            // exported as AWS_REGION
 	AutoReveal  bool   `yaml:"auto_reveal,omitempty"`                           // show every value in clear when the file opens
 	View        string `yaml:"view,omitempty" jsonschema:"enum=tree,enum=flat"` // how this secret opens when its values are nested; secrets.view when empty
+	// Git overrides how den follows the file in its git working copy. Not
+	// needed otherwise: den finds the repository, the branch and its
+	// upstream by itself, and shows whether the file is up to date with it.
+	Git *SecretGitSpec `yaml:"git,omitempty"`
 }
+
+// SecretGitSpec is how den follows a secret's file in its git working copy.
+type SecretGitSpec struct {
+	// Branch is the branch whose upstream the file is compared with and
+	// updated from, whatever branch is checked out: main to hear of changes
+	// on main while working on a feature branch. Empty: the branch checked
+	// out. An update only ever fast-forwards that branch while it is checked out.
+	Branch string `yaml:"branch,omitempty"`
+	// Check shows the file's git state and offers fetch and update. On unless
+	// set to false.
+	Check *bool `yaml:"check,omitempty"`
+}
+
+// On reports whether den follows the file in git: true unless check: false.
+func (g SecretGitSpec) On() bool { return g.Check == nil || *g.Check }
 
 // AWSSecretsManagerSecretSpec is one AWS Secrets Manager secret, read with the
 // SDK as aws_profile. Read-only: den never writes a secret back.

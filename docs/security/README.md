@@ -22,7 +22,10 @@ permission of its own, and the sections below say where it stops short of using 
   and den never writes one to disk or to its log. Copying one clears the clipboard after 30
   seconds. `den.yaml` only refers to secrets (file paths, secret IDs, profiles), so it is safe
   to commit. Editing a SOPS file hands the file to `sops edit`, which uses its own temporary
-  file.
+  file. For a SOPS file in a git working copy, `u` changes your clone, and only by a
+  fast-forward of the branch checked out after you confirm it; den never commits, pushes,
+  stashes or merges, and fetches only when you press `f` or `u`
+  ([Files in git](../secrets/README.md#files-in-git-sops)).
 - **To a language model, unless you ask.** `den doctor --explain` is the only place den calls
   one. It first prints exactly what it would send, with names, hosts, IDs and paths replaced by
   placeholders, and sends it only if you agree or pass `--yes`. The placeholders are put back

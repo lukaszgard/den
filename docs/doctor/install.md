@@ -548,7 +548,7 @@ winget install -e --id DEVCOM.JetBrainsMonoNerdFont
 
 ### git
 
-Used for runbook sources: fetching the repositories in runbooks.sources. Docs: <https://git-scm.com/downloads>
+Used for runbook sources (fetching the repositories in runbooks.sources) and SOPS files kept in git (their state against the upstream, f and u in the Secrets panel). Docs: <https://git-scm.com/downloads>
 
 **macOS** (Homebrew)
 

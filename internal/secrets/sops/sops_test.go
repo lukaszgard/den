@@ -127,6 +127,18 @@ func TestEditCmd(t *testing.T) {
 	}
 }
 
+func TestGitFile(t *testing.T) {
+	path, spec := New(config.SOPSSecretSpec{Name: "a", File: "/x/a.enc.yaml"}, nil).GitFile()
+	if path != "/x/a.enc.yaml" || spec.Branch != "" || !spec.On() {
+		t.Errorf("no git block: %q %+v", path, spec)
+	}
+	off := false
+	_, spec = New(config.SOPSSecretSpec{Name: "b", File: "b", Git: &config.SecretGitSpec{Branch: "main", Check: &off}}, nil).GitFile()
+	if spec.Branch != "main" || spec.On() {
+		t.Errorf("git block: %+v", spec)
+	}
+}
+
 func contains(ss []string, s string) bool {
 	return slices.Contains(ss, s)
 }

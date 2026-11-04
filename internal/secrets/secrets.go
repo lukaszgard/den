@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os/exec"
 
+	"github.com/lukaszgard/den/internal/config"
 	"github.com/lukaszgard/den/internal/prereq"
 )
 
@@ -158,4 +159,13 @@ type Browser interface {
 // login is configured. The command is handed the terminal.
 type LoginCommander interface {
 	LoginCmd() *exec.Cmd
+}
+
+// GitTracked is implemented by items read from a file that may sit in a git
+// working copy a team shares (a SOPS file in an infra repository). The pane
+// shows whether the file is up to date with its upstream and offers to fetch
+// and fast-forward it. path is the file with ~ expanded; spec holds the
+// overrides from den.yaml, zero when there are none.
+type GitTracked interface {
+	GitFile() (path string, spec config.SecretGitSpec)
 }

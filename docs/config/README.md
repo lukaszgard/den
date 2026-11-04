@@ -490,6 +490,16 @@ Guide: [docs/secrets](../secrets/README.md)
 | `aws_region` | string | no | exported as AWS_REGION |
 | `auto_reveal` | boolean | no | show every value in clear when the file opens |
 | `view` | string, one of `tree`, `flat` | no | how this secret opens when its values are nested; secrets.view when empty |
+| `git` | object, keys in [`secrets.sops[].git`](#secretssopsgit) | no | `git` overrides how den follows the file in its git working copy. Not needed otherwise: den finds the repository, the branch and its upstream by itself, and shows whether the file is up to date with it. |
+
+## `secrets.sops[].git`
+
+This block is how den follows a secret's file in its git working copy.
+
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `branch` | string | no | `branch` is the branch whose upstream the file is compared with and updated from, whatever branch is checked out: main to hear of changes on main while working on a feature branch. Empty: the branch checked out. An update only ever fast-forwards that branch while it is checked out. |
+| `check` | boolean | no | `check` shows the file's git state and offers fetch and update. On unless set to false. |
 
 ## `secrets.aws_secretsmanager[]`
 

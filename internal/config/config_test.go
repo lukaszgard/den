@@ -361,6 +361,28 @@ secrets:
   sops:
     - {name: s, file: s.enc.yaml, view: nested}
 `, `secrets.sops[0] "s": view must be tree or flat`},
+		{"sops git", `
+secrets:
+  sops:
+    - {name: s, file: s.enc.yaml, git: {branch: release/2026.11}}
+    - {name: t, file: t.enc.yaml, git: {check: false}}
+`, ""},
+		// A branch reaches git as an argument: an option or a range must not.
+		{"sops git branch option", `
+secrets:
+  sops:
+    - {name: s, file: s.enc.yaml, git: {branch: --upload-pack=x}}
+`, `secrets.sops[0] "s": git.branch "--upload-pack=x" is not a branch name`},
+		{"sops git branch range", `
+secrets:
+  sops:
+    - {name: s, file: s.enc.yaml, git: {branch: main..dev}}
+`, `git.branch "main..dev" is not a branch name`},
+		{"sops git branch space", `
+secrets:
+  sops:
+    - {name: s, file: s.enc.yaml, git: {branch: "my branch"}}
+`, `git.branch "my branch" is not a branch name`},
 		{"bad aws_secretsmanager view", `
 secrets:
   aws_secretsmanager:
@@ -407,6 +429,30 @@ secrets:
 	}
 	if !cfg.Secrets.SOPS[0].AutoReveal || cfg.Secrets.SOPS[1].AutoReveal {
 		t.Errorf("auto_reveal = %v, %v; want true, false", cfg.Secrets.SOPS[0].AutoReveal, cfg.Secrets.SOPS[1].AutoReveal)
+	}
+}
+
+func TestSecretsGitParsed(t *testing.T) {
+	cfg, err := load(t, `
+services: []
+secrets:
+  sops:
+    - {name: a, file: a.enc.yaml}
+    - {name: b, file: b.enc.yaml, git: {branch: main}}
+    - {name: c, file: c.enc.yaml, git: {check: false}}
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := cfg.Secrets.SOPS
+	if s[0].Git != nil || !(SecretGitSpec{}).On() {
+		t.Error("no git block: den follows the file in git as found")
+	}
+	if s[1].Git.Branch != "main" || !s[1].Git.On() {
+		t.Errorf("git = %+v, want branch main and on", s[1].Git)
+	}
+	if s[2].Git.On() {
+		t.Error("check: false turns it off")
 	}
 }
 

@@ -9,7 +9,8 @@ The Secrets pane opens secrets without leaving den. Four providers are supported
 - **[SOPS](https://github.com/getsops/sops):** den decrypts the file through the
   `sops` CLI. You can browse its keys, laid out like the YAML file itself, reveal
   or copy one value, or edit the file in `$EDITOR`. SOPS re-encrypts the file when
-  you save.
+  you save. For a file in a git working copy, den also shows whether a teammate
+  pushed a newer version, and updates it for you ([Files in git](#files-in-git-sops)).
 - **[AWS Secrets Manager](#aws-secrets-manager):** den reads the secret with the AWS
   SDK as your profile. It is read-only.
 - **[KeePassXC](#keepassxc):** den reads an entry of a `.kdbx` database through
@@ -108,6 +109,12 @@ secrets:
 
     - name: "Local dev"
       file: ./secrets/dev.enc.env        # age or PGP: no AWS settings needed
+
+    - name: "EU PROD"
+      file: ~/repos/infra/secrets/eu-prod.enc.yaml
+      aws_profile: "acme-prod"
+      git:                               # only to override what den finds by itself
+        branch: main                     # compare with main's upstream, whatever is checked out
 ```
 
 | Key           | Required | Description                                                                  |
@@ -119,6 +126,11 @@ secrets:
 | `aws_region`  | no       | Exported as `AWS_REGION`.                                                    |
 | `auto_reveal` | no       | `true` shows every value in clear when the secret opens. Default `false` (masked). `a` toggles it at runtime. |
 | `view`        | no       | `tree` or `flat` ([above](#tree-or-flat-view)). Default: `secrets.view`, else `tree`. `t` toggles it at runtime. |
+| `git.branch`  | no       | For a file in a git working copy: the branch whose upstream the file is compared with and updated from, whatever branch is checked out. Default: the branch checked out. [Files in git](#files-in-git-sops). |
+| `git.check`   | no       | `false` shows no git state and offers no `f` or `u` for this file. Default `true`. |
+
+A file in a git working copy needs no `git:` block: den finds the repository, the
+branch and its upstream by itself.
 
 Keys are shown in the file's own order, nested as in the file, or as dotted paths
 (`db.password`, `hosts[0]`) in the flat view.
@@ -343,6 +355,10 @@ den never handles Vault credentials. The `vault` CLI finds your token in
     needed if the key has a passphrase, because den can't show a terminal
     pinentry while the TUI is running.
 - **SOPS: `$EDITOR`** set for `e`. If it's unset, sops falls back to `vim` / `nano`.
+- **SOPS: `git`**, for a file in a git working copy. `den doctor` checks it when one
+  of your files is in one; finding the working copy needs no git. A fetch can't ask
+  for anything (a passphrase, a password, a new host key), so the remote has to be
+  reachable with an SSH agent or a credential helper.
 - **AWS Secrets Manager:** a valid session for `aws_profile` (log in from the AWS
   pane) and the IAM permissions above. No extra tools are needed.
 - **KeePassXC:** `keepassxc-cli`, which ships with KeePassXC 2.x:
@@ -415,6 +431,8 @@ Select **Secrets** in the left menu and press `→` or `Enter` to focus the list
 | `t`     | Switch the open secret between tree and flat view             |
 | `y`     | Copy the selected value; the clipboard is cleared after 30 s  |
 | `e`     | Edit in `$EDITOR` via `sops edit` (SOPS only)                 |
+| `f`     | Fetch the file's upstream and check again (a file in git)     |
+| `u`     | Fetch, then fast-forward the branch after asking (a file in git) |
 | `l`     | Forget every remembered KeePassXC master password             |
 | `L`     | Run the selected secret's `login` command (Vault)             |
 | `Esc`   | Clear the filter; then close the secret and drop its values   |
@@ -446,6 +464,107 @@ for every secret, and **Remember password** for KeePassXC entries.
 `sops edit` and comes back when the editor closes. If you saved, the open file
 is decrypted again so you see the new values. Closing without changes shows
 "no changes".
+
+### Files in git (SOPS)
+
+![secrets-git.gif](secrets-git.gif)
+
+A SOPS file often lives in a git repository the team shares
+(`~/repos/infra/secrets/payments-dev.enc.yaml`). A teammate rotates a value and
+pushes; until your clone pulls, the old value still opens as `ready`, and you find
+out when a login fails. The reverse happens too: after `e` the file is changed in
+your clone and still needs a commit and a push.
+
+So for a file in a git working copy, the list shows a second status beside `ready`:
+readable and up to date are two different things.
+
+```
+  SOPS
+  ● payments dev     ready   ↓ outdated
+  ● payments prod    ready   ✓ up to date
+  ● billing dev      ready   ✎ not committed
+  ● local env        ready
+```
+
+den finds the working copy by looking for `.git` above the file, without running
+git. A file outside any repository (`local env` above) has no git status and no git
+keys, exactly as before. Everything else needs no configuration either: the branch
+is the one checked out and the upstream is its tracking branch.
+
+The comparison is per file, not per repository: den compares the file's content at
+`HEAD` with its content on the upstream. A busy repository is nearly always behind,
+and a commit that does not touch the file leaves it `up to date`.
+
+| Status          | Meaning                                                               | `u`                    |
+|-----------------|-----------------------------------------------------------------------|------------------------|
+| `diverged`      | The file changed both in your clone and upstream                      | Refused: an encrypted file can't be merged; resolve it in git |
+| `outdated`      | The upstream has a newer version of the file (the details box says how many commits, and the newest) | Fast-forwards, after asking |
+| `not committed` | The file is changed in your working tree or index, e.g. after `e`     | A reminder             |
+| `not pushed`    | Your commits change the file and the upstream lacks them              | A reminder             |
+| `up to date`    | The same content as the upstream, as of the last fetch                |                        |
+| `no upstream`   | The branch tracks nothing (or HEAD is detached) and there is no `git.branch` | |
+| `check failed`  | git failed, e.g. a fetch with the VPN down; the details box shows git's last line | `f` retries |
+| `not in git`    | Inside a repository, but untracked or ignored                         |                        |
+
+The details box shows where the file is and what it is compared with, and how old
+that comparison is:
+
+```
+Git          infra · main → origin/main · fetched 2h ago
+Upstream     2 newer commits · a1b2c3d rotate stripe key (Anna, 3h ago)
+```
+
+**When den checks.** The status is worked out offline, from the refs your clone
+already has, when the Secrets pane is first shown and again after `e`, `u`, `f` and
+a config reload. den never fetches by itself, on a timer or otherwise: `fetched 2h
+ago` is the time of the clone's last fetch, whoever made it (den, your shell or your
+editor's auto-fetch), and `never fetched` offers `f`. So `not committed`, `not
+pushed` and `diverged` show up without the network, and so does `outdated` once
+anything fetched.
+
+- **`f`** fetches the upstream of the selected file's repository (that branch only,
+  no tags, 30 s at most) and checks every file in that repository again. Ten secrets
+  in one repository cost one fetch.
+- **`u`** fetches the same way, then, if the file is outdated, asks:
+
+  ```
+  Fast-forward infra (main) by 7 commits? This updates the whole branch, not only this file.
+  ```
+
+  `y` runs `git merge --ff-only`, checks every secret again and, if the file is open,
+  decrypts it again so you see the new values. The status bar says what moved:
+  `infra: main a1b2c3d → d4e5f6a (7 commits)`. A file that is already up to date
+  only says so.
+- **`e` on an outdated file** asks first: editing the old version is how a
+  `diverged` file is made. `u` updates first, `e` edits anyway.
+
+**What `u` will and won't do.** den changes your own working copy here, so it only
+ever fast-forwards:
+
+- It runs `git merge --ff-only --no-autostash` on the branch checked out. It never
+  rebases, makes a merge commit, stashes, resets, checks out, switches branches,
+  commits or pushes. It runs `merge`, not `pull`, so your `pull.rebase` doesn't apply.
+- It refuses, saying why, when the file is `diverged`, HEAD is detached, a merge,
+  rebase, cherry-pick, revert or bisect is in progress, `git.branch` names another
+  branch than the one checked out ("you are on feature/x; switch to main to
+  update"), or your branch has commits the upstream lacks.
+- git itself refuses when the update would overwrite your local changes, and den
+  names the files in the way. Nothing changes.
+
+**`git.branch`.** Set it to compare with a branch other than the one checked out:
+on `feature/x`, `git.branch: main` still tells you when `main` changed the file.
+The upstream is that branch's tracking branch, or `origin/<branch>` when it has none.
+`u` only updates it while it is checked out.
+
+Some things to know:
+
+- A fetch runs without a terminal and can't ask for anything: a key with a
+  passphrase needs your SSH agent, and HTTPS needs a credential helper. Otherwise
+  it shows `check failed` with git's message.
+- sops rewrites `lastmodified` and `mac` on every save, so saving without changing a
+  value still makes the file `not committed`. The commit subject in the details
+  box shows what an upstream change was.
+- Git state isn't part of `den mcp` or `--json`.
 
 ## Providers: supported and planned
 
@@ -484,7 +603,8 @@ show the config each one is intended to take.
 
 ### Other planned improvements
 
-- **KeePassXC:** YubiKey challenge-response databases.
+- **KeePassXC:** YubiKey challenge-response databases, and the git status of a
+  `.kdbx` kept in a repository, as SOPS files have.
 - **Vault:** editing (`vault kv patch`), and other secrets engines than KV
   (for example dynamic database credentials).
 - **Using secrets elsewhere:** an [RDS service](../rds/README.md#a-password-from-a-secret)

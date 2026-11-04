@@ -49,10 +49,11 @@ type keyMemo struct {
 }
 
 var (
-	_ secrets.Item    = (*Item)(nil)
-	_ secrets.Editor  = (*Item)(nil)
-	_ secrets.Viewer  = (*Item)(nil)
-	_ secrets.AWSUser = (*Item)(nil)
+	_ secrets.Item       = (*Item)(nil)
+	_ secrets.Editor     = (*Item)(nil)
+	_ secrets.Viewer     = (*Item)(nil)
+	_ secrets.AWSUser    = (*Item)(nil)
+	_ secrets.GitTracked = (*Item)(nil)
 )
 
 // New builds an item from its config entry. aws is the config's shared view
@@ -84,6 +85,14 @@ func (it *Item) Details() []secrets.Detail {
 		d = append(d, secrets.Detail{Label: "AWS region", Value: it.spec.AWSRegion})
 	}
 	return d
+}
+
+// GitFile is the file, for following it in its git working copy.
+func (it *Item) GitFile() (string, config.SecretGitSpec) {
+	if it.spec.Git == nil {
+		return it.path, config.SecretGitSpec{}
+	}
+	return it.path, *it.spec.Git
 }
 
 // Tools is what den doctor checks for this item: sops, and gpg when a PGP

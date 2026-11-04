@@ -14,6 +14,7 @@ import (
 	"github.com/lukaszgard/den/internal/runbook"
 	"github.com/lukaszgard/den/internal/runbook/source"
 	"github.com/lukaszgard/den/internal/secrets"
+	"github.com/lukaszgard/den/internal/secrets/gitfile"
 	"github.com/lukaszgard/den/internal/secrets/providers"
 	"github.com/lukaszgard/den/internal/service"
 	"github.com/lukaszgard/den/internal/tui/applog"
@@ -376,10 +377,11 @@ func New(mgr *service.Manager, opts Options) *AppModel {
 }
 
 // newSecretsPane builds the Secrets pane for cfg. Its items share one view of
-// the AWS logins, which the pane watches to refresh their statuses.
+// the AWS logins, which the pane watches to refresh their statuses, and it
+// follows the files kept in a git working copy.
 func newSecretsPane(cfg *config.Config, awsCfgPath string, width, height int) secretspane.Model {
 	logins := secrets.NewAWSLogins(awsCfgPath)
-	return secretspane.NewWithAWS(providers.Items(cfg, logins), logins, width, height)
+	return secretspane.NewWithAWS(providers.Items(cfg, logins), logins, width, height).WithGit(gitfile.Git{})
 }
 
 // buildRunbookRegistry builds the runbook registry for cfg. Failures are
