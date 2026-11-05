@@ -3,6 +3,7 @@ title: den
 layout: hextra-home
 ---
 
+{{< den/hero src="den/den.avif" alt="den's gopher in a hard hat with a headlamp, a wrench and a coil of cable, standing in an underground den full of terminals" >}}
 {{< hextra/hero-badge link="docs/changelog/" >}}
   What's new in den
 {{< /hextra/hero-badge >}}
@@ -14,6 +15,7 @@ layout: hextra-home
 {{< hextra/hero-subtitle style="margin-bottom: 1.5rem" >}}
   den is a terminal dashboard that opens the tunnel, keeps your IAM credentials fresh and reconnects when the connection drops, for RDS, Aurora, ElastiCache, MemoryDB, DocumentDB, Redshift, OpenSearch and Neptune. Run your team's runbooks against the live tunnels, with the AWS profile, region and ports already set.
 {{< /hextra/hero-subtitle >}}
+{{< /den/hero >}}
 
 {{< tabs >}}
   {{< tab name="macOS / Linux" >}}

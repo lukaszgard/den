@@ -31,3 +31,50 @@ html.dark .den-status-beta {
   background: rgba(146, 64, 14, 0.3);
   border-color: rgba(252, 211, 77, 0.4);
 }
+
+/* The home page's hero (layouts/_shortcodes/den/hero.html): the text, then den's
+   gopher beside it in a round frame. The illustration is already drawn as a
+   round tunnel mouth, so the circle crops only the roots in its corners. On a
+   phone the gopher moves above the badge, small enough that the headline still
+   starts in the first screen. */
+.den-hero {
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 3rem;
+}
+.den-hero-logo {
+  width: 320px;
+  height: 320px;
+  box-sizing: border-box;
+  border: 6px solid #e5e7eb;
+  border-radius: 9999px;
+  box-shadow: 0 20px 40px -12px rgba(52, 27, 13, 0.45);
+}
+html.dark .den-hero-logo {
+  border-color: #262626;
+  box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.8);
+}
+@media (max-width: 1023px) {
+  .den-hero-logo {
+    width: 220px;
+    height: 220px;
+  }
+}
+@media (max-width: 767px) {
+  .den-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .den-hero-logo {
+    order: -1;
+    width: 144px;
+    height: 144px;
+    margin-bottom: 1.5rem;
+    border-width: 4px;
+    box-shadow: 0 12px 24px -8px rgba(52, 27, 13, 0.45);
+  }
+  html.dark .den-hero-logo {
+    box-shadow: 0 12px 24px -8px rgba(0, 0, 0, 0.8);
+  }
+}
