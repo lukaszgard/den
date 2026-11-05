@@ -1,0 +1,23 @@
+{{- /*
+The home page's hero: the text it wraps on the left, den's gopher on the right. On a
+phone the picture goes above the text, smaller, so the headline stays in the first
+screen.
+
+The picture is the repo's den.avif (mounted in hugo.yaml), served as it is: the
+README and the site then show the same file.
+
+@param {string} src The picture, under assets/ (mounted in hugo.yaml).
+@param {string} alt What the picture shows, for screen readers.
+
+@example {{< den/hero src="den/den.avif" alt="den's gopher" >}}…{{< /den/hero >}}
+*/ -}}
+{{- $img := resources.Get (.Get "src") -}}
+{{- if not $img -}}
+  {{- errorf "den/hero: %q is not in assets (see module.mounts in hugo.yaml)" (.Get "src") -}}
+{{- end -}}
+<div class="den-hero not-prose">
+  <div class="den-hero-text">
+    {{- .Inner -}}
+  </div>
+  <img class="den-hero-logo" src="{{ $img.RelPermalink }}" alt="{{ .Get "alt" }}" width="320" height="320" fetchpriority="high">
+</div>

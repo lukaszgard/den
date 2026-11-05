@@ -14,6 +14,7 @@ on:
       - "docs/**"
       - README.md
       - CHANGELOG.md
+      - den.avif
       - Makefile
       - scripts/site-lastmod.sh
       - .github/workflows/pages.yaml
@@ -25,6 +26,7 @@ on:
       - "docs/**"
       - README.md
       - CHANGELOG.md
+      - den.avif
       - Makefile
       - scripts/site-lastmod.sh
       - .github/workflows/pages.yaml

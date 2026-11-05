@@ -31,6 +31,9 @@ module:
     # The home page's recording, rendered from main-hd.tape (make tape TAPE=main-hd).
     - source: ../main-hd.mp4
       target: assets/den/main-hd.mp4
+    # den's gopher, beside the home page's headline (layouts/_shortcodes/den/hero.html).
+    - source: ../den.avif
+      target: assets/den/den.avif
 
 # Every docs page also comes as Markdown (/docs/rds/index.md, what "Copy page" copies)
 # and /llms.txt lists them for AI readers.
@@ -79,7 +82,13 @@ params:
 
   navbar:
     displayTitle: true
-    displayLogo: false
+    displayLogo: true
+    # The gopher's head, the same drawing as the favicon; its transparent
+    # background suits both themes, so there is no separate dark logo.
+    logo:
+      path: favicon.svg
+      width: 28
+      height: 28
     width: wide
 
   theme:
