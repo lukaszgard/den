@@ -3,7 +3,7 @@ title: den
 layout: hextra-home
 ---
 
-{{< den/hero src="den/den.avif" alt="den's gopher in a hard hat with a headlamp, a wrench and a coil of cable, standing in an underground den full of terminals" >}}
+{{< den/hero src="den-hero/den-hero.avif" anim="den-hero/den-hero-anim.avif" alt="den's gopher in a hard hat with a headlamp, a wrench and a coil of cable, standing in an underground den full of terminals" >}}
 {{< hextra/hero-badge link="docs/changelog/" >}}
   What's new in den
 {{< /hextra/hero-badge >}}

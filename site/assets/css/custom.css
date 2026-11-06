@@ -45,12 +45,63 @@ html.dark .den-status-beta {
   column-gap: 3rem;
 }
 .den-hero-logo {
+  position: relative;
+  overflow: hidden;
   width: 320px;
   height: 320px;
   box-sizing: border-box;
   border: 6px solid #e5e7eb;
   border-radius: 9999px;
   box-shadow: 0 20px 40px -12px rgba(52, 27, 13, 0.45);
+}
+/* The picture and the SVG with the pupils and lids lie exactly on top of each
+   other: both are drawn in the same square. */
+.den-hero-logo img,
+.den-hero-logo svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.den-hero-logo svg {
+  pointer-events: none;
+}
+/* A blink: den-eyes.js sets .blinking for 300 ms. The lid's resting place, 140 units
+   up, is its transform attribute, so the eyes stay open without this file. */
+.den-hero-eyes.blinking .den-lid {
+  animation: den-blink 300ms ease-in-out;
+}
+.den-hero-eyes.blinking .den-lash {
+  animation: den-lash 300ms linear;
+}
+@keyframes den-blink {
+  0%,
+  100% {
+    transform: translateY(-140px);
+  }
+  35%,
+  65% {
+    transform: translateY(0);
+  }
+}
+/* The lash is the shut lid's edge, so it shows only while the lid is down. */
+@keyframes den-lash {
+  0%,
+  30%,
+  70%,
+  100% {
+    opacity: 0;
+  }
+  35%,
+  65% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .den-hero-eyes.blinking .den-lid,
+  .den-hero-eyes.blinking .den-lash {
+    animation: none;
+  }
 }
 html.dark .den-hero-logo {
   border-color: #262626;
