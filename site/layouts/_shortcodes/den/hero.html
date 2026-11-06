@@ -3,21 +3,71 @@ The home page's hero: the text it wraps on the left, den's gopher on the right. 
 phone the picture goes above the text, smaller, so the headline stays in the first
 screen.
 
-The picture is the repo's den.avif (mounted in hugo.yaml), served as it is: the
-README and the site then show the same file.
+The gopher is the README's loop (monitors, headlamp, ROOT_ACCESS) rendered with hollow
+eyes by `python3 scripts/logo-anim.py --site site/assets/den-hero`. The pupils and
+eyelids are the SVG over it, in the picture's 1440-unit space, so that
+assets/js/den-eyes.js can turn the pupils toward the pointer and blink at random.
+Without the script the pupils stay where the drawing has them. A visitor who asks for
+reduced motion gets the loop's first frame and no blink.
 
-@param {string} src The picture, under assets/ (mounted in hugo.yaml).
-@param {string} alt What the picture shows, for screen readers.
+The SVG's numbers come from scripts/logo-anim.py: the clip ellipses are EYES, the lids
+are blink()'s shut lid (its curved edge, the 8-unit ink rim, the lash) and sit 140
+units higher while open, above the eye. Each pupil's data-eye holds its eye's centre
+and how far the pupil may travel from it (the eye's radii, less the pupil's 25 and a
+4-unit margin); its transform is where the drawing had it.
 
-@example {{< den/hero src="den/den.avif" alt="den's gopher" >}}…{{< /den/hero >}}
+@param {string} src  The still picture, under assets/.
+@param {string} anim The animated picture, under assets/.
+@param {string} alt  What the picture shows, for screen readers.
+
+@example {{< den/hero src="den-hero/den-hero.avif" anim="den-hero/den-hero-anim.avif" alt="den's gopher" >}}…{{< /den/hero >}}
 */ -}}
-{{- $img := resources.Get (.Get "src") -}}
-{{- if not $img -}}
-  {{- errorf "den/hero: %q is not in assets (see module.mounts in hugo.yaml)" (.Get "src") -}}
+{{- $still := resources.Get (.Get "src") -}}
+{{- if not $still -}}
+  {{- errorf "den/hero: %q is not in assets" (.Get "src") -}}
 {{- end -}}
+{{- $anim := resources.Get (.Get "anim") -}}
+{{- if not $anim -}}
+  {{- errorf "den/hero: %q is not in assets" (.Get "anim") -}}
+{{- end -}}
+{{- $js := resources.Get "js/den-eyes.js" | minify | fingerprint -}}
 <div class="den-hero not-prose">
   <div class="den-hero-text">
     {{- .Inner -}}
   </div>
-  <img class="den-hero-logo" src="{{ $img.RelPermalink }}" alt="{{ .Get "alt" }}" width="320" height="320" fetchpriority="high">
+  <div class="den-hero-logo">
+    <picture>
+      <source srcset="{{ $anim.RelPermalink }}" media="(prefers-reduced-motion: no-preference)">
+      <img src="{{ $still.RelPermalink }}" alt="{{ .Get "alt" }}" width="320" height="320" fetchpriority="high">
+    </picture>
+    <svg class="den-hero-eyes" viewBox="0 0 1440 1440" aria-hidden="true" focusable="false">
+      <defs>
+        <clipPath id="den-eye-left"><ellipse cx="627.5" cy="658" rx="56.5" ry="56"/></clipPath>
+        <clipPath id="den-eye-right"><ellipse cx="798" cy="660.5" rx="62" ry="54.5"/></clipPath>
+      </defs>
+      <g clip-path="url(#den-eye-left)">
+        <g class="den-pupil" data-eye="627.5 658 27.5 27" transform="translate(649 656)">
+          <circle r="25" fill="#030303"/>
+          <circle cx="7" cy="-11" r="8" fill="#fefefe"/>
+        </g>
+        <g class="den-lid" transform="translate(0 -140)">
+          <path fill="#08080c" d="M571 452H684V722Q627.5 755.6 571 722Z"/>
+          <path fill="#55afd1" d="M571 452H684V714Q627.5 747.6 571 714Z"/>
+        </g>
+        <path class="den-lash" opacity="0" fill="none" stroke="#08080c" stroke-width="9" d="M582.3 668.64Q627.5 686.56 672.7 668.64"/>
+      </g>
+      <g clip-path="url(#den-eye-right)">
+        <g class="den-pupil" data-eye="798 660.5 33 25.5" transform="translate(815.5 655)">
+          <circle r="25" fill="#030303"/>
+          <circle cx="7" cy="-11" r="8" fill="#fefefe"/>
+        </g>
+        <g class="den-lid" transform="translate(0 -140)">
+          <path fill="#08080c" d="M736 456H860V723Q798 755.7 736 723Z"/>
+          <path fill="#55afd1" d="M736 456H860V715Q798 747.7 736 715Z"/>
+        </g>
+        <path class="den-lash" opacity="0" fill="none" stroke="#08080c" stroke-width="9" d="M748.4 670.86Q798 688.3 847.6 670.86"/>
+      </g>
+    </svg>
+  </div>
 </div>
+<script defer src="{{ $js.RelPermalink }}" integrity="{{ $js.Data.Integrity }}"></script>

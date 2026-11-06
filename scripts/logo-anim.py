@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
-"""Animate den's gopher logo (den.avif): in the terminal, or as den-anim.avif for the README.
+"""Animate den's gopher logo (den.avif): in the terminal, as den-anim.avif for the README,
+or as the documentation site's hero.
 
     python3 scripts/logo-anim.py                       # play it here, 40 columns wide
     python3 scripts/logo-anim.py 60                    # ... 60 columns wide
     python3 scripts/logo-anim.py --avif den-anim.avif  # write the README's animation
+    python3 scripts/logo-anim.py --site site/assets/den-hero  # write the site's hero
+
+--site writes den-hero-anim.avif (the loop) and den-hero.avif (its first frame, for
+visitors who ask for reduced motion) into the folder, with hollow eyes: no pupils and
+no blink. The home page draws those over the picture in SVG, so the pupils can follow
+the pointer (site/layouts/_shortcodes/den/hero.html, site/assets/js/den-eyes.js).
 
 Playing needs a terminal with kitty graphics animation (Ghostty 1.4+ or kitty), and
 not tmux. The script uploads the frames and exits; the terminal plays the loop. Remove
@@ -32,13 +39,14 @@ LOGO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "den.avif"
 MENLO = "/System/Library/Fonts/Menlo.ttc"
 SIZE = 720                    # sent to the terminal; the logo is 1440x1440
 README_SIZE = 800             # shown 400 px wide in the README, sharp on retina
+SITE_SIZE = 640               # the site's hero is at most 320 px wide
 FRAMES, GAP = 40, 100         # 4 s loop
 CHUNK = 4096                  # max base64 bytes per kitty graphics escape sequence
 
 # Positions in the 1440x1440 logo.
 LAMP = (664, 498)
 EYES = [(627.5, 658, 56.5, 56), (798, 660.5, 62, 54.5)]  # centre, radii
-SKIN, INK = (85, 175, 209), (8, 8, 12)
+SKIN, INK, EYE_WHITE = (85, 175, 209), (8, 8, 12), (254, 254, 254)
 PROMPT = (432, 569)           # left end of the ">" baseline on the prompt screen
 CURSOR = (445, 567, 463, 576)
 LABEL = (1078, 546, 1224, 588)  # ROOT_ACCESS
@@ -232,9 +240,27 @@ def blink(img, closed):
                     px[x, y] = INK
 
 
+def hollow(logo):
+    """The logo with the pupils painted out of its eyes; the outlines stay."""
+    arr = np.asarray(logo).copy()
+    for cx, cy, rx, ry in EYES:
+        box = (int(cx - rx), int(cy - ry), int(cx + rx) + 1, int(cy + ry) + 1)
+        seed = (int(cx - rx / 2), int(cy))   # left of the pupil, which looks right
+        white = grow(logo, [seed], box, lambda c: min(c) > 200, 255)
+        # The pupil and its catchlight are a hole in the white; a white is convex, so
+        # filling every row and column between its ends closes it, rim included.
+        eye = fill_rows(white) | fill_rows(white.T).T
+        arr[eye] = EYE_WHITE
+    return Image.fromarray(arr)
+
+
 class Den:
-    def __init__(self, logo):
+    def __init__(self, logo, eyes=True):
+        """eyes=False hollows the eyes and drops the blink, for the site's hero."""
+        if not eyes:
+            logo = hollow(logo)
         self.logo = logo
+        self.eyes = eyes
         self.masks = {}
         for name, (seeds, box, ok, tol) in SCREENS.items():
             mask = grow(logo, seeds, box, ok, tol)
@@ -441,7 +467,7 @@ class Den:
         frame = self.root_access(Image.fromarray(arr.astype(np.uint8)), n)
 
         lid = {28: 0.55, 29: 1.0, 30: 0.55}.get(n, 0)
-        if lid:
+        if lid and self.eyes:
             blink(frame, lid)
         light = 0.15 + 0.65 * (0.5 - 0.5 * math.cos(2 * math.pi * n / FRAMES))
         if n in (13, 15):
@@ -492,16 +518,26 @@ def play(den, cols):
     sys.stdout.flush()
 
 
-def save_avif(den, path):
-    frames = [den.render(n, README_SIZE) for n in range(FRAMES)]
+def save_avif(den, path, size=README_SIZE):
+    frames = [den.render(n, size) for n in range(FRAMES)]
     frames[0].save(path, save_all=True, append_images=frames[1:], duration=GAP, loop=0,
                    quality=70, speed=6)
     print(f"saved {path}")
 
 
+def save_site(den, folder):
+    os.makedirs(folder, exist_ok=True)
+    save_avif(den, os.path.join(folder, "den-hero-anim.avif"), SITE_SIZE)
+    still = os.path.join(folder, "den-hero.avif")
+    den.render(0, SITE_SIZE).save(still, quality=70, speed=6)
+    print(f"saved {still}")
+
+
 if __name__ == "__main__":
-    den = Den(load_logo())
-    if sys.argv[1:2] == ["--avif"]:
-        save_avif(den, sys.argv[2])
+    args = sys.argv[1:]
+    if args[:1] == ["--site"]:
+        save_site(Den(load_logo(), eyes=False), args[1])
+    elif args[:1] == ["--avif"]:
+        save_avif(Den(load_logo()), args[1])
     else:
-        play(den, int(sys.argv[1]) if len(sys.argv) > 1 else 40)
+        play(Den(load_logo()), int(args[0]) if args else 40)
