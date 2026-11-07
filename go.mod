@@ -20,7 +20,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/memorydb v1.42.8
 	github.com/aws/aws-sdk-go-v2/service/opensearch v1.84.0
 	github.com/aws/aws-sdk-go-v2/service/rds v1.130.1
-	github.com/aws/aws-sdk-go-v2/service/redshift v1.71.4
+	github.com/aws/aws-sdk-go-v2/service/redshift v1.71.6
 	github.com/aws/aws-sdk-go-v2/service/redshiftserverless v1.44.0
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.50.4
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.80.0
