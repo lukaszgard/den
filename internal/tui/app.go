@@ -173,6 +173,9 @@ type AppModel struct {
 	// Runbook overlay: the runbook view, as the detail view is a service's.
 	showRunbook bool
 	runbookView runbooks.View
+	// runbookLogPrefs are T and w of the runbook view's logs, kept here so
+	// they hold for every runbook opened until den exits.
+	runbookLogPrefs runbooks.LogPrefs
 	// runbookTabs are the terminal tabs of each runbook, by name, and
 	// startProgram runs a program for one. See runbookterms.go.
 	runbookTabs  map[string]*components.Tabs

@@ -70,6 +70,7 @@ type View struct {
 
 	logs    components.LogView
 	logsKey string // what the log view holds, so it is refilled only on change
+	logsFor string // the run it holds, so a new one starts at its newest lines
 	// saved caches the output of the run restored from disk, by its start.
 	saved    []string
 	savedFor time.Time
@@ -85,6 +86,14 @@ type View struct {
 	histKey     string // what histLog holds, so it is refilled only on change
 	histFor     string // the log histLog shows, to start a newly picked one at its end
 	histOpen    bool
+
+	// The keys of the log on screen (see logKey): full shows it alone, filling
+	// the box; searching is set while a search's query is typed, and query
+	// stays once enter keeps it, until esc.
+	full      bool
+	searching bool
+	query     string
+	prefs     LogPrefs
 
 	about    viewport.Model
 	aboutKey string // the width and source it was rendered for
@@ -113,6 +122,28 @@ type View struct {
 func (v View) WithOutput(out func(name, line string)) View {
 	v.flow.out = out
 	return v
+}
+
+// LogPrefs are how the logs of a run show their lines: without the time in
+// front of each (T), and wrapped (w). The root model keeps them, so they hold
+// for every runbook opened until den exits.
+type LogPrefs struct{ HideStamps, Wrap bool }
+
+// WithLogPrefs shows the view's logs as prefs says.
+func (v View) WithLogPrefs(prefs LogPrefs) View {
+	v.prefs = prefs
+	v.applyPrefs()
+	return v
+}
+
+// LogPrefs is how the view's logs show their lines, after T and w.
+func (v View) LogPrefs() LogPrefs { return v.prefs }
+
+func (v *View) applyPrefs() {
+	for _, l := range []*components.LogView{&v.logs, &v.histLog} {
+		l.SetHideStamps(v.prefs.HideStamps)
+		l.SetWrap(v.prefs.Wrap)
+	}
 }
 
 // NewView opens the view of the runbook or sequence called name over its
@@ -155,19 +186,20 @@ func (v View) Dark() bool { return !v.light }
 // Name is the runbook or sequence on screen.
 func (v View) Name() string { return v.name }
 
-// OwnsBack reports that esc belongs to the view: a run's log is open full
-// height in History, or a file in Files, and esc goes back to the runs or the
-// tree before leaving.
+// OwnsBack reports that esc belongs to the view, one step at a time before it
+// leaves: a search of the log ends, then its full screen, then a run's log
+// open in History goes back to the runs, or a file in Files to the tree.
 func (v View) OwnsBack() bool {
-	return (v.tab() == tabHistory && v.histOpen) || (v.tab() == tabFiles && v.previewOpen)
+	return v.searching || v.query != "" || v.full ||
+		(v.tab() == tabHistory && v.histOpen) || (v.tab() == tabFiles && v.previewOpen)
 }
 
 // CapturingKeys reports that the view needs every key: a terminal is typed
-// into, a tab renamed, a close or a run confirmed, or a parameter answered.
-// The root model must then not act on esc, h or q.
+// into, a tab renamed, a close or a run confirmed, a parameter answered, or a
+// search typed. The root model must then not act on esc, h or q.
 func (v View) CapturingKeys() bool {
 	return v.strip.Capturing() || v.flow.active() || v.mig.active() || v.fork.active() || v.del.active() || v.ask != nil ||
-		v.resend.active()
+		v.resend.active() || v.searching
 }
 
 // AwaitingForm reports that a form is up, the parameters' or the request E
@@ -198,20 +230,32 @@ func (v View) RunningTerminals() int {
 // TerminalSize is the size a terminal opened in this view starts with.
 func (v View) TerminalSize() (cols, rows int) { return v.bodySize() }
 
-// chromeLines are the rows under the box: a blank line and the help line.
+// chromeLines are the rows under the box: the log's line (logBar, blank without
+// a log on screen) and the help line.
 const chromeLines = 2
 
 func (v View) boxInnerHeight() int { return max(v.height-chromeLines-2, 10) }
 
 func (v View) bodySize() (cols, rows int) {
-	cols, rows, _ = v.bodyArea(v.upperSection())
+	cols, rows, _ = v.bodyArea(v.upperSectionShown())
 	return cols, rows
+}
+
+// upperSectionShown is upperSection, or nothing while a log is full screen.
+func (v View) upperSectionShown() string {
+	if v.full {
+		return ""
+	}
+	return v.upperSection()
 }
 
 // bodyArea is bodySize for the already rendered sections above the tab bar,
 // and the row of the screen the body starts on: under the box's top border,
-// those sections and the tab bar.
+// those sections and the tab bar. A log full screen has the whole box.
 func (v View) bodyArea(upperSection string) (cols, rows, top int) {
+	if v.full {
+		return v.width - 4, v.boxInnerHeight(), 1
+	}
 	upper := lipgloss.Height(lipgloss.NewStyle().Width(v.width - 2).Render(upperSection))
 	return v.width - 4, max(v.boxInnerHeight()-upper-components.TabBarLines, 1), 1 + upper + components.TabBarLines
 }
@@ -256,11 +300,17 @@ func (v View) Update(msg tea.Msg) (View, tea.Cmd) {
 	case msgs.TickMsg:
 	case tea.KeyPressMsg:
 		v, cmd = v.key(msg)
-	// Pasted text goes to the terminal being typed into or the name being
-	// edited. The pop-ups that ask something take keys, not text, and a form
-	// has had the message above.
+	// Pasted text goes to the search being typed, the terminal being typed
+	// into or the name being edited. The pop-ups that ask something take keys,
+	// not text, and a form has had the message above.
 	case tea.PasteMsg:
-		if !v.mig.active() && !v.fork.active() && !v.del.active() && !v.flow.active() && !v.resend.active() {
+		switch {
+		case v.searching:
+			// A line is searched on its own: what follows a line break could
+			// never match.
+			text, _, _ := strings.Cut(msg.Content, "\n")
+			v.typeQuery(v.query + strings.TrimRight(text, "\r"))
+		case !v.mig.active() && !v.fork.active() && !v.del.active() && !v.flow.active() && !v.resend.active():
 			_, cmd = v.strip.Paste(msg)
 		}
 	}
@@ -385,6 +435,11 @@ func (v View) key(msg tea.KeyPressMsg) (View, tea.Cmd) {
 		v.del, cmd = v.del.key(msg)
 		return v, cmd
 	}
+	// A search being typed takes every key as text before the view's own: t,
+	// n and the digits are letters of the query there, not a terminal.
+	if v.searching {
+		return v.searchKey(msg), nil
+	}
 	e, ok := lookup(v.reg, v.name)
 	if !ok {
 		return v, nil
@@ -398,6 +453,9 @@ func (v View) key(msg tea.KeyPressMsg) (View, tea.Cmd) {
 	}
 	if handled, cmd := v.strip.Key(msg); handled {
 		return v, cmd
+	}
+	if next, cmd, handled := v.logKey(msg); handled {
+		return next, cmd
 	}
 
 	switch k {
@@ -449,7 +507,7 @@ func (v View) key(msg tea.KeyPressMsg) (View, tea.Cmd) {
 	case tabHistory:
 		if v.histOpen {
 			if k == "esc" || k == "backspace" {
-				v.histOpen = false
+				v.closeHistRun()
 				return v, nil
 			}
 			return v, v.histLog.Update(msg)
@@ -470,6 +528,164 @@ func (v View) key(msg tea.KeyPressMsg) (View, tea.Cmd) {
 		return v.filesKey(msg)
 	}
 	return v, nil
+}
+
+// logKey handles the keys of the log on screen, the Run tab's or a run's
+// opened in History, and reports whether msg was one: / searches it, n and N
+// go from match to match, f shows it full screen, T hides the times, w wraps
+// long lines, s stops or resumes following, c copies it, and esc ends the
+// search, then the full screen. On History's list, / and f open the run
+// picked first, and c copies its log.
+func (v View) logKey(msg tea.KeyPressMsg) (View, tea.Cmd, bool) {
+	tab := v.tab()
+	if tab != tabRun && tab != tabHistory {
+		return v, nil, false
+	}
+	k := msg.String()
+	if tab == tabHistory && !v.histOpen && (k == "/" || k == "f") {
+		if len(v.history) == 0 {
+			return v, flash("no run kept on disk yet"), true
+		}
+		v.histOpen = true
+	}
+	log := v.activeLog()
+	switch k {
+	case "/":
+		v.endSearch()
+		v.searching = true
+	case "n", "N":
+		// Without a search, n is not the log's: on a terminal's tab it
+		// renames it, which the strip has already seen to.
+		if v.query == "" || log == nil {
+			return v, nil, false
+		}
+		if k == "n" {
+			log.Next()
+		} else {
+			log.Prev()
+		}
+	case "f":
+		v.full = !v.full
+	case "T":
+		v.prefs.HideStamps = !v.prefs.HideStamps
+		v.applyPrefs()
+		if v.prefs.HideStamps {
+			return v, flash("timestamps hidden"), true
+		}
+		return v, flash("timestamps shown"), true
+	case "w":
+		v.prefs.Wrap = !v.prefs.Wrap
+		v.applyPrefs()
+		if v.prefs.Wrap {
+			return v, flash("long lines wrapped"), true
+		}
+		return v, flash("long lines cut at the edge"), true
+	case "s":
+		if log == nil {
+			return v, nil, false
+		}
+		log.ToggleFollow()
+		if log.Following() {
+			return v, flash("following new lines"), true
+		}
+		return v, flash("paused: new lines no longer scroll the log"), true
+	case "c":
+		return v, v.copyLog(), true
+	case "esc", "backspace":
+		switch {
+		case v.query != "":
+			v.endSearch()
+		case v.full:
+			v.full = false
+		default:
+			return v, nil, false
+		}
+	default:
+		return v, nil, false
+	}
+	return v, nil, true
+}
+
+// searchKey types a search's query. Matches light up as it is typed; enter
+// keeps the search, esc ends it, and the arrows still scroll the log.
+func (v View) searchKey(msg tea.KeyPressMsg) View {
+	switch msg.String() {
+	case "esc":
+		v.endSearch()
+	case "enter":
+		v.searching = false
+		if v.query == "" {
+			v.endSearch()
+		}
+	case "backspace":
+		r := []rune(v.query)
+		v.typeQuery(string(r[:max(len(r)-1, 0)]))
+	case "up", "down", "pgup", "pgdown":
+		if log := v.activeLog(); log != nil {
+			log.Update(msg)
+		}
+	default:
+		if msg.Text != "" {
+			v.typeQuery(v.query + msg.Text)
+		}
+	}
+	return v
+}
+
+// typeQuery makes q the query of the search, its matches lit up as it goes.
+func (v *View) typeQuery(q string) {
+	v.query = q
+	if log := v.activeLog(); log != nil {
+		log.SetQuery(q)
+	}
+}
+
+// activeLog is the log on screen that the log keys work on: the Run tab's, or
+// the run opened in History. nil anywhere else.
+func (v *View) activeLog() *components.LogView {
+	switch v.tab() {
+	case tabRun:
+		return &v.logs
+	case tabHistory:
+		if v.histOpen {
+			return &v.histLog
+		}
+	}
+	return nil
+}
+
+// copyLog copies the log on screen, or on History's list the picked run's, as
+// it is shown (its times only when they are) but without its colours.
+func (v View) copyLog() tea.Cmd {
+	log, empty := &v.logs, v.logsKey == "never"
+	if v.tab() == tabHistory {
+		log, empty = &v.histLog, len(v.history) == 0
+	}
+	n := log.Len()
+	if empty || n == 0 {
+		return flash("nothing to copy")
+	}
+	return components.Copy(log.PlainText(), fmt.Sprintf("copied %d %s", n, plural(n, "line", "lines")))
+}
+
+// endSearch ends the search of the log, typed or kept.
+func (v *View) endSearch() {
+	v.searching, v.query = false, ""
+	v.logs.ClearQuery()
+	v.histLog.ClearQuery()
+}
+
+// endLogModes ends the search and the full screen, as the log they were for
+// leaves the screen.
+func (v *View) endLogModes() {
+	v.endSearch()
+	v.full = false
+}
+
+// closeHistRun goes back from a run's log in History to the list of runs.
+func (v *View) closeHistRun() {
+	v.histOpen = false
+	v.endLogModes()
 }
 
 // openLog opens the log file of the run on screen in the editor, in a terminal
@@ -541,6 +757,9 @@ func (v View) refresh() View {
 	tab := v.tab()
 	entered := tab != v.lastTab
 	v.lastTab = tab
+	if entered {
+		v.endLogModes()
+	}
 	st := e.state()
 	switch tab {
 	case tabRun:
@@ -573,8 +792,8 @@ func (v View) refresh() View {
 
 func (v *View) refreshLogs(st runbook.Run) {
 	var (
-		lines []string
-		key   string
+		lines    []string
+		key, run string
 	)
 	switch {
 	case st.Saved != nil:
@@ -582,9 +801,10 @@ func (v *View) refreshLogs(st runbook.Run) {
 		head := fmt.Sprintf("── last run, %s · from %s ──", st.Saved.StartedAt.Local().Format("Mon 2 Jan 15:04"), orDash(st.Saved.Origin))
 		lines = append([]string{head}, lines...)
 		key = "saved " + st.Saved.StartedAt.String()
+		run = key
 	case st.Status == runbook.StatusNeverRun:
 		lines = []string{"Nothing yet — press r to run it."}
-		key = "never"
+		key, run = "never", "never"
 	default:
 		lines = st.Logs
 		last := ""
@@ -592,10 +812,17 @@ func (v *View) refreshLogs(st runbook.Run) {
 			last = lines[len(lines)-1]
 		}
 		key = fmt.Sprint("live ", st.StartedAt, len(lines), last, st.Status)
+		run = fmt.Sprint("live ", st.StartedAt)
 	}
 	if key != v.logsKey {
 		v.logsKey = key
 		v.logs.SetContent(lines)
+	}
+	// A new run is followed from its start, wherever the last one was left:
+	// a search's jump or a scroll up paused that one, not this.
+	if run != v.logsFor {
+		v.logsFor = run
+		v.logs.GotoBottom()
 	}
 }
 
@@ -638,7 +865,9 @@ func (v *View) loadHistory(st runbook.Run) {
 // again only when the file has grown.
 func (v *View) refreshHistLog(st runbook.Run) {
 	if v.histCursor >= len(v.history) {
-		v.histOpen = false
+		if v.histOpen {
+			v.closeHistRun()
+		}
 		return
 	}
 	sel := v.history[v.histCursor]
@@ -687,25 +916,29 @@ func (v View) View() string {
 // Render is View with the cursor of the terminal being typed into, from the
 // top left of the view, or nil when there is none to show.
 func (v View) Render() (view string, cursor *tea.Cursor) {
-	upper := v.upperSection()
+	upper := v.upperSectionShown()
 	cols, rows, top := v.bodyArea(upper)
 	body := v.body(rows)
 	if v.strip.Current() != nil {
 		cursor = v.strip.Cursor(1, top, cols, rows) // 1: the box's left border
 	}
-	content := strings.Join([]string{upper, v.strip.Bar(v.width - 4), body}, "\n")
+	content := body
+	if !v.full {
+		content = strings.Join([]string{upper, v.strip.Bar(v.width - 4), body}, "\n")
+	}
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(colorAccent).
 		Width(v.width).
 		Height(v.boxInnerHeight() + 2).
 		Render(content)
+	// A line wider than the terminal would wrap and push the frame's top off
+	// screen; the keys at its end are the ones that can be spared.
+	cut := lipgloss.NewStyle().MaxWidth(v.width)
 	frame := lipgloss.JoinVertical(lipgloss.Left,
 		box,
-		"",
-		// A line wider than the terminal would wrap and push the frame's top
-		// off screen; the keys at its end are the ones that can be spared.
-		lipgloss.NewStyle().MaxWidth(v.width).Render(v.helpLine()),
+		cut.Render(v.logBar()), // blank without a log on screen
+		cut.Render(v.helpLine()),
 	)
 	// A pop-up covers part of the screen, and the cursor of what is under it
 	// would show through.
@@ -979,6 +1212,10 @@ func (v View) helpLine() string {
 	if line, ok := v.strip.ModeHelp(components.HelpKey{Key: "esc", Text: "back"}); ok {
 		return line
 	}
+	if v.searching {
+		// The query itself is on the log's line, above.
+		return "  " + components.Hints(key("enter", "keep the search"), key("esc", "cancel"), key("↑↓", "scroll"))
+	}
 	e, _ := lookup(v.reg, v.name)
 	keys := []components.HelpKey{{Key: "h", Text: "help"}, {Key: "r", Text: "run"}}
 	files := v.tab() == tabFiles // where e edits the file picked
@@ -1003,15 +1240,18 @@ func (v View) helpLine() string {
 		}
 		keys = append(keys, key("D", "delete"))
 	}
+	// The log's own keys are on its line, above (logBar).
 	switch v.tab() {
 	case tabRun:
-		keys = append(keys, key("o", "log in editor"))
+		keys = append(keys, key("o", "log in editor"), key("←→", "tabs"), v.escKey("back"))
+		return "  " + components.Hints(keys...)
 	case tabHistory:
 		if v.histOpen {
-			keys = append(keys, key("↑↓", "scroll"), key("o", "log in editor"), key("←→", "tabs"), key("esc", "runs"))
+			keys = append(keys, key("↑↓", "scroll"), key("o", "log in editor"), key("←→", "tabs"), v.escKey("runs"))
 			return "  " + components.Hints(keys...)
 		}
-		keys = append(keys, key("↑↓", "select"), key("enter", "whole log"), key("o", "log in editor"))
+		keys = append(keys, key("↑↓", "select"), key("enter", "whole log"), key("o", "log in editor"), key("←→", "tabs"), key("esc", "back"))
+		return "  " + components.Hints(keys...)
 	case tabFiles:
 		if v.previewOpen {
 			keys = append(keys, key("↑↓", "scroll"), key("e", "edit in editor"), key("←→", "tabs"), key("esc", "files"))
@@ -1021,6 +1261,117 @@ func (v View) helpLine() string {
 	}
 	keys = append(keys, key("←→", "tabs"), key("esc", "back"))
 	return "  " + components.Hints(keys...)
+}
+
+// escKey is esc on a log's help line: one step back, the search and the full
+// screen first, then def.
+func (v View) escKey(def string) components.HelpKey {
+	switch {
+	case v.query != "":
+		return key("esc", "clear search")
+	case v.full:
+		return key("esc", "leave full screen")
+	}
+	return key("esc", def)
+}
+
+// logBar is the line between the box and the help line while a run's log is
+// on screen: whether it follows new lines, the search, and the log's own keys,
+// each toggle named by what it does next. They have a line of their own so the
+// help line's esc and tabs are not cut for them on a narrow screen. On
+// History's list it has the keys that work there, for the picked run's log.
+// "" with no log on screen, or a pop-up over the view.
+func (v View) logBar() string {
+	if v.PopUp() {
+		return ""
+	}
+	var log *components.LogView
+	switch v.tab() {
+	case tabRun:
+		if v.logsKey == "never" {
+			return "" // the placeholder is no log
+		}
+		log = &v.logs
+	case tabHistory:
+		switch {
+		case len(v.history) == 0:
+			return ""
+		case !v.histOpen:
+			return "  " + components.Hints(key("/", "search"), key("f", "full screen"), v.timeKey(), v.wrapKey(), key("c", "copy"))
+		}
+		log = &v.histLog
+	default:
+		return ""
+	}
+	if v.searching {
+		return "  " + v.searchLine()
+	}
+	line := "  " + followMark(log)
+	keys := []components.HelpKey{key("/", "search")}
+	if v.query != "" {
+		line += v.searchLine() + "  "
+		keys = []components.HelpKey{key("n/N", "next/previous"), key("/", "new search")}
+	}
+	follow, full := "pause", "full screen"
+	if !log.Following() {
+		follow = "follow"
+	}
+	if v.full {
+		full = "leave full screen"
+	}
+	keys = append(keys, key("s", follow), v.timeKey(), v.wrapKey(), key("g/G", "top/bottom"), key("f", full), key("c", "copy"))
+	return line + components.Hints(keys...)
+}
+
+// timeKey is T as the log's line names it: what it does next.
+func (v View) timeKey() components.HelpKey {
+	if v.prefs.HideStamps {
+		return key("T", "show time")
+	}
+	return key("T", "hide time")
+}
+
+// wrapKey is w as the log's line names it: what it does next.
+func (v View) wrapKey() components.HelpKey {
+	if v.prefs.Wrap {
+		return key("w", "unwrap")
+	}
+	return key("w", "wrap")
+}
+
+// searchLine is the search as the help line shows it: /query, the cursor while
+// it is typed, and which match of how many is the current one.
+func (v View) searchLine() string {
+	line := accent.Render("/" + v.query)
+	if v.searching {
+		line += accent.Render("▌")
+	}
+	log := v.histLog
+	if v.tab() == tabRun {
+		log = v.logs
+	}
+	cur, total := log.MatchInfo()
+	switch {
+	case v.query == "":
+	case total == 0:
+		line += "  " + lipgloss.NewStyle().Foreground(colorWarn).Render("no match")
+	case cur == 0:
+		line += "  " + muted.Render(fmt.Sprintf("%d %s", total, plural(total, "match", "matches")))
+	default:
+		line += "  " + muted.Render(fmt.Sprintf("%d/%d", cur, total))
+	}
+	return line
+}
+
+// followMark says, ahead of the log's keys, whether the log goes with new
+// lines: "paused" once a scroll up, a jump or s stopped it, "following" again
+// at its end. Always one of them, the run live or done: a mark that came and
+// went with the run read as if the end had lost the pause.
+func followMark(log *components.LogView) string {
+	if !log.Following() {
+		return lipgloss.NewStyle().Foreground(colorWarn).Render("paused") + "  "
+	}
+	return lipgloss.NewStyle().Foreground(colorOK).Render("following") + "  "
 }
 
 // Shortcuts lists the keys of the view for the shortcuts pop-up.
@@ -1050,10 +1401,21 @@ func (v View) Shortcuts() []components.ShortcutGroup {
 			{Keys: "x", Text: "Close the terminal (asks while it runs)"},
 			{Keys: "esc ctrl+t", Text: "Give den the keys back (esc twice in an editor)"},
 		}},
+		{Title: "Log", Keys: []components.Shortcut{
+			{Keys: "/", Text: "Search the log: matches light up as you type; enter keeps the search, esc ends it"},
+			{Keys: "n N", Text: "Next / previous match, round from the last to the first"},
+			{Keys: "f", Text: "Full screen: the log fills the box (f or esc to leave)"},
+			{Keys: "T", Text: "Timestamps on / off, for every runbook until den exits"},
+			{Keys: "w", Text: "Wrap long lines on / off, for every runbook until den exits"},
+			{Keys: "s", Text: "Follow new lines on / off (scrolling up or a jump to a match stops it)"},
+			{Keys: "g G", Text: "Top / bottom (or home, end); the bottom follows new lines again"},
+			{Keys: "c", Text: "Copy the whole log, without its colours"},
+			{Keys: "/ f c", Text: "On History's list: the same for the run picked"},
+		}},
 		{Title: "View", Keys: []components.Shortcut{
 			{Keys: "↑ ↓", Text: "Scroll Run, About or a file shown; pick a run or a file"},
 			{Keys: "enter", Text: "On Files: show the file picked; esc goes back to the tree"},
-			{Keys: "esc", Text: "Back to the list (from a run's whole log or a file: to the runs or files)"},
+			{Keys: "esc", Text: "One step back: a search, full screen, a run's whole log or a file, then the list"},
 		}},
 	}
 }

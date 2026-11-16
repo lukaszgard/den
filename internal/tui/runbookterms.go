@@ -100,7 +100,7 @@ func (m *AppModel) openRunbook(msg msgs.OpenRunbookMsg) []tea.Cmd {
 		}
 	}
 	m.runbookView = runbooks.NewView(m.runbookReg, m.ctx, msg.Name, m.runbookTabsFor(msg.Name), m.width, detailHeight(m.height)).
-		WithOutput(m.logger.Output).SetDark(!m.light)
+		WithOutput(m.logger.Output).WithLogPrefs(m.runbookLogPrefs).SetDark(!m.light)
 	m.showRunbook = true
 	if msg.AgentEdit {
 		var cmd tea.Cmd
@@ -594,6 +594,7 @@ func (m *AppModel) runbookKey(msg tea.KeyPressMsg) []tea.Cmd {
 	var cmd tea.Cmd
 	if m.runbookView.CapturingKeys() {
 		m.runbookView, cmd = m.runbookView.Update(msg)
+		m.runbookLogPrefs = m.runbookView.LogPrefs()
 		return []tea.Cmd{cmd}
 	}
 	if k := msg.String(); k == "h" || k == "?" {
@@ -610,5 +611,6 @@ func (m *AppModel) runbookKey(msg tea.KeyPressMsg) []tea.Cmd {
 		return nil
 	}
 	m.runbookView, cmd = m.runbookView.Update(msg)
+	m.runbookLogPrefs = m.runbookView.LogPrefs()
 	return []tea.Cmd{cmd}
 }
