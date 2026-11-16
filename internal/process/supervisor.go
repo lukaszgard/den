@@ -350,6 +350,21 @@ func Timestamped(t time.Time, line string) string {
 	return "[" + t.Format("15:04:05") + "] " + line
 }
 
+// CutTimestamp is line without the time Timestamped put before it. A line
+// without one, such as a header den wrote above a run, comes back as it is.
+func CutTimestamp(line string) string {
+	const stamp = len("[15:04:05] ")
+	if len(line) < stamp || line[0] != '[' || line[9] != ']' || line[10] != ' ' || line[3] != ':' || line[6] != ':' {
+		return line
+	}
+	for _, i := range []int{1, 2, 4, 5, 7, 8} {
+		if line[i] < '0' || line[i] > '9' {
+			return line
+		}
+	}
+	return line[stamp:]
+}
+
 // splitLines is bufio.ScanLines that hands out a line of maxLineBytes rather
 // than asking for more once a line has grown that long. A cut never splits a
 // UTF-8 character.

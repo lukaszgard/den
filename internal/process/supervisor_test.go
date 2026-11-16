@@ -341,3 +341,17 @@ func TestResetLogsStartsTheNextRunClean(t *testing.T) {
 		t.Fatalf("logs = %q, want the second run's line only", logs)
 	}
 }
+
+func TestCutTimestampUndoesTimestamped(t *testing.T) {
+	at := time.Date(2026, 1, 2, 9, 5, 7, 0, time.Local)
+	for _, line := range []string{"done", "", "[12:00:00] a line that looks stamped", "\x1b[32mok\x1b[0m"} {
+		if got := CutTimestamp(Timestamped(at, line)); got != line {
+			t.Errorf("CutTimestamp(Timestamped(%q)) = %q", line, got)
+		}
+	}
+	for _, line := range []string{"── last run, Mon 2 Jan 15:04 · from tui ──", "[12:00] short", "[ab:cd:ef] x", "[12:00:00]x", "", "[1"} {
+		if got := CutTimestamp(line); got != line {
+			t.Errorf("CutTimestamp(%q) = %q, want it unchanged: it has no timestamp", line, got)
+		}
+	}
+}

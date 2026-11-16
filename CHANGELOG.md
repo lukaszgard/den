@@ -1,5 +1,49 @@
 # Changelog
 
+## [1.11.0] - 2026-11-16
+
+**A runbook's log can now be searched, shown full screen and copied, without leaving den.** Until
+now the output on the Run tab, and a past run opened in History, could only be scrolled: to find an
+error in a long run you pressed `o` and searched in your editor. The log now reads like k9s's log
+view, with a line of its own under it that says whether it follows new lines and lists its keys.
+This release is also built with Go 1.27.4, for a crash fix in Go's HTTP server.
+
+### 🖥 The dashboard
+
+- In the App Logs panel and a service's Logs tab, `f` no longer pages down (`pgdown` and `space`
+  still do), and `g`/`G`/`home`/`end` now jump to the top and the bottom of the log.
+- On a runbook's Run tab and a run opened in History, `/` searches the log. Every match lights up
+  as you type, and the view jumps to the first one at or below the top. `enter` keeps the search,
+  `esc` ends it. `n`/`N` go to the next and previous match, round from the last to the first, with
+  a `3/17` count. The text is matched as it is, not as a pattern: all lower case matches any case,
+  and a capital letter matches only itself.
+- `f` shows the log alone, over the whole box, without the header and the tabs.
+- `T` hides the timestamps and `w` wraps long lines, which are otherwise cut at the edge. Both stay
+  set for every runbook you open until den exits.
+- `s` stops and resumes following new lines. Scrolling up or jumping to a match also stops it, so a
+  live run no longer pulls the view away while you read. `G`, `end` or scrolling down to the last
+  line follows again, and `g` or `home` goes to the top.
+- `c` copies the whole log, not only what is on screen: without its colours, and with the
+  timestamps if they are shown. Secret parameters are already redacted from it. Where there is no
+  system clipboard, the terminal sets it (OSC 52), and some terminals cut a long copy.
+- Under the box, the log has a line that always says `following` or `paused`, shows the search,
+  and lists the log's keys, each named by what it does next (`s: pause`, `T: show time`). The help
+  line under it keeps the view's own keys.
+- On History's list, `/` and `f` open the selected run's log first, and `c` copies it.
+- `esc` goes back one step at a time: the search, then full screen, then from a run's log to the
+  list of runs, then out of the view.
+
+### 🔌 Data stores and tunnels
+
+- Built with Go 1.27.4. With Go 1.27.3, an HTTP/1 server could crash on a race over the request
+  headers (GO-2026-6859). That affected the local SigV4 proxy that OpenSearch and Neptune
+  connections go through.
+- The AWS SDK for Go now returns an error, instead of panicking, when a role assumption comes back
+  without credentials or an `aws login` token lacks a field (`credentials` 1.20.13).
+- Routine updates, with nothing meant to change in den: the AWS SDK for Go (`config` 1.33.13,
+  MemoryDB 1.42.8, Redshift 1.71.6, and `ssooidc` 1.44.1, the IAM Identity Center API that renews
+  an SSO session's token).
+
 ## [1.10.0] - 2026-11-03
 
 **A SOPS file kept in git now says when a teammate pushed a newer version, and `u` updates it.**

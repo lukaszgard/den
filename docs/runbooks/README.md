@@ -700,8 +700,10 @@ that the name and the account stay readable.
   runs take up to two thirds of the tab; when there are more, `↓ 9 more · 26 of 30 runs
   kept` says how many and `↑` `↓` scroll to them. `enter` shows that log full height,
   `esc` goes back to the runs.
-- On either, `o` opens that run's log file in your editor, in a terminal tab named after
-  it (`log-07`): search it, copy from it, save part of it. The editor is the one `e` uses.
+- On either, the log can be searched, shown full screen and copied in place: see
+  [Reading a run's log](#reading-a-runs-log). `o` opens that run's log file in your
+  editor instead, in a terminal tab named after it (`log-07`), to save part of it or work
+  on it there. The editor is the one `e` uses.
 
 ```
 │─ Run │ History │ About │ Files                                                │
@@ -770,11 +772,58 @@ that the name and the account stay readable.
 | `1`–`9`      | Jump to a terminal and type into it                                  |
 | `enter`      | Type into a terminal; restart an exited one; on History, a run's whole log; on Files, show the file picked |
 | `↑` `↓`      | Scroll Run and About; pick a run in History, or scroll its whole log; pick a file in Files, or scroll the one shown |
-| `esc`        | Back to the list (from a terminal: back to den's keys first; from a run's whole log: back to the runs; from a file shown: back to the tree) |
+| `/` `n` `f` `T` `w` `s` `c` | On Run or History: search, full screen, timestamps, wrap, follow and copy the log; see [Reading a run's log](#reading-a-runs-log) |
+| `esc`        | One step back, then the list: from a terminal, den's keys first; a search ends, then full screen; from a run's whole log, back to the runs; from a file shown, back to the tree |
 
 A sequence's view has Run, History and an About that lists its steps; it has no folder of
 its own, so no Files and no terminals. A runbook declared in `den.yaml` or by a single script
 has no Files either: it runs in a directory it shares.
+
+#### Reading a run's log
+
+The log on Run, and a run's log opened in History, read like k9s's log view: look for an
+error in a long run, see the log on the whole screen, and copy it, without leaving den.
+
+![Reading a run's log: a search, the log full screen without its times, a copy](log/runbook-log.gif)
+
+Under the box, the log has a line of its own: whether it follows new lines (`following` or
+`paused`, always one of them), the search when there is one, and the log's keys, each toggle
+named by what it does next (`s: pause`, `T: show time`). The help line under it keeps the
+view's keys. Here the log is full screen, its times hidden, a search kept:
+
+```
+╭────────────────────────────────────────────────────────────────────────────────────────╮
+│rotating app_rw in prod                                                                 │
+│ERROR could not reach the bastion, retrying in 5s                                       │
+│ERROR could not reach the bastion, retrying in 5s                                       │
+│✓ new password stored                                                                   │
+│                                                                                        │
+╰────────────────────────────────────────────────────────────────────────────────────────╯
+  paused  /error  2/2  n/N: next/previous  /: new search  s: follow  T: show time  w: wrap
+```
+
+On a screen this narrow the end of the line (`g/G`, `f`, `c`) is cut; `h` lists every key.
+
+| Key            | Action |
+|----------------|--------|
+| `/`            | Search the log. Every match lights up as you type, and the view jumps to the first at or below the line at the top. `enter` keeps the search, `esc` cancels it. The text is searched as it is, not as a pattern; all in lower case it matches any case, with a capital only its own (smart case). |
+| `n` `N`        | Next / previous match, from the last round to the first. The log's line counts them: `2/17`. |
+| `f`            | Full screen: the log fills the box, without the header and the tabs. `f` or `esc` leaves. |
+| `T`            | Timestamps on / off. |
+| `w`            | Wrap long lines on / off; without it they are cut at the edge. |
+| `s`            | Follow new lines on / off. Scrolling up or jumping to a match stops it too, so a live run does not pull the view away; the log's line says `paused` until `s`, `G` or a scroll down to the end makes it `following` again. |
+| `g` `G`        | Top / bottom (or `home`, `end`). The bottom follows new lines again. |
+| `c`            | Copy the whole log, not only what is on screen: without its colours, with the timestamps if they are shown. |
+
+- On History's list, `/` and `f` open the picked run's log first, and `c` copies it.
+- `T` and `w` hold for every runbook you open until den exits; they are not saved.
+- `esc` goes back one step at a time: the search, then full screen, then from a run's log to
+  the runs, then to the list. Moving to another tab ends the search and full screen.
+- Secret parameters are redacted from the log before it is shown, so a copy has none.
+- The copy goes to the system clipboard. Where there is none (no `xclip` or `wl-copy`, a
+  session over SSH), den asks the terminal to set it (OSC 52): most terminals accept it,
+  tmux only with `set -g set-clipboard on`, and some cap its size, so a long log can arrive
+  cut. `o` opens the whole file in your editor instead.
 
 ### Command line
 

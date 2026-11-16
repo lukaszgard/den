@@ -15,6 +15,7 @@ A runbook is one of your own scripts or commands (shell, Python, Go, anything) t
 - Chain runbooks into sequences that stop at the first failure.
 - Look back at past runs: one log file per run, kept in the runbook's folder, with the run's status and parameters.
 - Open a runbook like a service: its log, its history, what den hands it, and terminals that open in its folder with the same environment.
+- Read a run's log in place, as in k9s: search it with every match lit up, show it full screen, hide its timestamps, wrap long lines, stop it following, and copy it whole without its colours.
 - Create a runbook from a template, or have an agent CLI write it from a description (`den runbook new NAME "…"`): Claude Code, Codex, OpenCode, Copilot CLI, Qwen Code, Droid, Pi or Kimi Code.
 - Change a runbook with an agent: `E` asks what to change and starts the runbook's own `agent` (`claude --model opus`, say) in a tab of its folder.
 - Keep what you type for an agent: `esc` asks to keep it as a draft, a kept draft is a row of the list that `n` offers again, and an agent restarted on its tab can be sent its request again.
