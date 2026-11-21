@@ -19,7 +19,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/elasticache v1.66.0
 	github.com/aws/aws-sdk-go-v2/service/memorydb v1.42.8
 	github.com/aws/aws-sdk-go-v2/service/opensearch v1.88.1
-	github.com/aws/aws-sdk-go-v2/service/rds v1.130.1
+	github.com/aws/aws-sdk-go-v2/service/rds v1.133.0
 	github.com/aws/aws-sdk-go-v2/service/redshift v1.72.0
 	github.com/aws/aws-sdk-go-v2/service/redshiftserverless v1.46.6
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.50.4
@@ -45,8 +45,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.12 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.12 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/v4a v1.5.8 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.23 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.8 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.25 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.12 // indirect
 	github.com/aws/aws-sdk-go-v2/service/signin v1.12.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.39.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.51.6 // indirect
