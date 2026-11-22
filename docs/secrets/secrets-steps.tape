@@ -55,6 +55,17 @@ Sleep 1s     # Act
 Type "a"
 Sleep 1s     # Back
 
+# ── Search the values too: find the key that holds what you typed ────────────
+# Notice: "horse" is in no key, only in db.password's value; the row is listed,
+# stays masked and is tagged "in value".
+Sleep 1s     # Act: / opens the search bar
+Type "/"
+Type "horse"
+Sleep 1.5s   # Type
+Sleep 4s     # Read: db.password, masked, tagged in value
+Escape
+Sleep 1s     # Back: every key again
+
 # ── Copy a value: the clipboard is cleared after 30 s ────────────────────────
 Sleep 1s     # Act
 Type "y"

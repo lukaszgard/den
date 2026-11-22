@@ -524,10 +524,10 @@ func (m Model) View(width, height int, focused bool) string {
 		zone := components.ZoneID("row", len(m.sessions)+i)
 		if focused && i == profCursor {
 			row := selectedRowStyle.Width(leftWidth).Render(fmt.Sprintf("► %s", name))
-			listLines = append(listLines, components.Zone(zone, row))
+			listLines = append(listLines, components.Zone(zone, components.MarkMatches(row, m.query)))
 		} else {
 			row := fmt.Sprintf("  %s", dimStyle.Render(name))
-			listLines = append(listLines, components.Zone(zone, row))
+			listLines = append(listLines, components.Zone(zone, components.MarkMatches(row, m.query)))
 		}
 	}
 

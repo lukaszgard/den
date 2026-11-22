@@ -161,7 +161,7 @@ func press(v *MarkdownView, keys ...string) {
 // puts the match at the top, one line of context above it, unless the
 // document ends too soon for that.
 func onTop(v MarkdownView, text string) bool {
-	// The match is drawn in reverse video, which splits the text in two.
+	// The match is lit up, which splits the text in two.
 	view := ansi.Strip(v.vp.View())
 	lines := strings.Split(view, "\n")
 	if v.vp.AtBottom() {

@@ -425,7 +425,7 @@ Select **Secrets** in the left menu and press `→` or `Enter` to focus the list
 |---------|---------------------------------------------------------------|
 | `↑`/`↓` | Move between secrets, or between keys when a secret is open   |
 | `Enter` | Open the selected secret and list its keys (values masked)    |
-| `/`     | Filter: secrets by name, description or location; in an open secret, keys only |
+| `/`     | Filter: secrets by name, description or location; in an open secret, keys and values |
 | `r`     | Reveal / hide the selected value                              |
 | `a`     | Reveal / hide every value                                     |
 | `t`     | Switch the open secret between tree and flat view             |
@@ -449,8 +449,11 @@ for every secret, and **Remember password** for KeePassXC entries.
 
 - In the list, it matches names, descriptions and locations (file path or
   secret ID).
-- In an open secret, it matches **key names only, never values**. Matching values
-  would show which masked rows contain what you typed, which gives them away.
+- In an open secret, it matches key names and values, ignoring case: type a
+  host, a token prefix or an account ID to find the key that holds it. What
+  matched lights up in yellow, in a key or a revealed value. A row found by its
+  value alone stays masked and is tagged `in value`; `r` reveals it. Whoever sees your screen, on a screen share say, sees the query and which
+  keys it matched, so they learn that those keys hold what you typed.
 - While you type, `↑`/`↓` move through the results. Every other key is text,
   including `j`, `k`, `h` and `q`.
 - `Enter` closes the bar and keeps the filter, so `r`, `a`, `y` and `e` act on the

@@ -69,7 +69,7 @@ func TestLogViewSearchLightsUpTheMatchOnAColouredLine(t *testing.T) {
 		t.Errorf("match = %+v, want line 0, cells 4-9", m)
 	}
 	got := l.View()
-	if want := currentMatchStyle.Render("error"); !strings.Contains(got, want) {
+	if want := CurrentMatchStyle.Render("error"); !strings.Contains(got, want) {
 		t.Errorf("view = %q, want the match lit up as %q", got, want)
 	}
 	if !strings.Contains(got, "\x1b[31mred") {
@@ -153,7 +153,7 @@ func TestLogViewKeepsItsMatchAsLinesArrive(t *testing.T) {
 	if cur, total := l.MatchInfo(); cur != 2 || total != 3 {
 		t.Errorf("MatchInfo = %d/%d, want 2/3: the same match, and the new line's", cur, total)
 	}
-	if !strings.Contains(l.View(), currentMatchStyle.Render("x")) {
+	if !strings.Contains(l.View(), CurrentMatchStyle.Render("x")) {
 		t.Error("the current match is no longer lit up after new lines")
 	}
 }

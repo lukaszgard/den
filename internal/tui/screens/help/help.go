@@ -457,7 +457,9 @@ func (m Model) line(r row, width, titleWidth int, focused bool) string {
 		n := r.topic.Matches(m.query)
 		about = fmt.Sprintf("%d %s", n, plural(n, "match", "matches"))
 	}
-	line := "   " + cursor + name.Render(cell)
+	// The title lights up when it holds the query; most matches are in the
+	// text, counted beside it and lit up once the topic opens.
+	line := "   " + cursor + components.MarkMatches(name.Render(cell), m.query)
 	// 3 indent + 2 cursor + the title column + 3 gap.
 	if room := width - 8 - titleWidth; room >= 12 {
 		line += "   " + dim.Render(ansi.Truncate(about, room, "…"))

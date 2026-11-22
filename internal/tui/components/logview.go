@@ -69,15 +69,9 @@ type logLine struct {
 // which of the line's hits it is.
 type match struct{ line, hit, col0, col1 int }
 
-var (
-	// logColour is the colour of a log line's own text, under any colour the
-	// process printed.
-	logColour = lipgloss.NewStyle().Foreground(lipgloss.Color("#9B9B9B"))
-	// A match sets its own text and background colours, so it reads on a dark
-	// and a light terminal alike; the one jumped to is the brighter.
-	matchStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("#1a1a1a")).Background(lipgloss.Color("#A89A4E"))
-	currentMatchStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#1a1a1a")).Background(lipgloss.Color("#ECFD65"))
-)
+// logColour is the colour of a log line's own text, under any colour the
+// process printed. A match is lit up as wherever else / finds one (match.go).
+var logColour = lipgloss.NewStyle().Foreground(lipgloss.Color("#9B9B9B"))
 
 // NewLogView creates a LogView with the given dimensions.
 func NewLogView(width, height int) LogView {
@@ -232,19 +226,6 @@ func findHits(re *regexp.Regexp, plain string) [][2]int {
 		}
 	}
 	return hits
-}
-
-// markHits lights up hits in line, the one numbered cur brighter.
-func markHits(line string, hits [][2]int, cur int) string {
-	ranges := make([]lipgloss.Range, len(hits))
-	for i, h := range hits {
-		style := matchStyle
-		if i == cur {
-			style = currentMatchStyle
-		}
-		ranges[i] = lipgloss.NewRange(h[0], h[1], style)
-	}
-	return lipgloss.StyleRanges(line, ranges...)
 }
 
 // queryRegexp finds q as plain text, with smart case: a query without capitals

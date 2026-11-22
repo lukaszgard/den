@@ -283,8 +283,12 @@ func (m Model) View(width, height int, focused bool) string {
 					Foreground(lipgloss.Color("#FFFDF5"))
 			}
 
+			// The name and the type are what the filter matched (the
+			// environment is not on the row); each cell is styled on its own,
+			// so each can be marked on its own.
 			line := fmt.Sprintf("  %s %s  %s  %s  %s",
-				dot, rowStyle.Render(padded), badge, portStr, extra)
+				dot, components.MarkMatches(rowStyle.Render(padded), m.query),
+				components.MarkMatches(badge, m.query), portStr, extra)
 
 			if selected {
 				line = lipgloss.NewStyle().

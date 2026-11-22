@@ -182,24 +182,137 @@ func TestWithoutAutoRevealEverythingStartsMasked(t *testing.T) {
 	}
 }
 
-func TestKeySearchFiltersKeysNotValues(t *testing.T) {
-	m := openItem(t, autoItem(false))
+// search opens the search bar on m and types q.
+func search(t *testing.T, m Model, q string) Model {
+	t.Helper()
 	m, _ = m.Update(testkeys.Press("/"), true)
 	if !m.Searching() {
 		t.Fatal("/ must open the search bar")
 	}
-	m = typeText(m, "tok") // only in the api.token key... and its value
+	return typeText(m, q)
+}
+
+func TestSearchMatchesKeysAndValues(t *testing.T) {
+	// In the api.token key and its value: the key explains the row, no tag.
+	m := search(t, openItem(t, autoItem(false)), "tok")
 	v := ansi.Strip(m.View(100, 30, true))
-	if strings.Contains(v, "db.password") || !strings.Contains(v, "api.token") {
+	if strings.Contains(v, "db.password") {
 		t.Fatalf("filter by key failed:\n%s", v)
 	}
+	if l := lineWith(t, v, "api.token"); strings.Contains(l, "in value") {
+		t.Errorf("a key match must not be tagged: %q", l)
+	}
 
-	// A string found only in a value must match nothing.
+	// Only in db.password's value: listed, still masked, tagged.
+	for _, q := range []string{"hunter", "HUNTER"} {
+		m = search(t, openItem(t, autoItem(false)), q)
+		v = ansi.Strip(m.View(100, 30, true))
+		if strings.Contains(v, "api.token") {
+			t.Fatalf("%s: a row matching neither key nor value is listed:\n%s", q, v)
+		}
+		if strings.Contains(v, "hunter2") {
+			t.Fatalf("%s: a value match must stay masked:\n%s", q, v)
+		}
+		if l := lineWith(t, v, "db.password"); !strings.Contains(l, mask+"   in value") {
+			t.Errorf("%s: a value match must be tagged: %q", q, l)
+		}
+	}
+
+	m = search(t, openItem(t, autoItem(false)), "zzz")
+	if !strings.Contains(ansi.Strip(m.View(100, 30, true)), "No keys or values match") {
+		t.Fatal("a query matching nothing must say so")
+	}
+}
+
+func TestValueMatchRevealsWithR(t *testing.T) {
+	m := search(t, openItem(t, autoItem(false)), "hunter")
+	m, _ = m.Update(testkeys.Press("enter"), true)
+	m, _ = m.Update(testkeys.Press("r"), true)
+	v := ansi.Strip(m.View(100, 30, true))
+	if l := lineWith(t, v, "db.password"); !strings.Contains(l, "hunter2   in value") {
+		t.Errorf("r must reveal the value and keep its tag: %q", l)
+	}
+	if strings.Contains(v, "api.token") || m.fieldQuery != "hunter" {
+		t.Fatalf("the filter must stay:\n%s", v)
+	}
+}
+
+// A long value is cut to the row, tag included, and a narrow pane cuts the
+// tag rather than the mask.
+func TestValueTagFitsTheRow(t *testing.T) {
+	long := fakeItem{name: "e2e", status: secrets.Status{Ready: true}, auto: true,
+		fields: []secrets.Field{{Key: "k", Value: strings.Repeat("x", 200) + "needle"}}}
+	m := search(t, openItem(t, long), "needle")
+	v := ansi.Strip(m.View(100, 30, true))
+	l := lineWith(t, v, "in value")
+	if w := len([]rune(l)); w > 100 {
+		t.Errorf("row is %d wide in a 100-wide pane: %q", w, l)
+	}
+	if !strings.Contains(l, "…   in value") {
+		t.Errorf("a long value must be cut before the tag: %q", l)
+	}
+
+	m = search(t, openItem(t, autoItem(false)), "hunter")
+	val, tag := m.valueCell(0, m.fields[0], 12)
+	if got := ansi.Strip(val + tag); got != mask+"   …" {
+		t.Errorf("narrow cell = %q, want the mask and a cut tag", got)
+	}
+}
+
+// litMark starts a lit-up match in a view.
+var litMark, _, _ = strings.Cut(components.MatchStyle.Render("x"), "x")
+
+// / lights up what it matched, as it does everywhere else: a key, a revealed
+// value, a tree heading. A mask holds nothing to light up, and the tag beside
+// it is not part of the match.
+func TestSearchLightsUpWhatItMatched(t *testing.T) {
+	m := search(t, openItem(t, autoItem(false)), "TOK")
+	if v := m.View(100, 30, true); !strings.Contains(v, components.MatchStyle.Render("tok")) {
+		t.Errorf("the key should light up:\n%q", v)
+	}
+
+	m = search(t, openItem(t, fakeItem{name: "e2e", status: secrets.Status{Ready: true},
+		fields: []secrets.Field{{Key: "k", Value: "a value"}}}), "value")
+	if v := m.View(100, 30, true); !strings.Contains(ansi.Strip(v), "in value") || strings.Contains(v, litMark) {
+		t.Errorf("a masked row lights up nothing, its tag included:\n%q", v)
+	}
+
+	m = search(t, openItem(t, autoItem(false)), "hunter")
+	m, _ = m.Update(testkeys.Press("enter"), true)
+	m, _ = m.Update(testkeys.Press("r"), true)
+	if v := m.View(100, 30, true); !strings.Contains(v, components.MatchStyle.Render("hunter")) {
+		t.Errorf("a revealed value should light up:\n%q", v)
+	}
+
+	m = search(t, openItem(t, nestedItem(t, true)), "client")
+	if v := m.View(100, 30, true); strings.Count(v, components.MatchStyle.Render("client")) < 2 {
+		t.Errorf("the heading and the key under it should light up:\n%q", v)
+	}
+}
+
+// describedItem has a description and shows its location in the box.
+type describedItem struct{ fakeItem }
+
+func (describedItem) Description() string { return "Payments team" }
+func (d describedItem) Details() []secrets.Detail {
+	return []secrets.Detail{{Label: "File", Value: d.Location()}, {Label: "Team", Value: "enc-ops"}}
+}
+
+// A secret found by its description or location has it lit up in the box,
+// and only that: the other details were not searched.
+func TestListSearchLightsUpTheBox(t *testing.T) {
+	it := describedItem{fakeItem{name: "billing", status: secrets.Status{Ready: true}}}
+	m := New([]secrets.Item{it}, 100, 30)
+	m, _ = m.Update(testkeys.Press("/"), true)
+	m = typeText(m, "PAYMENTS")
+	if v := m.View(100, 30, true); !strings.Contains(v, components.MatchStyle.Render("Payments")) {
+		t.Errorf("the description should light up:\n%q", v)
+	}
 	m, _ = m.Update(testkeys.Press("esc"), true)
 	m, _ = m.Update(testkeys.Press("/"), true)
-	m = typeText(m, "hunter")
-	if !strings.Contains(ansi.Strip(m.View(100, 30, true)), "No keys match") {
-		t.Fatal("search must never match values")
+	m = typeText(m, "ENC") // in the location, /x/billing.enc.yaml, and in enc-ops
+	if v := m.View(100, 30, true); strings.Count(v, components.MatchStyle.Render("enc")) != 1 {
+		t.Errorf("the location should light up, and not a detail the filter did not read:\n%q", v)
 	}
 }
 
@@ -257,6 +370,9 @@ func TestListSearchFiltersFiles(t *testing.T) {
 	v := ansi.Strip(m.View(100, 30, true))
 	if strings.Contains(v, "eu staging") || !strings.Contains(v, "us prod") {
 		t.Fatalf("list filter failed:\n%s", v)
+	}
+	if v := m.View(100, 30, true); !strings.Contains(v, components.MatchStyle.Render("prod")) {
+		t.Fatalf("the name should light up:\n%q", v)
 	}
 	// enter opens the one match.
 	m, cmd := m.Update(testkeys.Press("enter"), true)
@@ -582,10 +698,32 @@ func TestBrowseSearchFiltersEntries(t *testing.T) {
 	if strings.Contains(v, "CI/Jenkins") || !strings.Contains(v, "AMS/Kafka/E2E") {
 		t.Fatalf("entry search failed:\n%s", v)
 	}
+	if v := m.View(100, 30, true); !strings.Contains(v, components.MatchStyle.Render("Kafka")) {
+		t.Fatalf("the path should light up:\n%q", v)
+	}
 	m, cmd := m.Update(testkeys.Press("enter"), true) // opens the one match
 	m = deliver(m, cmd)
 	if m.entry != "AMS/Kafka/E2E" {
 		t.Fatalf("opened %q", m.entry)
+	}
+}
+
+// Inside an open entry, / matches values as in any other secret; the entry
+// list keeps matching paths only (TestBrowseSearchFiltersEntries).
+func TestBrowseEntrySearchMatchesValues(t *testing.T) {
+	m := unlockBrowse(t, newBrowse())
+	m, cmd := m.Update(testkeys.Press("enter"), true)
+	m = deliver(m, cmd)
+	if m.entry != "CI/Jenkins" {
+		t.Fatalf("opened %q", m.entry)
+	}
+	m = search(t, m, "jenkins")
+	v := ansi.Strip(m.View(100, 30, true))
+	if strings.Contains(v, "secret-of-") {
+		t.Fatalf("a value match must stay masked:\n%s", v)
+	}
+	if l := lineWith(t, v, "Password"); !strings.Contains(l, mask+"   in value") {
+		t.Errorf("an entry field found by its value must be tagged: %q", l)
 	}
 }
 
@@ -901,6 +1039,21 @@ func TestTreeFilterKeepsParentKeys(t *testing.T) {
 	v := ansi.Strip(m.View(100, 30, true))
 	if !strings.Contains(v, "  client.aacn:") || !strings.Contains(v, "basicauth.clientId:") {
 		t.Fatalf("a match must show under its parent key:\n%s", v)
+	}
+	if strings.Contains(v, "cicd-database-secret") || strings.Contains(v, "apiKey") {
+		t.Fatalf("the filter must hide the rest:\n%s", v)
+	}
+}
+
+func TestValueMatchInTreeKeepsParents(t *testing.T) {
+	m := search(t, openItem(t, nestedItem(t, true)), "CID-1")
+	m, _ = m.Update(testkeys.Press("enter"), true)
+	v := ansi.Strip(m.View(100, 30, true))
+	if !strings.Contains(v, "  client.aacn:") {
+		t.Fatalf("a value match must show under its parent key:\n%s", v)
+	}
+	if l := lineWith(t, v, "basicauth.clientId:"); !strings.Contains(l, mask+"   in value") {
+		t.Errorf("a value match must stay masked and be tagged: %q", l)
 	}
 	if strings.Contains(v, "cicd-database-secret") || strings.Contains(v, "apiKey") {
 		t.Fatalf("the filter must hide the rest:\n%s", v)
