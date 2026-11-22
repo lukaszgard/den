@@ -1,5 +1,41 @@
 # Changelog
 
+## [1.12.0] - 2026-11-22
+
+**`/` now finds the key that holds a value, and a match looks the same in every panel.** In an
+open secret, the search used to read key names only. You often know the value instead (a host, a
+token prefix, an account ID), so it now reads values too, and a value it finds stays masked. What
+any search finds now lights up in yellow, as it does in a runbook's log.
+
+### 🔐 Secrets
+
+- In an open secret, `/` matches key names and values, ignoring case. A row found by its value
+  alone stays masked and is tagged `in value`, so you can see why it is listed. `r`, `a` and `y`
+  work on it as on any other row. Whoever sees your screen sees the query and which keys it
+  matched, so they learn that those keys hold what you typed. The list of secrets and a KeePassXC
+  database's entry list are searched as before, and nothing more is decrypted.
+- The empty result now says "No keys or values match your search."
+
+### 🖥 The dashboard
+
+- A search match looks the same everywhere: dark text on yellow, as you type. Before, only a
+  runbook's log lit its matches up.
+- The filtered lists light up what they matched, in the columns the filter reads: a service's name
+  and type in Connect, a profile's name in AWS, a runbook's name and description, a line of
+  `den.yaml` in Config, a topic's title in Help. In Secrets, they also light up a secret's name and
+  its description and file in the box under the list, keys and revealed values, tree headings and
+  KeePassXC entry paths. A masked value never lights up.
+- A Help topic and the changelog light up every match, with the ones on the line the view is on
+  brighter. Before, only the current match showed, in reverse video.
+- A selected row keeps its bar after a match.
+
+### 🔌 Data stores and tunnels
+
+- Routine updates, with nothing meant to change in den: the AWS SDK for Go (ElastiCache 1.66.0,
+  OpenSearch 1.88.1, RDS 1.133.0, Redshift 1.72.0, Redshift Serverless 1.46.6, and `ssooidc`
+  1.44.5, the IAM Identity Center API that renews an SSO session's token), `golang.org/x/term`
+  0.48.0, and Lip Gloss 2.1.0, which draws the dashboard.
+
 ## [1.11.0] - 2026-11-16
 
 **A runbook's log can now be searched, shown full screen and copied, without leaving den.** Until
