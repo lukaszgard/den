@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/lukaszgard/den/internal/secrets"
 	"github.com/lukaszgard/den/internal/secrets/gitfile"
@@ -246,7 +248,7 @@ func (m Model) Shortcuts() []components.ShortcutGroup {
 		{Title: "Secrets", Keys: []components.Shortcut{
 			{Keys: "↑ ↓", Text: "Select a secret or a key (or k, j)"},
 			{Keys: "enter", Text: "Open it: list its keys, values masked"},
-			{Keys: "/", Text: "Filter secrets, or an open one's keys"},
+			{Keys: "/", Text: "Filter secrets, or an open one's keys and values"},
 			{Keys: "esc", Text: "Clear the filter, then close the secret"},
 		}},
 		{Title: "Values", Note: "Dropped when the panel loses focus.", Keys: []components.Shortcut{
@@ -363,17 +365,73 @@ func (m Model) visibleItems() []int {
 	return out
 }
 
-// visibleFields returns the indexes of the fields matching fieldQuery. Keys
-// only: matching values would tell which masked rows contain the query.
+// visibleFields returns the indexes of the fields whose key or value contains
+// fieldQuery. A row found by its value alone stays masked and is tagged
+// instead (valueCell): whoever sees the screen sees the query too, so all it
+// tells is that this key holds what was typed.
 func (m Model) visibleFields() []int {
-	q := strings.ToLower(m.fieldQuery)
 	var out []int
 	for i, f := range m.fields {
-		if q == "" || strings.Contains(strings.ToLower(f.Key), q) {
+		if containsFold(f.Key, m.fieldQuery) || containsFold(f.Value, m.fieldQuery) {
 			out = append(out, i)
 		}
 	}
 	return out
+}
+
+// valueOnlyMatch reports whether f is listed only because its value contains
+// the filter. A row whose key matches is explained by its key and needs no tag.
+func (m Model) valueOnlyMatch(f secrets.Field) bool {
+	return m.fieldQuery != "" && !containsFold(f.Key, m.fieldQuery) && containsFold(f.Value, m.fieldQuery)
+}
+
+// containsFold reports whether sub is in s, ignoring case. It compares rune
+// by rune in place rather than lowercasing s: s is often a decrypted value,
+// and a lowercased copy would be one more plaintext string that the pane
+// cannot clear and that lingers until the garbage collector frees it.
+func containsFold(s, sub string) bool {
+	for i := 0; ; {
+		if hasPrefixFold(s[i:], sub) {
+			return true
+		}
+		if i == len(s) {
+			return false
+		}
+		_, w := utf8.DecodeRuneInString(s[i:])
+		i += w
+	}
+}
+
+// hasPrefixFold reports whether s starts with prefix, ignoring case. Runes
+// are compared one at a time because a rune and its other case may differ in
+// length (K and the Kelvin sign), so byte offsets cannot be matched up.
+func hasPrefixFold(s, prefix string) bool {
+	for prefix != "" {
+		if s == "" {
+			return false
+		}
+		a, wa := utf8.DecodeRuneInString(s)
+		b, wb := utf8.DecodeRuneInString(prefix)
+		if !equalFoldRune(a, b) {
+			return false
+		}
+		s, prefix = s[wa:], prefix[wb:]
+	}
+	return true
+}
+
+// equalFoldRune reports whether a and b are the same letter in any case,
+// walking a's case-folding orbit as strings.EqualFold does.
+func equalFoldRune(a, b rune) bool {
+	if a == b {
+		return true
+	}
+	for r := unicode.SimpleFold(a); r != a; r = unicode.SimpleFold(r) {
+		if r == b {
+			return true
+		}
+	}
+	return false
 }
 
 // selectedIndex is the index into m.items of the highlighted item.
@@ -1232,7 +1290,7 @@ func (m Model) renderOpen(width, height int, focused bool) string {
 	case len(m.fields) == 0:
 		rows = append(rows, lipgloss.NewStyle().Foreground(colorDim).Padding(0, 2).Render("(empty)"))
 	case len(vis) == 0:
-		rows = append(rows, lipgloss.NewStyle().Foreground(colorDim).Padding(0, 2).Render("No keys match your search."))
+		rows = append(rows, lipgloss.NewStyle().Foreground(colorDim).Padding(0, 2).Render("No keys or values match your search."))
 	case m.tree:
 		rows = append(rows, m.renderTree(vis, width, visible, focused)...)
 	default:
@@ -1283,7 +1341,7 @@ func (m Model) renderFlat(vis []int, width, visible int, focused bool) []string 
 	var rows []string
 	for i := start; i < end; i++ {
 		f := m.fields[vis[i]]
-		line := fmt.Sprintf("  %-*s  %s", keyW, truncate(f.Key, keyW), m.shownValue(i, f.Value, max(width-keyW-8, 8)))
+		line := fmt.Sprintf("  %-*s  %s", keyW, truncate(f.Key, keyW), m.valueCell(i, f, max(width-keyW-8, 8)))
 		if focused && i == m.fieldCur {
 			line = selectedStyle(width).Render(line)
 		}
@@ -1375,7 +1433,7 @@ func (m Model) renderTree(vis []int, width, visible int, focused bool) []string 
 			continue
 		}
 		keyW := min(labelW[row.parent], width/2)
-		val := m.shownValue(row.vis, m.fields[vis[row.vis]].Value, max(width-keyW-7, 8))
+		val := m.valueCell(row.vis, m.fields[vis[row.vis]], max(width-keyW-7, 8))
 		line := fmt.Sprintf("  %-*s %s", keyW, truncate(label, keyW), val)
 		if focused && row.vis == m.fieldCur {
 			line = selectedStyle(width).Render(line)
@@ -1383,6 +1441,24 @@ func (m Model) renderTree(vis []int, width, visible int, focused bool) []string 
 		out = append(out, components.Zone(components.ZoneID("field", row.vis), line))
 	}
 	return out
+}
+
+// valueTag follows a row listed only because its value matches the filter,
+// so a masked row shows why it is there.
+const valueTag = "   in value"
+
+// valueCell is the i-th visible value as shownValue gives it, tagged when the
+// row is found by its value alone. The tag stays on a revealed row: a long
+// value may be cut off before the part that matched. n caps the cell's width,
+// tag included, so the row is as wide as any other.
+func (m Model) valueCell(i int, f secrets.Field, n int) string {
+	if !m.valueOnlyMatch(f) {
+		return m.shownValue(i, f.Value, n)
+	}
+	val := m.shownValue(i, f.Value, max(n-len(valueTag), 8))
+	// The mask keeps its width, so a narrow pane cuts the tag instead.
+	tag := truncate(valueTag, n-lipgloss.Width(val))
+	return val + lipgloss.NewStyle().Foreground(colorDim).Render(tag)
 }
 
 // shownValue is the i-th visible value as the pane shows it: the mask, unless

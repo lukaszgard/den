@@ -11,7 +11,7 @@ The Secrets panel opens the secrets you work with without leaving den: SOPS-encr
 - See every secret with a status worked out without decrypting: ready, file not found, tool missing, SSO login expired, login required.
 - Open a secret and browse its keys, as a tree indented like the YAML it came from or as a flat list of dotted keys.
 - Reveal one value, or all of them, and copy one; the clipboard is cleared 30 seconds later.
-- Filter the list by name, description or location, and an open secret by key name (never by value, which would give masked values away).
+- Filter the list by name, description or location, and an open secret by key name or value (a row found by its value stays masked, tagged *in value*).
 - Edit a SOPS file in `$EDITOR`; sops encrypts it again when you save. The other providers are read-only.
 - Log in from den: an AWS SSO login turns the secrets waiting for it ready, and a Vault secret runs its own `login` command.
 - Log an RDS service in with a username and password from a secret: `auth` in its `rds:` section (see RDS and Aurora).
