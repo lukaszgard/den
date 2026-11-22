@@ -131,6 +131,19 @@ func TestSearchFindsTopicsByTheirText(t *testing.T) {
 	}
 }
 
+// A title holding the query lights up as a match does everywhere else, and so
+// does every match in the topic it opens.
+func TestSearchLightsUpTitlesAndText(t *testing.T) {
+	m := press(newTestModel(t, 80, 30), "/", "REDIS")
+	if v := m.View(80, 30, true); !strings.Contains(v, components.MatchStyle.Render("Redis")) {
+		t.Fatalf("the title should light up:\n%q", v)
+	}
+	m = press(m, "esc", "/", "pgpass", "enter")
+	if v := m.View(80, 30, true); !strings.Contains(v, components.CurrentMatchStyle.Render("pgpass")) {
+		t.Fatalf("the topic should open with its match lit up:\n%q", v)
+	}
+}
+
 func TestSearchKeysWhileTyping(t *testing.T) {
 	m := press(newTestModel(t, 80, 30), "/", "tokens")
 	if view := ansi.Strip(m.View(80, 30, true)); !strings.Contains(view, "2 topics") {

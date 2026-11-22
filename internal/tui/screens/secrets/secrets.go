@@ -13,8 +13,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/lukaszgard/den/internal/secrets"
 	"github.com/lukaszgard/den/internal/secrets/gitfile"
@@ -321,10 +319,9 @@ func (m Model) listing() bool { return m.open && m.browsing && m.entry == "" }
 
 // visibleEntries returns the indexes of the entries matching entryQuery.
 func (m Model) visibleEntries() []int {
-	q := strings.ToLower(m.entryQuery)
 	var out []int
 	for i, e := range m.entries {
-		if q == "" || strings.Contains(strings.ToLower(e), q) {
+		if components.ContainsFold(e, m.entryQuery) {
 			out = append(out, i)
 		}
 	}
@@ -352,13 +349,12 @@ func probeAll(items []secrets.Item) []secrets.Status {
 // visibleItems returns the indexes of the items matching itemQuery, by name,
 // description or location.
 func (m Model) visibleItems() []int {
-	q := strings.ToLower(m.itemQuery)
+	q := m.itemQuery
 	var out []int
 	for i, it := range m.items {
-		if q == "" ||
-			strings.Contains(strings.ToLower(it.Name()), q) ||
-			strings.Contains(strings.ToLower(it.Description()), q) ||
-			strings.Contains(strings.ToLower(it.Location()), q) {
+		if components.ContainsFold(it.Name(), q) ||
+			components.ContainsFold(it.Description(), q) ||
+			components.ContainsFold(it.Location(), q) {
 			out = append(out, i)
 		}
 	}
@@ -372,7 +368,7 @@ func (m Model) visibleItems() []int {
 func (m Model) visibleFields() []int {
 	var out []int
 	for i, f := range m.fields {
-		if containsFold(f.Key, m.fieldQuery) || containsFold(f.Value, m.fieldQuery) {
+		if components.ContainsFold(f.Key, m.fieldQuery) || components.ContainsFold(f.Value, m.fieldQuery) {
 			out = append(out, i)
 		}
 	}
@@ -382,56 +378,7 @@ func (m Model) visibleFields() []int {
 // valueOnlyMatch reports whether f is listed only because its value contains
 // the filter. A row whose key matches is explained by its key and needs no tag.
 func (m Model) valueOnlyMatch(f secrets.Field) bool {
-	return m.fieldQuery != "" && !containsFold(f.Key, m.fieldQuery) && containsFold(f.Value, m.fieldQuery)
-}
-
-// containsFold reports whether sub is in s, ignoring case. It compares rune
-// by rune in place rather than lowercasing s: s is often a decrypted value,
-// and a lowercased copy would be one more plaintext string that the pane
-// cannot clear and that lingers until the garbage collector frees it.
-func containsFold(s, sub string) bool {
-	for i := 0; ; {
-		if hasPrefixFold(s[i:], sub) {
-			return true
-		}
-		if i == len(s) {
-			return false
-		}
-		_, w := utf8.DecodeRuneInString(s[i:])
-		i += w
-	}
-}
-
-// hasPrefixFold reports whether s starts with prefix, ignoring case. Runes
-// are compared one at a time because a rune and its other case may differ in
-// length (K and the Kelvin sign), so byte offsets cannot be matched up.
-func hasPrefixFold(s, prefix string) bool {
-	for prefix != "" {
-		if s == "" {
-			return false
-		}
-		a, wa := utf8.DecodeRuneInString(s)
-		b, wb := utf8.DecodeRuneInString(prefix)
-		if !equalFoldRune(a, b) {
-			return false
-		}
-		s, prefix = s[wa:], prefix[wb:]
-	}
-	return true
-}
-
-// equalFoldRune reports whether a and b are the same letter in any case,
-// walking a's case-folding orbit as strings.EqualFold does.
-func equalFoldRune(a, b rune) bool {
-	if a == b {
-		return true
-	}
-	for r := unicode.SimpleFold(a); r != a; r = unicode.SimpleFold(r) {
-		if r == b {
-			return true
-		}
-	}
-	return false
+	return m.fieldQuery != "" && !components.ContainsFold(f.Key, m.fieldQuery) && components.ContainsFold(f.Value, m.fieldQuery)
 }
 
 // selectedIndex is the index into m.items of the highlighted item.
@@ -1169,7 +1116,8 @@ func (m Model) renderList(width, height int, focused bool) string {
 			dot = lipgloss.NewStyle().Foreground(colorErr).Render("✕")
 			label = lipgloss.NewStyle().Foreground(colorErr).Render(st.Reason)
 		}
-		line := fmt.Sprintf("  %s %-*s  %s", dot, maxName, truncate(it.Name(), maxName), label)
+		name := truncate(it.Name(), maxName)
+		line := fmt.Sprintf("  %s %-*s  %s", dot, maxName, name, label)
 		// Readiness and freshness are apart: a file can be readable and outdated.
 		if badge := m.gitBadge(i); badge != "" {
 			line += "   " + badge
@@ -1177,6 +1125,10 @@ func (m Model) renderList(width, height int, focused bool) string {
 		if focused && row == m.cursor {
 			line = selectedStyle(width).Render(line)
 		}
+		// The name lights up, not the status beside it; a description or a
+		// location that matched lights up in the box under the list.
+		from := lipgloss.Width("  " + dot + " ")
+		line = components.MarkMatches(line, m.itemQuery, [2]int{from, from + lipgloss.Width(name)})
 		rows = append(rows, components.Zone(components.ZoneID("item", row), line))
 	}
 	// The search bar is pinned to the last line.
@@ -1212,11 +1164,16 @@ func (m Model) renderBox(width, height int) string {
 	var lines []string
 	if it, ok := m.selected(); ok {
 		if d := it.Description(); d != "" {
-			lines = append(lines, lipgloss.NewStyle().Foreground(colorMuted).Render(truncate(d, innerW)))
+			lines = append(lines, components.MarkMatches(
+				lipgloss.NewStyle().Foreground(colorMuted).Render(truncate(d, innerW)), m.itemQuery))
 		}
 		detail := func(d secrets.Detail) string {
 			label := lipgloss.NewStyle().Foreground(colorHead).Render(fmt.Sprintf("%-12s", d.Label))
-			return label + " " + ansi.Truncate(d.Value, max(innerW-13, 1), "…")
+			value := ansi.Truncate(d.Value, max(innerW-13, 1), "…")
+			if d.Value == it.Location() {
+				value = components.MarkMatches(value, m.itemQuery)
+			}
+			return label + " " + value
 		}
 		for _, d := range it.Details() {
 			lines = append(lines, detail(d))
@@ -1341,11 +1298,14 @@ func (m Model) renderFlat(vis []int, width, visible int, focused bool) []string 
 	var rows []string
 	for i := start; i < end; i++ {
 		f := m.fields[vis[i]]
-		line := fmt.Sprintf("  %-*s  %s", keyW, truncate(f.Key, keyW), m.valueCell(i, f, max(width-keyW-8, 8)))
+		key := truncate(f.Key, keyW)
+		val, tag := m.valueCell(i, f, max(width-keyW-8, 8))
+		prefix := fmt.Sprintf("  %-*s  ", keyW, key)
+		line := prefix + val + tag
 		if focused && i == m.fieldCur {
 			line = selectedStyle(width).Render(line)
 		}
-		rows = append(rows, components.Zone(components.ZoneID("field", i), line))
+		rows = append(rows, components.Zone(components.ZoneID("field", i), m.markField(line, key, prefix, val)))
 	}
 	return rows
 }
@@ -1429,16 +1389,19 @@ func (m Model) renderTree(vis []int, width, visible int, focused bool) []string 
 		row := rows[r]
 		label := strings.Repeat("  ", row.depth) + row.label
 		if row.vis < 0 {
-			out = append(out, "  "+head.Render(truncate(label, width-4)))
+			// A heading is part of the keys under it, so it lights up too.
+			out = append(out, components.MarkMatches("  "+head.Render(truncate(label, width-4)), m.fieldQuery))
 			continue
 		}
 		keyW := min(labelW[row.parent], width/2)
-		val := m.valueCell(row.vis, m.fields[vis[row.vis]], max(width-keyW-7, 8))
-		line := fmt.Sprintf("  %-*s %s", keyW, truncate(label, keyW), val)
+		val, tag := m.valueCell(row.vis, m.fields[vis[row.vis]], max(width-keyW-7, 8))
+		label = truncate(label, keyW)
+		prefix := fmt.Sprintf("  %-*s ", keyW, label)
+		line := prefix + val + tag
 		if focused && row.vis == m.fieldCur {
 			line = selectedStyle(width).Render(line)
 		}
-		out = append(out, components.Zone(components.ZoneID("field", row.vis), line))
+		out = append(out, components.Zone(components.ZoneID("field", row.vis), m.markField(line, label, prefix, val)))
 	}
 	return out
 }
@@ -1447,18 +1410,27 @@ func (m Model) renderTree(vis []int, width, visible int, focused bool) []string 
 // so a masked row shows why it is there.
 const valueTag = "   in value"
 
-// valueCell is the i-th visible value as shownValue gives it, tagged when the
-// row is found by its value alone. The tag stays on a revealed row: a long
-// value may be cut off before the part that matched. n caps the cell's width,
-// tag included, so the row is as wide as any other.
-func (m Model) valueCell(i int, f secrets.Field, n int) string {
+// valueCell is the i-th visible value as shownValue gives it and, when the
+// row is found by its value alone, the tag that says so. The tag stays on a
+// revealed row: a long value may be cut off before the part that matched. n
+// caps the two together, so the row is as wide as any other.
+func (m Model) valueCell(i int, f secrets.Field, n int) (val, tag string) {
 	if !m.valueOnlyMatch(f) {
-		return m.shownValue(i, f.Value, n)
+		return m.shownValue(i, f.Value, n), ""
 	}
-	val := m.shownValue(i, f.Value, max(n-len(valueTag), 8))
+	val = m.shownValue(i, f.Value, max(n-len(valueTag), 8))
 	// The mask keeps its width, so a narrow pane cuts the tag instead.
-	tag := truncate(valueTag, n-lipgloss.Width(val))
-	return val + lipgloss.NewStyle().Foreground(colorDim).Render(tag)
+	tag = truncate(valueTag, n-lipgloss.Width(val))
+	return val, lipgloss.NewStyle().Foreground(colorDim).Render(tag)
+}
+
+// markField lights up the query in a finished value row: in its key, and in
+// its value once revealed. prefix is the row up to the value. The tag is left
+// out, and so is a mask, which never holds what was typed.
+func (m Model) markField(line, key, prefix, val string) string {
+	from := lipgloss.Width(prefix)
+	return components.MarkMatches(line, m.fieldQuery,
+		[2]int{2, 2 + lipgloss.Width(key)}, [2]int{from, from + lipgloss.Width(val)})
 }
 
 // shownValue is the i-th visible value as the pane shows it: the mask, unless
@@ -1519,7 +1491,7 @@ func (m Model) renderEntries(width, visible int, focused bool) []string {
 		if focused && i == m.entryCur {
 			line = selectedStyle(width).Render(line)
 		}
-		rows = append(rows, components.Zone(components.ZoneID("entry", i), line))
+		rows = append(rows, components.Zone(components.ZoneID("entry", i), components.MarkMatches(line, m.entryQuery)))
 	}
 	return rows
 }

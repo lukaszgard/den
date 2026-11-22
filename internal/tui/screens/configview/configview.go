@@ -192,7 +192,7 @@ func (m *Model) rebuildViewport() {
 			if i+1 == m.focus {
 				number = m.markStyle(i + 1).Bold(true).Render(fmt.Sprintf("%*d", digits, i+1))
 			}
-			line := m.mark(i+1) + number + "  " + highlightYAMLLine(l)
+			line := m.mark(i+1) + number + "  " + components.MarkMatches(highlightYAMLLine(l), m.query)
 			// Cut, not wrapped: a wrapped line has no number and pushes the
 			// lines after it away from theirs.
 			lines = append(lines, ansi.Truncate(line, max(m.vp.Width(), 1), "…"))

@@ -335,3 +335,14 @@ func TestClickSelectsAProblemInTheList(t *testing.T) {
 		t.Fatal("a click with the list closed should do nothing")
 	}
 }
+
+func TestFilterLightsUpTheMatch(t *testing.T) {
+	m := newPane(t)
+	m, _ = m.Update(testkeys.Press("/"), true)
+	for _, r := range "KEY12" {
+		m, _ = m.Update(testkeys.Press(string(r)), true)
+	}
+	if v := m.View(paneWidth, paneHeight, true); !strings.Contains(v, components.MatchStyle.Render("key12")) {
+		t.Fatalf("the filter should light up what it matched:\n%q", v)
+	}
+}

@@ -450,9 +450,9 @@ for every secret, and **Remember password** for KeePassXC entries.
 - In the list, it matches names, descriptions and locations (file path or
   secret ID).
 - In an open secret, it matches key names and values, ignoring case: type a
-  host, a token prefix or an account ID to find the key that holds it. A row
-  found by its value alone stays masked and is tagged `in value`; `r` reveals
-  it. Whoever sees your screen, on a screen share say, sees the query and which
+  host, a token prefix or an account ID to find the key that holds it. What
+  matched lights up in yellow, in a key or a revealed value. A row found by its
+  value alone stays masked and is tagged `in value`; `r` reveals it. Whoever sees your screen, on a screen share say, sees the query and which
   keys it matched, so they learn that those keys hold what you typed.
 - While you type, `↑`/`↓` move through the results. Every other key is text,
   including `j`, `k`, `h` and `q`.

@@ -253,33 +253,66 @@ func TestValueTagFitsTheRow(t *testing.T) {
 	}
 
 	m = search(t, openItem(t, autoItem(false)), "hunter")
-	cell := m.valueCell(0, m.fields[0], 12)
-	if got := ansi.Strip(cell); got != mask+"   …" {
+	val, tag := m.valueCell(0, m.fields[0], 12)
+	if got := ansi.Strip(val + tag); got != mask+"   …" {
 		t.Errorf("narrow cell = %q, want the mask and a cut tag", got)
 	}
 }
 
-func TestContainsFold(t *testing.T) {
-	for _, c := range []struct {
-		s, sub string
-		want   bool
-	}{
-		{"hunter2", "hunt", true},
-		{"hunter2", "ER2", true},
-		{"Postgres", "gReS", true},
-		{"ÉCOLE", "école", true},
-		{"école", "ÉCOLE", true},
-		{"ÿ-host", "HOST", true},   // a multibyte rune before the match
-		{"Kelvin", "Kelvin", true}, // the Kelvin sign is 3 bytes, K one
-		{"any", "", true},
-		{"", "", true},
-		{"ab", "abc", false},
-		{"hunter2", "tok", false},
-		{"", "a", false},
-	} {
-		if got := containsFold(c.s, c.sub); got != c.want {
-			t.Errorf("containsFold(%q, %q) = %v, want %v", c.s, c.sub, got, c.want)
-		}
+// litMark starts a lit-up match in a view.
+var litMark, _, _ = strings.Cut(components.MatchStyle.Render("x"), "x")
+
+// / lights up what it matched, as it does everywhere else: a key, a revealed
+// value, a tree heading. A mask holds nothing to light up, and the tag beside
+// it is not part of the match.
+func TestSearchLightsUpWhatItMatched(t *testing.T) {
+	m := search(t, openItem(t, autoItem(false)), "TOK")
+	if v := m.View(100, 30, true); !strings.Contains(v, components.MatchStyle.Render("tok")) {
+		t.Errorf("the key should light up:\n%q", v)
+	}
+
+	m = search(t, openItem(t, fakeItem{name: "e2e", status: secrets.Status{Ready: true},
+		fields: []secrets.Field{{Key: "k", Value: "a value"}}}), "value")
+	if v := m.View(100, 30, true); !strings.Contains(ansi.Strip(v), "in value") || strings.Contains(v, litMark) {
+		t.Errorf("a masked row lights up nothing, its tag included:\n%q", v)
+	}
+
+	m = search(t, openItem(t, autoItem(false)), "hunter")
+	m, _ = m.Update(testkeys.Press("enter"), true)
+	m, _ = m.Update(testkeys.Press("r"), true)
+	if v := m.View(100, 30, true); !strings.Contains(v, components.MatchStyle.Render("hunter")) {
+		t.Errorf("a revealed value should light up:\n%q", v)
+	}
+
+	m = search(t, openItem(t, nestedItem(t, true)), "client")
+	if v := m.View(100, 30, true); strings.Count(v, components.MatchStyle.Render("client")) < 2 {
+		t.Errorf("the heading and the key under it should light up:\n%q", v)
+	}
+}
+
+// describedItem has a description and shows its location in the box.
+type describedItem struct{ fakeItem }
+
+func (describedItem) Description() string { return "Payments team" }
+func (d describedItem) Details() []secrets.Detail {
+	return []secrets.Detail{{Label: "File", Value: d.Location()}, {Label: "Team", Value: "enc-ops"}}
+}
+
+// A secret found by its description or location has it lit up in the box,
+// and only that: the other details were not searched.
+func TestListSearchLightsUpTheBox(t *testing.T) {
+	it := describedItem{fakeItem{name: "billing", status: secrets.Status{Ready: true}}}
+	m := New([]secrets.Item{it}, 100, 30)
+	m, _ = m.Update(testkeys.Press("/"), true)
+	m = typeText(m, "PAYMENTS")
+	if v := m.View(100, 30, true); !strings.Contains(v, components.MatchStyle.Render("Payments")) {
+		t.Errorf("the description should light up:\n%q", v)
+	}
+	m, _ = m.Update(testkeys.Press("esc"), true)
+	m, _ = m.Update(testkeys.Press("/"), true)
+	m = typeText(m, "ENC") // in the location, /x/billing.enc.yaml, and in enc-ops
+	if v := m.View(100, 30, true); strings.Count(v, components.MatchStyle.Render("enc")) != 1 {
+		t.Errorf("the location should light up, and not a detail the filter did not read:\n%q", v)
 	}
 }
 
@@ -337,6 +370,9 @@ func TestListSearchFiltersFiles(t *testing.T) {
 	v := ansi.Strip(m.View(100, 30, true))
 	if strings.Contains(v, "eu staging") || !strings.Contains(v, "us prod") {
 		t.Fatalf("list filter failed:\n%s", v)
+	}
+	if v := m.View(100, 30, true); !strings.Contains(v, components.MatchStyle.Render("prod")) {
+		t.Fatalf("the name should light up:\n%q", v)
 	}
 	// enter opens the one match.
 	m, cmd := m.Update(testkeys.Press("enter"), true)
@@ -661,6 +697,9 @@ func TestBrowseSearchFiltersEntries(t *testing.T) {
 	v := ansi.Strip(m.View(100, 30, true))
 	if strings.Contains(v, "CI/Jenkins") || !strings.Contains(v, "AMS/Kafka/E2E") {
 		t.Fatalf("entry search failed:\n%s", v)
+	}
+	if v := m.View(100, 30, true); !strings.Contains(v, components.MatchStyle.Render("Kafka")) {
+		t.Fatalf("the path should light up:\n%q", v)
 	}
 	m, cmd := m.Update(testkeys.Press("enter"), true) // opens the one match
 	m = deliver(m, cmd)

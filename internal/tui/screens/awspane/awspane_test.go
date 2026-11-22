@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/lukaszgard/den/internal/service"
+	"github.com/lukaszgard/den/internal/tui/components"
+	"github.com/lukaszgard/den/internal/tui/testkeys"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -138,5 +140,22 @@ func TestSessionRowWithoutAKnownEnd(t *testing.T) {
 	}
 	if row = rowOf(t, view, "den-corp"); !strings.Contains(row, "No active token") {
 		t.Errorf("row of a session never logged in: %q", row)
+	}
+}
+
+func TestFilterLightsUpTheMatch(t *testing.T) {
+	t.Chdir(t.TempDir())
+	cfg := "[profile app-prod]\nregion = eu-central-1\n\n[profile app-e2e]\nregion = eu-central-1\n"
+	if err := os.WriteFile("config", []byte(cfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m := New(nil, "config", "", 117, 40)
+	m, _ = m.Update(testkeys.Press("/"), true)
+	for _, r := range "PROD" {
+		m, _ = m.Update(testkeys.Press(string(r)), true)
+	}
+	v := m.View(117, 40, true)
+	if !strings.Contains(v, components.MatchStyle.Render("prod")) || strings.Contains(ansi.Strip(v), "app-e2e") {
+		t.Fatalf("the filter should keep app-prod with its match lit up:\n%q", v)
 	}
 }

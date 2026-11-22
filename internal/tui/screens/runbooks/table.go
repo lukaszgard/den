@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/lukaszgard/den/internal/runbook"
+	"github.com/lukaszgard/den/internal/tui/components"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -170,6 +171,10 @@ func (m Model) tableRow(e entry, selected, focused bool, widths []int) string {
 				style = style.Bold(true).Foreground(lipgloss.Color("#FFFFFF")).Faint(!focused)
 			}
 			cell = style.Render(cell)
+		}
+		// The two columns the filter reads.
+		if c.title == "  NAME" || c.title == "DESCRIPTION" {
+			cell = components.MarkMatches(cell, m.query)
 		}
 		cells = append(cells, fit(cell, widths[i]))
 	}

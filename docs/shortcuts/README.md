@@ -186,6 +186,12 @@ In the Connect panel:
 In the detail view, `y` copies the connect command, `Y` the command with the password or
 token inlined, and `p` the raw token.
 
+**Searching.** A match looks the same wherever `/` finds it: lit up in yellow, as you
+type. A panel's filtered list (Connect, AWS, Secrets, Runbooks, Config, the Help topics)
+lights it up in the columns the filter reads. A Help topic, the changelog and a run's log
+light up every match, the one the view is on brighter. Text the filter did not read stays
+as it was, and so does a masked secret.
+
 ## Mouse
 
 den reads clicks, drags and the wheel in every panel and view, and the keys keep working
@@ -255,9 +261,9 @@ topic does:
 | `Esc`          | While typing: cancel and scroll back. After: clear the search        |
 | `Backspace`    | Delete a letter; on an empty search, close it                        |
 
-The search ignores case and starts below where you are reading. The line of the
-current match shows in reverse, and the hint under the box reads `2/5` for the second
-of five. While you type, every key is a letter of the search: `q`, `h`, `R` and `s`
+The search ignores case and starts below where you are reading. Every match lights up
+in yellow, those on the current match's line brighter, and the hint under the box reads
+`2/5` for the second of five. While you type, every key is a letter of the search: `q`, `h`, `R` and `s`
 do not quit, leave, reload or close the changelog. A second `Esc`, with no search on,
 closes the changelog as before. The Help panel's own search, across every topic, is in
 [docs/help-panel](../help-panel/README.md).

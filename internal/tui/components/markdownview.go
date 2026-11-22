@@ -276,9 +276,9 @@ func (v *MarkdownView) typeKey(key tea.KeyPressMsg) {
 // current match where it was if there still is one there.
 func (v *MarkdownView) findMatches() {
 	v.matches = v.matches[:0]
-	if q := strings.ToLower(v.query); q != "" {
+	if v.query != "" {
 		for i, line := range v.plain {
-			if strings.Contains(strings.ToLower(line), q) {
+			if ContainsFold(line, v.query) {
 				v.matches = append(v.matches, i)
 			}
 		}
@@ -307,30 +307,24 @@ func (v *MarkdownView) showMatch() {
 	}
 }
 
-// marked is the document with the current match shown in reverse video. The
-// line loses its own colours for that, which is what makes it stand out; its
-// width stays the same, so the box does not move.
+// marked is the document with every match lit up as in a run's log, the
+// ones on the line the view is on brighter: n and N step a line at a time.
+// A line keeps its own colours around its matches, and its width.
 func (v MarkdownView) marked() []string {
 	if len(v.matches) == 0 {
 		return v.lines
 	}
-	line := v.matches[v.current]
-	plain, lower := v.plain[line], strings.ToLower(v.plain[line])
-	query := strings.ToLower(v.query)
 	out := slices.Clone(v.lines)
-	at := strings.Index(lower, query)
-	// Lowercasing can change a text's length in bytes, and the offsets in
-	// lower then miss plain; mark the whole line instead.
-	if at < 0 || len(lower) != len(plain) || len(query) != len(v.query) {
-		out[line] = searchMark.Render(plain)
-		return out
+	for i, line := range v.matches {
+		hits := foldHits(v.plain[line], v.query)
+		if i == v.current {
+			out[line] = markAllCurrent(v.lines[line], hits)
+		} else {
+			out[line] = markHits(v.lines[line], hits, -1)
+		}
 	}
-	end := at + len(v.query)
-	out[line] = plain[:at] + searchMark.Render(plain[at:end]) + plain[end:]
 	return out
 }
-
-var searchMark = lipgloss.NewStyle().Reverse(true)
 
 // View renders the title, the boxed document and the hint.
 func (v MarkdownView) View() string {
