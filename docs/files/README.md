@@ -17,7 +17,7 @@ sits in a git work tree.
 | `den.yaml` | `./den.yaml`, else `~/.config/den/den.yaml` | yes | a team's shared one, yes: it holds references, never secret values |
 | VPN settings, `vpn/*.conf` | `~/.config/den/vpn/` | yes, only for openfortivpn settings den has no key for | **never**: it can hold a password |
 | Runbooks, `runbooks/` | `~/.config/den/runbooks/`, or any folder in `runbooks.dirs` | yes, or `den runbook new` | a team's runbooks, yes |
-| RDS CA bundle, `global-bundle.pem` | `~/.config/den/` | no, den downloads it for DocumentDB | pointless: it is public and den fetches it again |
+| RDS CA bundles, `global-bundle.pem` and, for `cn-*` regions, `global-bundle-cn.pem` | `~/.config/den/` | no, den downloads them for DocumentDB | pointless: they are public and den fetches them again |
 | State: run history, runbook trust, runbook drafts | `~/.local/state/den/` | no | no: a draft may hold a secret |
 | Data: runbook source checkouts, runbook state | `~/.local/share/den/` | no | no |
 | The VPN helper's copy of the settings | `/opt/den/etc/<name>.conf` | no, `den vpn install-helper` writes it as root | never |
@@ -72,6 +72,7 @@ den.yaml                   exists   ~/.config/den/den.yaml  (from the config dir
 config directory           exists   ~/.config/den           (your own files belong here)
 runbooks                   exists   ~/.config/den/runbooks  (the usual place for runbooks you write)
 RDS CA bundle              missing  ~/.config/den/global-bundle.pem  (downloaded for DocumentDB when needed)
+RDS CA bundle (China)      missing  ~/.config/den/global-bundle-cn.pem  (downloaded for DocumentDB in cn-* regions)
 state directory            exists   ~/.local/state/den      (run history, runbook trust)
 runbook drafts             exists   ~/.local/state/den/runbook-drafts  (requests typed for an agent; may hold secrets)
 data directory             missing  ~/.local/share/den      (runbook source checkouts, runbook state)

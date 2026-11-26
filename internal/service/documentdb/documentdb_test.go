@@ -40,6 +40,21 @@ func TestConnectCommandKeepsTheTunnelFlags(t *testing.T) {
 	}
 }
 
+// The command is shown before Prepare downloads anything, so it must already
+// name the bundle of the cluster's partition.
+func TestConnectCommandNamesTheChinaBundleInChina(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	tgt := target()
+	tgt.AWSRegionCode = "cn-north-1"
+	svc, err := New("docdb", &config.DocumentDBSpec{SSMTarget: tgt, DocumentDBHost: "cluster.docdb.amazonaws.com.cn", DBName: "app"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cmd := svc.ConnectCommand(); !strings.Contains(cmd, "--tlsCAFile ") || !strings.Contains(cmd, "global-bundle-cn.pem ") {
+		t.Errorf("connect command does not name the China bundle:\n%s", cmd)
+	}
+}
+
 func TestConfiguredCAFileAndForwards(t *testing.T) {
 	spec := &config.DocumentDBSpec{SSMTarget: target(), DocumentDBHost: "cluster.docdb.amazonaws.com", CAFile: "/etc/rds-ca.pem"}
 	spec.LocalPort = 50141

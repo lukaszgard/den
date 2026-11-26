@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.12.1] - 2026-11-26
+
+**DocumentDB clusters in AWS China now connect without a `ca_file`.** In `cn-north-1` and
+`cn-northwest-1`, den's login check failed with `MongoNetworkError: unable to get local issuer
+certificate`, although the tunnel was up. den handed `mongosh` the CA bundle of the commercial AWS
+regions, which holds none of the China CAs. If you worked around it with a `ca_file` that points
+at the China bundle, you can keep that line or delete it.
+
+### 🔌 Data stores and tunnels
+
+- A DocumentDB service in a `cn-*` region now verifies the cluster with the China CA bundle, cached
+  as `~/.config/den/global-bundle-cn.pem` and downloaded from the address the AWS China docs give.
+  Before, den reused `global-bundle.pem` whenever it was on disk, and the China address it fell
+  back to did not exist. Other regions keep using `global-bundle.pem`, so a cached bundle stays
+  valid.
+- When the login check fails, its hint in the detail view's log now also names the CA bundle, for
+  a certificate error. It used to list only IAM causes.
+
+### 🔧 Configuration and checks
+
+- `den paths` lists the China CA bundle next to the other one.
+
 ## [1.12.0] - 2026-11-22
 
 **`/` now finds the key that holds a value, and a match looks the same in every panel.** In an

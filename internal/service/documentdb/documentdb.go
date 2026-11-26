@@ -125,7 +125,7 @@ func (e *engine) caBundle() string {
 		caFile = e.spec.CAFile
 	}
 	if caFile == "" {
-		caFile = defaultCABundlePath()
+		caFile = defaultCABundlePath(e.env.AWSRegionCode)
 	}
 	return caFile
 }

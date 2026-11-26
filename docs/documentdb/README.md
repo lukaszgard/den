@@ -38,7 +38,7 @@ services:
 | `local_port`      | no       | Local port for the tunnel (default `27017`)                                                     |
 | `reconnect`       | no       | Auto-reopen the SSM port-forward when it drops (default `false`). See [Auto-reconnect](#auto-reconnect) |
 | `db_name`         | no       | Placed in the URI path. Leave unset and select it in the shell with `use readWriteDB`            |
-| `ca_file`         | no       | Path to the Amazon RDS global CA bundle. Auto-downloaded to `~/.config/den/` when unset          |
+| `ca_file`         | no       | Path to the Amazon RDS global CA bundle. When unset, den downloads it to `~/.config/den/global-bundle.pem`, or `global-bundle-cn.pem` in `cn-*` regions: the China partition has CAs of its own |
 
 The `env:` reference supplies the rest through the normal environment merge:
 
@@ -47,7 +47,7 @@ The `env:` reference supplies the rest through the normal environment merge:
 | `ec2_instance_id`    | SSM port-forward target (the bastion)                               |
 | `aws_profile`        | Opening the SSM tunnel                                              |
 | `credential_profile`    | **The identity mongosh authenticates as** — becomes `AWS_PROFILE=`  |
-| `aws_region_code`    | SSM region, and picks the CN truststore for `cn-*` regions          |
+| `aws_region_code`    | SSM region, and picks the China CA bundle for `cn-*` regions        |
 
 > **Note on the `documentdb:` key.** It must match the service type. Nesting
 > these settings under `redis:` produces a `documentdb` service with no spec;
@@ -200,6 +200,13 @@ discards `localhost`, and tries to reach hosts that do not resolve from your
 machine. Keep `directConnection=true` and no `replicaSet=rs0`. A working session's
 prompt reads `rs0 [direct: primary]` — that `[direct: ...]` marker is the
 confirmation.
+
+**`MongoNetworkError: unable to get local issuer certificate`** — the tunnel is fine;
+mongosh cannot verify the cluster's certificate because the CA bundle lacks the CA of the
+cluster's region. The commercial and China partitions have separate CAs: den caches
+`global-bundle.pem` for the first and `global-bundle-cn.pem` for `cn-*` regions. A
+`ca_file` you set yourself must hold the right one; for China, the global bundle is
+`https://rds-truststore.s3.cn-north-1.amazonaws.com.cn/global/global-bundle.pem`.
 
 **Auth fails only sometimes** — almost always stale exported credentials.
 `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` outrank

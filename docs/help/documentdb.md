@@ -28,7 +28,7 @@ A service of `type: documentdb` with a `documentdb:` section; the shared keys ar
 
 - `documentdb_host` (required): the cluster endpoint.
 - `db_name`: the database the command opens; otherwise pick it in the shell with `use`.
-- `ca_file` (default `~/.config/den/global-bundle.pem`, downloaded when missing): the CA bundle `mongosh` verifies the cluster with.
+- `ca_file` (default `~/.config/den/global-bundle.pem`, or `global-bundle-cn.pem` in `cn-*` regions, downloaded when missing): the CA bundle `mongosh` verifies the cluster with.
 - `local_port` (default `27017`): where the cluster appears on `127.0.0.1`.
 
 A cluster through the environment `dev`:
@@ -69,6 +69,7 @@ services:
 
 - `connected · login failed` in the Connect panel: the tunnel is up and den's own `mongosh` login ended without an authenticated user. The detail view's log has mongosh's answer, the profile it signed with, and what to check; fix it, then disconnect and connect again.
 - `MongoServerSelectionError: Server selection timed out`: not an authentication error. Replica-set discovery was turned on; keep `directConnection=true` and leave out `replicaSet`.
+- `unable to get local issuer certificate`: the CA bundle lacks the CA of the cluster's region; a `ca_file` you set must be the China bundle for a `cn-*` cluster, the global one elsewhere.
 - Logins fail only sometimes: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` or `AWS_SESSION_TOKEN` exported in your shell win over `AWS_PROFILE`; unset them.
 - Connected but `authenticatedUsers` is empty in `db.runCommand({connectionStatus: 1})`: the login did not happen; check the `$external` user.
 

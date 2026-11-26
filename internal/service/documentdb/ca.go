@@ -13,17 +13,27 @@ import (
 	"github.com/lukaszgard/den/internal/platform"
 )
 
-const (
-	caBundleURL   = "https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem"
-	caBundleURLCN = "https://truststore.pki.cn.rds.amazonaws.com/global/global-bundle.pem"
-)
+// caBundleFor is where the RDS global CA bundle for a region's partition is
+// published, and the file den caches it in. The commercial and China
+// partitions have disjoint CAs, so a bundle cached for one must never be
+// handed to the other: mongosh then fails with "unable to get local issuer
+// certificate" over a tunnel that works. China publishes its bundles in an S3
+// bucket (docs.amazonaws.cn), not under a truststore.pki host; its global
+// bundle holds the CAs of every China region, so one file serves them all.
+func caBundleFor(regionCode string) (url, file string) {
+	if strings.HasPrefix(regionCode, "cn-") {
+		return "https://rds-truststore.s3.cn-north-1.amazonaws.com.cn/global/global-bundle.pem", "global-bundle-cn.pem"
+	}
+	return "https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem", "global-bundle.pem"
+}
 
 // resolveCABundle returns a local path to the Amazon RDS global CA bundle that
 // mongosh needs for the TLS handshake (DocumentDB requires TLS).
 //
 // An explicitly configured path is used as-is and must exist — den will not
 // silently substitute a downloaded bundle for one the user named. Otherwise the
-// bundle is cached at global-bundle.pem in the config directory and downloaded on first use.
+// bundle of the region's partition is cached in the config directory
+// (caBundleFor names the file) and downloaded on first use.
 func resolveCABundle(ctx context.Context, regionCode, configured string, logf func(string)) (string, error) {
 	if configured != "" {
 		path := platform.ExpandHome(configured)
@@ -33,15 +43,12 @@ func resolveCABundle(ctx context.Context, regionCode, configured string, logf fu
 		return path, nil
 	}
 
-	path := defaultCABundlePath()
+	path := defaultCABundlePath(regionCode)
 	if _, err := os.Stat(path); err == nil {
 		return path, nil
 	}
 
-	url := caBundleURL
-	if strings.HasPrefix(regionCode, "cn-") {
-		url = caBundleURLCN
-	}
+	url, _ := caBundleFor(regionCode)
 	logf(fmt.Sprintf("CA bundle not found — downloading %s", url))
 
 	if err := downloadTo(ctx, url, path); err != nil {
@@ -51,13 +58,15 @@ func resolveCABundle(ctx context.Context, regionCode, configured string, logf fu
 	return path, nil
 }
 
-// defaultCABundlePath is where den caches the RDS global CA bundle.
-func defaultCABundlePath() string {
+// defaultCABundlePath is where den caches the RDS global CA bundle for the
+// region's partition.
+func defaultCABundlePath(regionCode string) string {
+	_, file := caBundleFor(regionCode)
 	dir := platform.ConfigDir()
 	if dir == "" {
-		return "global-bundle.pem"
+		return file
 	}
-	return filepath.Join(dir, "global-bundle.pem")
+	return filepath.Join(dir, file)
 }
 
 // downloadTo fetches url and writes it to path, creating parent directories.

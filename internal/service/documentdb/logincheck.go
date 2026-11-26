@@ -39,5 +39,6 @@ func (e *engine) loginHint() string {
 		"  - no AWS_ACCESS_KEY_ID or AWS_SESSION_TOKEN where den runs: they outrank AWS_PROFILE",
 		"  - the profile's credentials have not expired" + login,
 		"  - mongosh is 2.5 or newer: older ones cannot sign with MONGODB-AWS",
+		"  - on a certificate error: ca_file lacks the CA of the cluster's region",
 	}, "\n")
 }

@@ -31,7 +31,7 @@ func TestLoginProbe(t *testing.T) {
 	if !strings.Contains(authCheck, "authenticatedUsers") || !strings.Contains(authCheck, "throw") {
 		t.Errorf("the script does not fail on a connection without a user: %s", authCheck)
 	}
-	for _, want := range []string{`AWS profile "acme-data"`, "$external", "MONGODB-AWS", "AWS_ACCESS_KEY_ID", "aws sso login --profile acme-data"} {
+	for _, want := range []string{`AWS profile "acme-data"`, "$external", "MONGODB-AWS", "AWS_ACCESS_KEY_ID", "aws sso login --profile acme-data", "ca_file"} {
 		if !strings.Contains(p.Hint, want) {
 			t.Errorf("hint has no %q:\n%s", want, p.Hint)
 		}

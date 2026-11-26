@@ -204,7 +204,7 @@ Guide: [docs/documentdb](../documentdb/README.md)
 | `transport` | object, keys in [`environments.<name>.transport`](#environmentsnametransport) | no | how the network is reached; SSM when unset |
 | `documentdb_host` | string | yes | cluster endpoint |
 | `db_name` | string | no | optional, placed in the URI path |
-| `ca_file` | string | no | optional, defaults to ~/.config/den/global-bundle.pem |
+| `ca_file` | string | no | optional, defaults to ~/.config/den/global-bundle.pem, or global-bundle-cn.pem in cn-* regions |
 
 ## `services[].redshift`
 

@@ -100,6 +100,7 @@ func buildPathsReport(explicit string) pathsReport {
 	if configDir != "" {
 		add("runbooks", filepath.Join(configDir, "runbooks"), "dir", "the usual place for runbooks you write")
 		add("RDS CA bundle", filepath.Join(configDir, "global-bundle.pem"), "file", "downloaded for DocumentDB when needed")
+		add("RDS CA bundle (China)", filepath.Join(configDir, "global-bundle-cn.pem"), "file", "downloaded for DocumentDB in cn-* regions")
 	}
 	add("state directory", platform.StateDir(), "dir", "run history, runbook trust")
 	add("update preferences", update.PrefsFile(), "file", "versions skipped in update checks")
