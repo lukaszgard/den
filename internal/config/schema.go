@@ -667,7 +667,7 @@ type DocumentDBSpec struct {
 
 	DocumentDBHost string `yaml:"documentdb_host,omitempty" jsonschema:"required"` // cluster endpoint
 	DBName         string `yaml:"db_name,omitempty"`                               // optional, placed in the URI path
-	CAFile         string `yaml:"ca_file,omitempty"`                               // optional, defaults to ~/.config/den/global-bundle.pem
+	CAFile         string `yaml:"ca_file,omitempty"`                               // optional, defaults to ~/.config/den/global-bundle.pem, or global-bundle-cn.pem in cn-* regions
 }
 
 // RedshiftSpec holds Amazon Redshift config. Exactly one of ClusterIdentifier

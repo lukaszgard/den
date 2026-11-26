@@ -214,7 +214,7 @@
         },
         "ca_file": {
           "type": "string",
-          "description": "optional, defaults to ~/.config/den/global-bundle.pem"
+          "description": "optional, defaults to ~/.config/den/global-bundle.pem, or global-bundle-cn.pem in cn-* regions"
         }
       },
       "additionalProperties": false,

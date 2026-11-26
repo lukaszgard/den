@@ -944,13 +944,14 @@ func TestPathsJSON(t *testing.T) {
 		byName[e.Name] = e
 	}
 	for name, want := range map[string]pathEntry{
-		"den.yaml":         {Path: path, Exists: true},
-		"config directory": {Path: filepath.Join(cfgHome, "den")},
-		"state directory":  {Path: filepath.Join(state, "den")},
-		"runbook drafts":   {Path: filepath.Join(state, "den", "runbook-drafts")},
-		"data directory":   {Path: filepath.Join(data, "den")},
-		"vpn Office VPN":   {Path: conf, Exists: true},
-		"RDS CA bundle":    {Path: filepath.Join(cfgHome, "den", "global-bundle.pem")},
+		"den.yaml":              {Path: path, Exists: true},
+		"config directory":      {Path: filepath.Join(cfgHome, "den")},
+		"state directory":       {Path: filepath.Join(state, "den")},
+		"runbook drafts":        {Path: filepath.Join(state, "den", "runbook-drafts")},
+		"data directory":        {Path: filepath.Join(data, "den")},
+		"vpn Office VPN":        {Path: conf, Exists: true},
+		"RDS CA bundle":         {Path: filepath.Join(cfgHome, "den", "global-bundle.pem")},
+		"RDS CA bundle (China)": {Path: filepath.Join(cfgHome, "den", "global-bundle-cn.pem")},
 	} {
 		e, ok := byName[name]
 		if !ok || e.Path != want.Path || e.Exists != want.Exists {

@@ -26,7 +26,7 @@ den uses the first `den.yaml` that exists: the file named by `-c`, then `./den.y
 - `den.yaml`: references to your stores, never secret values; a team may share one in a repository.
 - `vpn/*.conf`: openfortivpn settings, in its `key = value` format; they can hold a password, so `chmod 600` them and never commit them.
 - `runbooks/`: the folders you list in `runbooks.dirs`; `den runbook new` makes one.
-- `global-bundle.pem`: the RDS CA bundle den downloads for DocumentDB.
+- `global-bundle.pem`, `global-bundle-cn.pem`: the RDS CA bundles den downloads for DocumentDB, the second for `cn-*` regions.
 
 A VPN with just a gateway:
 
