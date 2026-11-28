@@ -1,20 +1,57 @@
 version: 2
 updates:
+  # den's own modules: one PR a week holding every minor and patch bump, which
+  # merges itself once CI passes (workflows/dependabot-automerge.yaml). Without
+  # the group, each module came as its own PR, the limit of 5 open PRs held the
+  # rest back, and every merge left the others to rebase on go.sum. A major
+  # bump stays out of the group, comes alone and waits for a person.
   - package-ecosystem: gomod
     directory: /
     schedule:
       interval: weekly
+      day: saturday
+    # A fresh release waits before it is offered, as a guard against a
+    # compromised one: nobody reads these PRs before they merge.
+    cooldown:
+      default-days: 7
+      semver-patch-days: 3
+    groups:
+      gomod:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
     commit-message:
       prefix: build
+  # The docs site's Hugo modules (the Hextra theme).
   - package-ecosystem: gomod
     directory: /site
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
+    groups:
+      site:
+        patterns:
+          - "*"
     commit-message:
       prefix: build
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns:
+          - "*"
+        # The auto-merge workflow runs it with write access: its bumps come
+        # alone, for a person.
+        exclude-patterns:
+          - dependabot/fetch-metadata
     commit-message:
       prefix: ci
+  # The demo projects under docs/ get security updates only, and those wait for
+  # a person: CI builds neither demo, so nothing would verify a bump.

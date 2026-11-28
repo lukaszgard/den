@@ -1,0 +1,62 @@
+name: Dependabot auto-merge
+
+# Approves Dependabot's minor and patch Go bumps (den's modules and the site's)
+# and its Actions bumps, and turns on auto-merge, so each merges once the checks
+# the main ruleset requires pass. Anything else (a major bump, a pseudo-version,
+# fetch-metadata itself, a demo under docs/) waits for a person.
+#
+# It leans on three repository settings: auto-merge allowed, Actions allowed to
+# approve pull requests, and the ruleset requiring CI's checks. Without the last,
+# an approved PR would merge before CI had run.
+#
+# A merge made with GITHUB_TOKEN starts no push workflow: a site/go.mod bump
+# reaches the site with the next docs push, or a manual run of pages.yaml.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  automerge:
+    # The PR's author, not github.actor: the actor is whoever caused this run,
+    # and Dependabot can be the actor on someone else's PR (a confused deputy).
+    # fetch-metadata also checks that the commits are Dependabot's own.
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.repository == 'lukaszgard/den'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      # Pinned by commit: it runs with write access, and a tag can be moved.
+      - id: meta
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+      # An allowlist, so a kind of update it does not name waits for a person.
+      # update-type is the largest bump in the PR.
+      - if: >-
+          (steps.meta.outputs.package-ecosystem == 'go_modules'
+            && (steps.meta.outputs.directory == '/' || steps.meta.outputs.directory == '/site')
+            && (steps.meta.outputs.update-type == 'version-update:semver-patch'
+              || steps.meta.outputs.update-type == 'version-update:semver-minor'))
+          || (steps.meta.outputs.package-ecosystem == 'github_actions'
+            && !contains(steps.meta.outputs.dependency-names, 'dependabot/fetch-metadata'))
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          UPDATES: ${{ steps.meta.outputs.updated-dependencies-json }}
+        run: |
+          # A pseudo-version is a commit, not a release, so its update type
+          # says nothing about the size of the change. In a group, the other
+          # modules' bumps would hide it from update-type.
+          pseudo=$(jq -r '.[] | select((.newVersion // "") | test("[0-9]{14}-[0-9a-f]{12}$")) | .dependencyName' <<<"$UPDATES")
+          if [ -n "$pseudo" ]; then
+            echo "::notice::Left for a person, pseudo-versions: $pseudo"
+            exit 0
+          fi
+          # Again on every push: the ruleset dismisses the approval when
+          # Dependabot rebases.
+          gh pr review --approve "$PR_URL"
+          # A merge commit, as main has: release-deps finds the PRs by the #N
+          # in its subject.
+          gh pr merge --auto --merge "$PR_URL"
