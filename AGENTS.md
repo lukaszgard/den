@@ -304,6 +304,9 @@ release-next` prints it: `last vX (…)`, `bump minor — N feat, N fix, N break
 entry with the migration; 1.0.0 is a separate, later decision. CI's `release-version` job
 only warns when the entry is lower than expected; it never fails the build.
 
-Dependabot's `build:` commits call for no release, so `make release-next` prints `next none`
-after a batch of them, even when the root `go.mod` moved. Shipping such a batch is a person's
-decision and takes a patch: skill `release-deps`.
+Dependabot's minor and patch Go bumps (one grouped PR a week for the root module) and its
+Actions bumps approve and merge themselves once CI passes
+(`.github/workflows/dependabot-automerge.yaml`); majors, pseudo-versions, `fetch-metadata` and
+the demos under `docs/` wait for a person. Those `build:` commits call for no release, so
+`make release-next` prints `next none` after a batch of them, even when the root `go.mod`
+moved. Shipping such a batch is a person's decision and takes a patch: skill `release-deps`.

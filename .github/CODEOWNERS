@@ -1,1 +1,11 @@
 * @lukaszgard
+
+# Dependency manifests and workflows have no owner, so Dependabot's PRs need only
+# the approval workflows/dependabot-automerge.yaml gives them. Any other PR still
+# needs an approval, and only @lukaszgard can give one: the workflow approves
+# Dependabot's PRs alone.
+/go.mod
+/go.sum
+/site/go.mod
+/site/go.sum
+/.github/workflows/
